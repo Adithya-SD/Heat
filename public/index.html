@@ -14,14 +14,14 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font:400 15px/1
 button,input{font:inherit;color:inherit;border:0;background:none;outline:0;cursor:pointer}
 /* iOS Safari will not accept typing into an input that inherits user-select:none */
 input{-webkit-user-select:text;user-select:text}
-svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i{filter:drop-shadow(0 1px 3px rgba(0,0,0,.35));width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .bg{position:fixed;inset:-10%;background:radial-gradient(55% 50% at 18% 18%,#2f63ff,transparent 70%),radial-gradient(50% 45% at 88% 28%,#b23cff,transparent 70%),radial-gradient(60% 55% at 58% 98%,#ff5a7a,transparent 70%),radial-gradient(40% 40% at 8% 90%,#00c7be,transparent 70%),#0a0a16;animation:dr 26s ease-in-out infinite alternate}
 @keyframes dr{to{transform:scale(1.14) translate(-2%,3%)}}
 .scr{position:fixed;inset:0;display:none;animation:in .5s var(--e)}
 @keyframes in{from{opacity:0;transform:scale(.985)}}
 body[data-s=home] #home{display:flex}body[data-s=host] #hostS,body[data-s=view] #viewS,body[data-s=call] #callS{display:block}
 /* liquid glass */
-.glass{position:relative;background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.05));-webkit-backdrop-filter:blur(20px) saturate(190%);backdrop-filter:blur(20px) saturate(190%);border-radius:var(--r,26px);box-shadow:inset 0 1px 1px rgba(255,255,255,.55),inset 0 -1px 1px rgba(255,255,255,.14),inset 0 0 24px rgba(255,255,255,.07),0 12px 40px rgba(0,0,0,.28),0 2px 6px rgba(0,0,0,.18)}
+.glass{position:relative;background:linear-gradient(135deg,rgba(255,255,255,.11),rgba(255,255,255,.025));-webkit-backdrop-filter:blur(2px) saturate(1.8) brightness(.96);backdrop-filter:blur(2px) saturate(1.8) brightness(.96);text-shadow:0 1px 8px rgba(0,0,0,.32);border-radius:var(--r,26px);box-shadow:inset 0 1px 1px rgba(255,255,255,.55),inset 0 -1px 1px rgba(255,255,255,.14),inset 0 0 24px rgba(255,255,255,.07),0 12px 40px rgba(0,0,0,.28),0 2px 6px rgba(0,0,0,.18)}
 .glass::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(140deg,rgba(255,255,255,.75),rgba(255,255,255,0) 35%,rgba(255,255,255,0) 62%,rgba(255,255,255,.5));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
 .glass::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(160px circle at var(--mx,50%) var(--my,0),rgba(255,255,255,.2),transparent 60%);opacity:0;transition:opacity .35s;pointer-events:none}
 .glass:hover::after{opacity:1}
@@ -86,7 +86,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 .none{color:var(--t2);padding:12px 0}
 .ov,.pop{position:absolute;inset:0;display:none;place-items:center;background:rgba(0,0,0,.45);z-index:5}
 .ov.s,.pop.s{display:grid}
-#pop{position:fixed;z-index:8}
+#pop,#dg{position:fixed;z-index:8}
 .c2{padding:26px 30px;--r:34px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;max-width:calc(100% - 32px)}
 .hint{color:var(--t2);font-size:13px;max-width:270px}
 .hint:empty{display:none}
@@ -126,6 +126,16 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 #cin{flex:1;min-width:0;height:44px;padding:0 16px;border-radius:22px;background:rgba(255,255,255,.14);cursor:text}
 #cin::placeholder{color:rgba(255,255,255,.38)}
 #csend{width:44px;height:44px}
+/* connection check */
+.lk{color:var(--t2);font-size:12px;text-decoration:underline;padding:2px 4px}
+.dg{width:min(390px,calc(100% - 32px));align-items:stretch;text-align:left}
+.dg>b{text-align:center}
+.dg .hint{max-width:none;text-align:center}
+#dgr{display:flex;flex-direction:column;gap:7px;max-height:44vh;overflow:auto}
+.dr{display:flex;align-items:center;gap:10px;font-size:13px}
+.dr i{width:9px;height:9px;border-radius:50%;background:var(--t2);flex:none}
+.dr.ok i{background:var(--ok)}.dr.bad i{background:var(--rd)}.dr.wait i{background:var(--wn)}
+.dr span{flex:1;min-width:0;overflow-wrap:anywhere}.dr em{color:var(--t2);font-style:normal;font-size:12px;text-align:right}
 @media(max-width:420px){#ci{width:116px;font-size:18px;letter-spacing:.04em}}
 @media(max-width:520px){.b{width:44px;height:44px}.sl{width:76px;margin:0 4px}.mt{display:none}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -162,7 +172,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 <button class="glass card" id="bh"><span class="ico" data-i="video"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
 <div class="glass card"><span class="ico g" data-i="eye"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
 <button class="glass chip" id="rc" hidden></button>
-<p class="ft">Video and audio go straight between devices.</p>
+<p class="ft">Video and audio go straight between devices.<br><button class="lk" id="dgo">Check connection</button> · <span id="bid"></span></p>
 </div></section>
 
 <!-- motion camera: host -->
@@ -178,7 +188,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 <div class="top"><div class="glass pill"><i class="dot" id="vd"></i><span id="vst">Connecting…</span><small id="ms"></small></div><button class="glass b" id="vf" data-i="max" title="Full screen"></button></div>
 <aside class="glass sheet" id="sheet"><h3>Activity</h3><div id="evl"></div></aside>
 <div class="glass dock"><button class="b arm" data-i="shield" title="Motion alerts"></button><div class="sl"><input class="sens" type="range" min="1" max="10" step="1" title="Sensitivity"></div><div class="mt"><i id="mi"></i></div><button class="b" id="vs2" data-i="cam" title="Save snapshot"></button><button class="b" id="ve" data-i="list" title="Activity"><em class="bd" id="bd"></em></button><button class="b" id="vm" data-i="vol" title="Alert sound"></button><button class="b red" id="vx" data-i="x" title="Disconnect"></button></div>
-<div class="ov s" id="ov"><div class="glass c2"><div class="sp"></div><b id="ovt">Connecting…</b><small class="hint" id="ovh"></small><button class="ghost" id="oc">Cancel</button></div></div>
+<div class="ov s" id="ov"><div class="glass c2"><div class="sp"></div><b id="ovt">Connecting…</b><small class="hint" id="ovh"></small><button class="ghost dgb" hidden>Check connection</button><button class="ghost" id="oc">Cancel</button></div></div>
 </section>
 
 <!-- video call (host and guest) -->
@@ -188,11 +198,12 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 <div class="top"><div class="glass pill"><i class="dot" id="cd"></i><span id="cst">Starting…</span><small id="ctm"></small><small id="cms"></small></div><button class="glass b" id="cfs" data-i="max" title="Full screen"></button></div>
 <aside class="glass sheet" id="chat"><h3>Chat</h3><div id="cl"></div><form id="cform" autocomplete="off"><input id="cin" placeholder="Message" maxlength="500"><button class="b" id="csend" type="submit" data-i="send" title="Send"></button></form></aside>
 <div class="glass dock"><button class="b" id="cm" data-i="mic" title="Mute"></button><button class="b" id="cc" data-i="video" title="Camera on/off"></button><button class="b" id="cf" data-i="flip" title="Switch camera"></button><button class="b" id="cs" data-i="monitor" title="Share screen" hidden></button><button class="b" id="ct" data-i="chat" title="Chat"><em class="bd" id="cbd"></em></button><button class="b" id="cv" data-i="share" title="Invite"></button><button class="b red" id="cx" data-i="hangup" title="Leave"></button></div>
-<div class="ov s" id="cov"><div class="glass c2"><div class="sp"></div><b id="covt">Starting…</b><small class="hint" id="covh"></small><button class="ghost" id="coc">Cancel</button></div></div>
+<div class="ov s" id="cov"><div class="glass c2"><div class="sp"></div><b id="covt">Starting…</b><small class="hint" id="covh"></small><button class="ghost dgb" hidden>Check connection</button><button class="ghost" id="coc">Cancel</button></div></div>
 </section>
 
 <!-- invite sheet (QR, code, link) -->
 <div class="pop" id="pop"><div class="glass c2"><b id="pt">Invite someone</b><img id="qr" alt="" hidden><div class="big" id="pc"></div><small id="ph" style="color:var(--t2)"></small><div class="row"><button class="ghost" id="pl">Copy invite link</button><button class="ghost" id="ps" hidden>Share…</button></div></div></div>
+<div class="pop" id="dg"><div class="glass c2 dg"><b>Connection check</b><small class="hint" id="dgs"></small><div id="dgr"></div><div class="row" style="justify-content:center"><button class="ghost" id="dga">Run again</button><button class="ghost" id="dgc">Copy report</button></div></div></div>
 <div class="glass" id="tt"><img alt=""><span></span></div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -207,6 +218,7 @@ const ICE={iceServers:[
  {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'},
  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443?transport=tcp','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
 ]};
+const BUILD='2026-10-02.3'; /* shown on the home screen so you can confirm both devices run the same version */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
 const AL='ABCDEFGHJKMNPQRSTUVWXYZ23456789',gen=()=>[...crypto.getRandomValues(new Uint8Array(8))].map(n=>AL[n%31]).join('');
@@ -416,7 +428,7 @@ async function hostStart(){
  if(id!==sid){s.getTracks().forEach(t=>t.stop());return}
  stream=s;camCheck();
  try{vTrack().contentHint=isCall?'detail':'motion'}catch{}
- wake();hb=setInterval(heartbeat,1000);
+ wake();hb=setInterval(heartbeat,1000);hstat('Connecting to the server…');
  if(isCall){attachLocal();callUI()}
  else{$('#hv').srcObject=stream;drawRoi();ui()}
  hostPeer();
@@ -428,8 +440,11 @@ function stat(t,ok){
  if(kind==='call')return cstat(t,ok,!ok);
  $('#vd').className='dot'+(ok?' ok':'');$('#vst').textContent=t;$('#ovt').textContent=t;$('#ov').classList.toggle('s',!ok);if(!ok)$('#ms').textContent=''}
 function hint(){
- const slow=mode==='view'&&!liveOn&&startAt&&performance.now()-startAt>20000;
- $('#ovh').textContent=$('#covh').textContent=slow?(lastErr==='unavail'?'No host found for this code. Check the code, and that the host page is open.':'Still trying… keep both devices online. Mobile networks and VPNs can take longer.'):''}
+ const el=startAt?performance.now()-startAt:0,unavail=lastErr==='unavail';
+ const slow=mode==='view'&&!liveOn&&(el>20000||(unavail&&el>5000));
+ const ice=conn&&!conn.open&&conn.peerConnection?conn.peerConnection.iceConnectionState:'';
+ const h=!slow?'':unavail?'No host found for this code. Check the code, and that the host page is open. If the host page was open before an update, refresh it too.':'Still trying'+(ice?' (network path: '+ice+')':'')+'… keep both devices online. Mobile networks, VPNs and Opera’s built-in VPN can block this.';
+ $('#ovh').textContent=$('#covh').textContent=h;$$('.dgb').forEach(b=>b.hidden=!slow)}
 const sched=ms=>{clearTimeout(rt);rt=setTimeout(dial,ms)};
 const lowLat=c=>{try{c.peerConnection.getReceivers().forEach(r=>{if('playoutDelayHint'in r)r.playoutDelayHint=0;if('jitterBufferTarget'in r)r.jitterBufferTarget=0})}catch{}};
 function setKind(k){
@@ -458,7 +473,7 @@ function remoteStream(s,c){
 function viewPeer(){
  const p=vp=new Peer({config:ICE});
  clearTimeout(ot);ot=setTimeout(()=>{if(mode==='view'&&vp===p&&!p.open&&!p.dead){stat('Can’t reach the server — retrying…',0);p.dead=1;try{p.destroy()}catch{}setTimeout(()=>{if(mode==='view')viewPeer()},1000)}},10000);
- p.on('open',()=>{clearTimeout(ot);if(!liveOn&&!lpBusy)stat('Looking for the host…',0);dial()});
+ p.on('open',()=>{clearTimeout(ot);if(!liveOn&&!lpBusy)stat('Contacting the host…',0);dial()});
  p.on('call',async c=>{
   call=c;setKind((c.metadata&&c.metadata.kind)||'watch');
   c.on('stream',s=>{if(call===c)remoteStream(s,c)});
@@ -471,7 +486,7 @@ function viewPeer(){
  p.on('error',e=>{if(p.dead||mode!=='view')return;
   if(e.type==='peer-unavailable'){
    lastErr='unavail';const old=conn;conn=null;try{old&&old.close()}catch{}
-   if(!liveOn)stat('Looking for the host…',0);sched(2000)}
+   if(!liveOn)stat('Host not found — waiting for it…',0);sched(2000)}
   else{
    lastErr='net';stat(['network','server-error','socket-error','socket-closed'].includes(e.type)?'Can’t reach the server — retrying…':'Reconnecting…',0);
    if(p.disconnected&&!p.destroyed)p.reconnect();sched(2500)}});
@@ -486,7 +501,7 @@ function dial(){
  if(lpBusy||(conn&&(conn.open?now-openAt<20000:now-dialAt<15000)))return sched(2000);
  const old=conn;conn=null;try{old&&old.close()}catch{}
  dialAt=now;openAt=0;
- if(!liveOn)stat('Looking for the host…',0);
+ if(!liveOn)stat('Contacting the host…',0);
  const c=conn=vp.connect('heat-'+code,{reliable:true});
  c.on('open',()=>{if(conn!==c)return;openAt=performance.now();lastRx=openAt;lastErr='';if(!liveOn&&!lpBusy)stat('Connecting video…',0)});
  c.on('data',m=>{lastRx=performance.now();onData(m)});
@@ -515,6 +530,42 @@ function onAlert(m){
  if(document.hidden&&window.Notification&&Notification.permission==='granted'){try{new Notification('Motion detected',{body:tm(e.ts)})}catch{}}
  document.title='● Motion — Heat';setTimeout(()=>document.title='Heat',3000);list()}
 async function rtt(){try{const c=mode==='host'?[...viewers.values()][0]?.call:call;if(!c)return;const r=await c.peerConnection.getStats();r.forEach(s=>{if(s.type==='candidate-pair'&&s.nominated&&s.currentRoundTripTime!=null)$(kind==='call'?'#cms':'#ms').textContent=Math.round(s.currentRoundTripTime*1e3)+' ms'})}catch{}}
+/* connection check: tests signaling and every STUN/TURN server on its own, so being stuck has a visible cause */
+let dgRun=0,dgReport='';
+const dgLab=u=>(/^turns?:/.test(u)?'Relay ':'STUN ')+u.replace(/^(stun|turns?):/,'').replace(/\?.*/,'')+(/transport=tcp/.test(u)?' (tcp)':'')+(/^turns:/.test(u)?' (tls)':'');
+function dgRow(id,label,cls,note){let r=$('#dg-'+id);if(!r){r=document.createElement('div');r.id='dg-'+id;r.innerHTML='<i></i><span></span><em></em>';$('#dgr').append(r)}r.className='dr '+cls;$('span',r).textContent=label;$('em',r).textContent=note||''}
+function probeIce(entry,ms=7000){
+ return new Promise(res=>{
+  const seen={host:0,srflx:0,relay:0};let pc,done=0;
+  const fin=()=>{if(done)return;done=1;try{pc.close()}catch{}res(seen)};
+  try{pc=new RTCPeerConnection({iceServers:[entry]})}catch(e){return res({...seen,err:String(e&&e.message||e)})}
+  pc.createDataChannel('x');
+  pc.onicecandidate=e=>{if(!e.candidate)return fin();const m=/ typ (host|srflx|relay)/.exec(e.candidate.candidate);if(m)seen[m[1]]++};
+  pc.createOffer().then(o=>pc.setLocalDescription(o)).catch(fin);
+  setTimeout(fin,ms)})}
+const probeSig=()=>new Promise(r=>{let p;const end=v=>{clearTimeout(t);try{p&&p.destroy()}catch{}r(v)},t=setTimeout(()=>end(false),8000);
+ try{p=new Peer({config:{iceServers:[]}});p.on('open',()=>end(true));p.on('error',()=>end(false))}catch{end(false)}});
+async function runDiag(){
+ const run=++dgRun;$('#dgr').innerHTML='';$('#dgs').textContent='Testing… this takes a few seconds.';dgReport='';
+ if(!window.RTCPeerConnection){$('#dgs').textContent='WebRTC is not available in this browser, so video calls and cameras cannot work here.';return}
+ const urls=[];ICE.iceServers.forEach(sv=>[].concat(sv.urls).forEach(u=>urls.push({u,sv})));
+ dgRow('sig','Signaling server (how devices find each other)','wait','testing…');
+ urls.forEach(({u},i)=>dgRow('i'+i,dgLab(u),'wait','testing…'));
+ const iceP=urls.map(({u,sv},i)=>probeIce({urls:u,...(sv.username?{username:sv.username,credential:sv.credential}:{})}).then(seen=>{
+  const relay=/^turns?:/.test(u),ok=relay?seen.relay>0:seen.srflx>0;
+  if(run===dgRun)dgRow('i'+i,dgLab(u),ok?'ok':'bad',seen.err?'invalid':ok?(relay?'relay works':'reachable'):'no response');
+  return{u,relay,ok,seen}}));
+ const sig=await probeSig();
+ if(run===dgRun)dgRow('sig','Signaling server (how devices find each other)',sig?'ok':'bad',sig?'reachable':'unreachable');
+ const ice=await Promise.all(iceP);if(run!==dgRun)return;
+ const anyRelay=ice.some(x=>x.relay&&x.ok),anyStun=ice.some(x=>!x.relay&&x.ok);
+ const v=!sig?'This device can’t reach the signaling server, so it can’t find other devices. Check your internet and turn off any VPN, ad-blocker or Opera’s built-in VPN, then run the check again.'
+  :anyRelay?'Looks good: this device can reach a relay server, so calls to devices on other networks should work.'
+  :anyStun?'Direct connections can work (for example both devices on the same Wi-Fi), but no relay server is reachable from this device. Calls between different networks, such as a phone on mobile data, will probably get stuck on “Connecting”.'
+  :'No STUN or relay server answered. WebRTC is probably blocked here by a VPN, firewall or privacy setting, so connections will fail.';
+ $('#dgs').textContent=v;
+ dgReport=['Heat connection check · build '+BUILD,new Date().toISOString(),'Secure page: '+(isSecureContext?'yes':'NO'),'Browser: '+navigator.userAgent,'Signaling: '+(sig?'reachable':'UNREACHABLE'),
+  ...ice.map(x=>dgLab(x.u)+': '+(x.seen.err?'invalid':x.ok?(x.relay?'relay works':'reachable'):'no response')),'Result: '+v].join('\n')}
 function callUI(){clearInterval(cti);ctk=0;cti=setInterval(()=>{if(callT0&&remoteOn)$('#ctm').textContent=hms(Date.now()-callT0);if(++ctk%3===0&&remoteOn)rtt()},1000)}
 function viewStart(c){
  if(!window.Peer)return toast('Connection library didn’t load — check your internet');
@@ -551,21 +602,46 @@ on('#hcode',()=>copyText(code,'Code copied'));on('#pc',()=>copyText(code,'Code c
 on('#pl',()=>copyText(inviteUrl(),'Invite link copied'));
 on('#ps',()=>{try{navigator.share({title:'Join me on Heat',text:'Room code '+fmt(code),url:inviteUrl()}).catch(()=>{})}catch{}});
 $('#pop').onclick=e=>{if(e.target.id==='pop')$('#pop').classList.remove('s')};
+const openDiag=()=>{$('#dg').classList.add('s');runDiag()};
+on('#dgo',openDiag);$$('.dgb').forEach(b=>b.onclick=openDiag);on('#dga',runDiag);on('#dgc',()=>dgReport?copyText(dgReport,'Report copied'):toast('Wait for the check to finish'));
+$('#dg').onclick=e=>{if(e.target.id==='dg'){$('#dg').classList.remove('s');dgRun++}};
+$('#bid').textContent='build '+BUILD;
 $('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();viewStart(v)}};
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
 roiInit($('#hroi'),$('#hostS .stage'));drawRoi();ui();ui2();applyPick();refreshChip();list();
 
-/* liquid glass refraction (Chromium; other browsers keep the blur + specular look) */
+/* liquid glass. Each .glass element gets a displacement map built from its own rounded-rect shape: inside a bezel
+   around the rim the backdrop is bent toward the centre (strongest at the very edge, none in the middle), with a faint
+   colour split on fine-pointer devices. Needs SVG filters in backdrop-filter, so Chromium only; other browsers keep
+   the lightly blurred, lit-edge look from the CSS. */
+const FINE=matchMedia('(pointer:fine)').matches;
 let lc=0;
 function lens(el){
  if(!navigator.userAgentData)return;
- const r=el.getBoundingClientRect(),W=Math.round(r.width),H=Math.round(r.height);if(W<8||H<8)return;
- const id=el._l=el._l||'L'+(++lc),R=Math.min(26,Math.min(W,H)/2),b=Math.min(W,H)*.2;
- const m=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="r"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#f00"/></linearGradient><linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#00f"/></linearGradient><filter id="f"><feGaussianBlur stdDeviation="${b/2}"/></filter></defs><rect width="${W}" height="${H}" fill="#000"/><rect width="${W}" height="${H}" fill="url(#r)"/><rect width="${W}" height="${H}" fill="url(#b)" style="mix-blend-mode:difference"/><rect x="${b}" y="${b}" width="${W-2*b}" height="${H-2*b}" rx="${R}" fill="#808080" filter="url(#f)"/></svg>`;
+ const W=el.offsetWidth,H=el.offsetHeight;if(W<8||H<8)return;
+ const rs=getComputedStyle(el).borderTopLeftRadius;let R=parseFloat(rs)||0;if(/%/.test(rs))R=R*Math.min(W,H)/100;R=Math.min(R,W/2,H/2);
+ const key=W+'x'+H+'x'+Math.round(R);if(el._k===key)return;el._k=key;
+ const bz=Math.min(36,Math.min(W,H)*.45),M=Math.max(4,Math.round(bz*.62));   /* bezel width, peak bend in px */
+ const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+ const g=cv.getContext('2d'),im=g.createImageData(W,H),d=im.data,hw=W/2-R,hh=H/2-R;
+ const sdf=(x,y)=>{const qx=Math.abs(x)-hw,qy=Math.abs(y)-hh;return Math.min(Math.max(qx,qy),0)+Math.hypot(Math.max(qx,0),Math.max(qy,0))-R};
+ for(let j=0;j<H;j++)for(let i=0;i<W;i++){
+  const x=i+.5-W/2,y=j+.5-H/2,s=-sdf(x,y);let r=128,gg=128;
+  if(s>=0&&s<bz){
+   const nx=sdf(x+.5,y)-sdf(x-.5,y),ny=sdf(x,y+.5)-sdf(x,y-.5),l=Math.hypot(nx,ny)||1,a=Math.pow(1-s/bz,2.2);
+   r=128-nx/l*a*127;gg=128-ny/l*a*127}   /* sample point sits inward of the pixel */
+  const k=(j*W+i)*4;d[k]=r;d[k+1]=gg;d[k+2]=128;d[k+3]=255}
+ g.putImageData(im,0,0);
+ const id=el._l=el._l||'L'+(++lc),sc=2*M;
  let f=document.getElementById(id);
  if(!f){f=document.createElementNS('http://www.w3.org/2000/svg','filter');f.id=id;f.setAttribute('color-interpolation-filters','sRGB');f.setAttribute('x','0');f.setAttribute('y','0');f.setAttribute('width','100%');f.setAttribute('height','100%');$('#fd').appendChild(f)}
- f.innerHTML=`<feImage href="data:image/svg+xml,${encodeURIComponent(m)}" x="0" y="0" width="${W}" height="${H}" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="34" xChannelSelector="R" yChannelSelector="B"/>`;
- el.style.backdropFilter=el.style.webkitBackdropFilter=`url(#${id}) blur(5px) saturate(1.9)`}
+ const dm=(k,res)=>`<feDisplacementMap in="SourceGraphic" in2="m" scale="${(sc*k).toFixed(2)}" xChannelSelector="R" yChannelSelector="G" result="${res}"/>`;
+ const ch=(i,m)=>`<feColorMatrix in="${i}" type="matrix" values="${m}" result="${i}c"/>`;
+ f.innerHTML=`<feImage href="${cv.toDataURL()}" x="0" y="0" width="${W}" height="${H}" result="m"/>`+(FINE
+  ?dm(1.1,'a')+ch('a','1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0')+dm(1,'b')+ch('b','0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0')+dm(.9,'c')+ch('c','0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0')
+   +'<feBlend in="ac" in2="bc" mode="screen" result="ab"/><feBlend in="ab" in2="cc" mode="screen"/>'
+  :dm(1,'o'));
+ el.style.backdropFilter=el.style.webkitBackdropFilter=`url(#${id}) blur(1px) saturate(1.7) brightness(.96)`}
 if(window.ResizeObserver){const ro=new ResizeObserver(es=>es.forEach(e=>lens(e.target)));$$('.glass').forEach(g=>ro.observe(g))}
 
 /* join link: page#join=ABCD1234 */
