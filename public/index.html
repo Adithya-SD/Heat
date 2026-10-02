@@ -17,6 +17,7 @@ input{-webkit-user-select:text;user-select:text}
 svg.i{filter:drop-shadow(0 1px 3px rgba(0,0,0,.35));width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .bg{position:fixed;inset:-10%;background:radial-gradient(55% 50% at 18% 18%,#2f63ff,transparent 70%),radial-gradient(50% 45% at 88% 28%,#b23cff,transparent 70%),radial-gradient(60% 55% at 58% 98%,#ff5a7a,transparent 70%),radial-gradient(40% 40% at 8% 90%,#00c7be,transparent 70%),#0a0a16;animation:dr 26s ease-in-out infinite alternate}
 @keyframes dr{to{transform:scale(1.14) translate(-2%,3%)}}
+body:not([data-s=home]) .bg{animation-play-state:paused}body[data-s=call] .bg{display:none}
 .scr{position:fixed;inset:0;display:none;animation:in .5s var(--e)}
 @keyframes in{from{opacity:0;transform:scale(.985)}}
 body[data-s=home] #home{display:flex}body[data-s=host] #hostS,body[data-s=view] #viewS,body[data-s=call] #callS{display:block}
@@ -172,7 +173,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 <button class="glass card" id="bh"><span class="ico" data-i="video"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
 <div class="glass card"><span class="ico g" data-i="eye"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
 <button class="glass chip" id="rc" hidden></button>
-<p class="ft">Video and audio go straight between devices.<br><button class="lk" id="dgo">Check connection</button> · <span id="bid"></span></p>
+<p class="ft">Video and audio go straight between devices.<br><button class="lk" id="dgo">Check connection</button> · <span id="bid"></span><span id="fxw"> · <button class="lk" id="fxb"></button></span></p>
 </div></section>
 
 <!-- motion camera: host -->
@@ -227,7 +228,7 @@ const norm=s=>s.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8),fmt=c=>c.lengt
 let mode,kind,peer,stream,facing='environment',code,vp,conn,call,rt,wd,hb,cti,ot,wtm,tk=0,ctk=0,sid=0,lastRx=0,liveOn=0,muted=false,ac,wl,evs=[],unread=0,tto,bg,lid=0,ut=0,
  dialAt=0,openAt=0,startAt=0,lp=null,lpBusy=0,lastErr='',lastSt=['',0],
  remoteOn=0,swapped=0,micOn=1,camOn=1,rmic=1,rcam=1,callT0=0,scr=null,cUnread=0,waiting=0,camN=2;
-const viewers=new Map(),go=s=>{document.body.dataset.s=s;requestAnimationFrame(fit);layout()};
+const viewers=new Map(),go=s=>{document.body.dataset.s=s;scrAt=performance.now();requestAnimationFrame(fit);layout()};
 const setIcon=(el,n)=>$('use',el).setAttribute('href','#i-'+n);
 
 $$('[data-i]').forEach(e=>e.insertAdjacentHTML('afterbegin',`<svg class="i"><use href="#i-${e.dataset.i}"/></svg>`));
@@ -611,38 +612,41 @@ $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia
 roiInit($('#hroi'),$('#hostS .stage'));drawRoi();ui();ui2();applyPick();refreshChip();list();
 
 /* liquid glass. Each .glass element gets a displacement map built from its own rounded-rect shape: inside a bezel
-   around the rim the backdrop is bent toward the centre (strongest at the very edge, none in the middle), with a faint
-   colour split on fine-pointer devices. Needs SVG filters in backdrop-filter, so Chromium only; other browsers keep
-   the lightly blurred, lit-edge look from the CSS. */
-const FINE=matchMedia('(pointer:fine)').matches;
-let lc=0;
+   around the rim the backdrop is bent toward the centre (strongest at the very edge, none in the middle). Needs SVG
+   filters in backdrop-filter, so Chromium only; other browsers keep the lightly blurred, lit-edge look from the CSS.
+   If the device can't hold its frame rate the refraction switches itself off (footer toggle brings it back). */
+let fxOn=ls('fx')!=='off',lc=0,scrAt=performance.now();
 function lens(el){
- if(!navigator.userAgentData)return;
+ if(!fxOn||!navigator.userAgentData)return;
  const W=el.offsetWidth,H=el.offsetHeight;if(W<8||H<8)return;
  const rs=getComputedStyle(el).borderTopLeftRadius;let R=parseFloat(rs)||0;if(/%/.test(rs))R=R*Math.min(W,H)/100;R=Math.min(R,W/2,H/2);
  const key=W+'x'+H+'x'+Math.round(R);if(el._k===key)return;el._k=key;
- const bz=Math.min(36,Math.min(W,H)*.45),M=Math.max(4,Math.round(bz*.62));   /* bezel width, peak bend in px */
+ const bz=Math.max(10,Math.min(26,Math.min(W,H)*.28)),M=Math.max(4,bz*.55);   /* bezel width; peak bend in px (a hair past the fold point, which gives a thin bright rim line) */
  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
  const g=cv.getContext('2d'),im=g.createImageData(W,H),d=im.data,hw=W/2-R,hh=H/2-R;
  const sdf=(x,y)=>{const qx=Math.abs(x)-hw,qy=Math.abs(y)-hh;return Math.min(Math.max(qx,qy),0)+Math.hypot(Math.max(qx,0),Math.max(qy,0))-R};
  for(let j=0;j<H;j++)for(let i=0;i<W;i++){
   const x=i+.5-W/2,y=j+.5-H/2,s=-sdf(x,y);let r=128,gg=128;
   if(s>=0&&s<bz){
-   const nx=sdf(x+.5,y)-sdf(x-.5,y),ny=sdf(x,y+.5)-sdf(x,y-.5),l=Math.hypot(nx,ny)||1,a=Math.pow(1-s/bz,2.2);
+   const nx=sdf(x+.5,y)-sdf(x-.5,y),ny=sdf(x,y+.5)-sdf(x,y-.5),l=Math.hypot(nx,ny)||1,a=Math.pow(1-s/bz,2.4);
    r=128-nx/l*a*127;gg=128-ny/l*a*127}   /* sample point sits inward of the pixel */
   const k=(j*W+i)*4;d[k]=r;d[k+1]=gg;d[k+2]=128;d[k+3]=255}
  g.putImageData(im,0,0);
- const id=el._l=el._l||'L'+(++lc),sc=2*M;
+ const id=el._l=el._l||'L'+(++lc);
  let f=document.getElementById(id);
  if(!f){f=document.createElementNS('http://www.w3.org/2000/svg','filter');f.id=id;f.setAttribute('color-interpolation-filters','sRGB');f.setAttribute('x','0');f.setAttribute('y','0');f.setAttribute('width','100%');f.setAttribute('height','100%');$('#fd').appendChild(f)}
- const dm=(k,res)=>`<feDisplacementMap in="SourceGraphic" in2="m" scale="${(sc*k).toFixed(2)}" xChannelSelector="R" yChannelSelector="G" result="${res}"/>`;
- const ch=(i,m)=>`<feColorMatrix in="${i}" type="matrix" values="${m}" result="${i}c"/>`;
- f.innerHTML=`<feImage href="${cv.toDataURL()}" x="0" y="0" width="${W}" height="${H}" result="m"/>`+(FINE
-  ?dm(1.1,'a')+ch('a','1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0')+dm(1,'b')+ch('b','0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0')+dm(.9,'c')+ch('c','0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0')
-   +'<feBlend in="ac" in2="bc" mode="screen" result="ab"/><feBlend in="ab" in2="cc" mode="screen"/>'
-  :dm(1,'o'));
+ f.innerHTML=`<feImage href="${cv.toDataURL()}" x="0" y="0" width="${W}" height="${H}" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="${2*M}" xChannelSelector="R" yChannelSelector="G"/>`;
  el.style.backdropFilter=el.style.webkitBackdropFilter=`url(#${id}) blur(1px) saturate(1.7) brightness(.96)`}
+const fxLabel=()=>{$('#fxb').textContent='Glass: '+(fxOn?'full':'light')};
+function setFx(v,msg){fxOn=v;ls('fx',v?'on':'off');$$('.glass').forEach(e=>{e._k=null;if(v)lens(e);else e.style.backdropFilter=e.style.webkitBackdropFilter=''});fxLabel();if(msg)toast(msg)}
 if(window.ResizeObserver){const ro=new ResizeObserver(es=>es.forEach(e=>lens(e.target)));$$('.glass').forEach(g=>ro.observe(g))}
+$('#fxw').hidden=!navigator.userAgentData;fxLabel();on('#fxb',()=>setFx(!fxOn));
+{let t0=performance.now(),win=t0,total=0,slow=0,strikes=0;   /* share of the last 3s spent in frames slower than ~22fps */
+ const tick=t=>{const dt=t-t0;t0=t;
+  if(!document.hidden&&dt<1000){total+=dt;if(dt>45)slow+=dt}
+  if(t-win>3000){if(fxOn&&total>1500&&slow/total>.5&&t-scrAt>3000){if(++strikes>=2){strikes=0;setFx(false,'Glass effects switched to light to keep things smooth')}}else strikes=0;total=slow=0;win=t}
+  requestAnimationFrame(tick)};
+ if(navigator.userAgentData)requestAnimationFrame(tick)}
 
 /* join link: page#join=ABCD1234 */
 const jm=location.hash.match(/join=([A-Z2-9]{8})/);if(jm)viewStart(jm[1]);

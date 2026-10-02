@@ -31,10 +31,16 @@ The TURN entries are public, shared, best-effort relays. For something you depen
 
 ## If it still does not connect
 
+- **Tap “Check connection”** (home screen footer, or on the stuck-connecting screen after 20 s). It tests the signaling server and every STUN/relay server from *that* device and says in plain words what is wrong, e.g. “no relay server is reachable from here”. **Copy report** gives you something to paste when asking for help. Run it on both devices.
+- The status line tells you the stage: *Contacting the host…* (looking for the other device), *Host not found — waiting for it…* (nobody is hosting that code), *Connecting video…* (found it, setting up media). The footer shows a **build** id; both devices should show the same one.
 - Both devices must be online and use the same room code; the host page must stay open.
 - Turn off VPN / ad-blockers that block WebRTC, or try another network or browser.
 - iOS: use Safari; Android: use Chrome; allow camera and microphone when asked.
 - If a call connects but you hear nothing on a device that joined from an invite link, tap the screen once (browsers block sound until you interact).
+
+## Glass effects
+
+The interface uses a refracting “liquid glass” look (a displacement map per element, with only a hint of blur) in Chromium-based browsers; other browsers get a lightly blurred, lit-edge version. It is the heaviest thing the page draws, so it switches itself to the light version if the device cannot hold its frame rate, and the footer has a **Glass: full / light** toggle.
 
 ## Deploying
 
