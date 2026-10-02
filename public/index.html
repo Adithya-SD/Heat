@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#000">
 <meta name="description" content="Video calls and motion-aware cameras, device to device. No accounts, no video server.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a84ff'/%3E%3Cpath d='M6 16s3.5-7 10-7 10 7 10 7-3.5 7-10 7S6 16 6 16z' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='16' r='3.4' fill='%23fff'/%3E%3C/svg%3E">
-<title>Vigil</title>
+<title>Heat</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
 :root{--t2:rgba(255,255,255,.62);--wn:#ff9f0a;--ok:#30d158;--rd:#ff453a;--e:cubic-bezier(.32,.72,0,1);--sp:cubic-bezier(.34,1.56,.64,1)}
@@ -156,7 +156,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 <div class="bg"></div>
 
 <section class="scr" id="home"><div class="col">
-<h1>Vigil</h1>
+<h1>Heat</h1>
 <p class="sub">Video calls and motion cameras,<br>device to device. No accounts.</p>
 <div class="glass seg" id="seg"><button data-m="call">Video call</button><button data-m="watch">Motion camera</button></div>
 <button class="glass card" id="bh"><span class="ico" data-i="video"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
@@ -373,7 +373,7 @@ const alive=c=>{const s=c.peerConnection&&c.peerConnection.iceConnectionState;re
 function dropViewer(v){try{v.c.close()}catch{}try{v.call.close()}catch{}viewers.forEach((x,k)=>{if(x===v)viewers.delete(k)});if(kind==='call'){remoteOn=0;callT0=0;$('#ctm').textContent=''}upd()}
 function heartbeat(){const now=performance.now();if(kind==='call')bc({t:'p'});viewers.forEach(v=>{if(now-v.seen>12000)dropViewer(v)})}
 function hostPeer(){
- const p=peer=new Peer('vigil-'+code,{config:ICE});
+ const p=peer=new Peer('heat-'+code,{config:ICE});
  /* the public signaling socket can hang without ever erroring; give up on it and start a fresh one */
  clearTimeout(ot);ot=setTimeout(()=>{if(mode==='host'&&peer===p&&!p.open&&!p.dead){hstat('Can’t reach the server — retrying…');p.dead=1;try{p.destroy()}catch{}setTimeout(()=>{if(mode==='host')hostPeer()},1000)}},10000);
  p.on('open',()=>{clearTimeout(ot);ut=0;upd();$('#hcode span').textContent=fmt(code);ls('hc',code)});
@@ -487,7 +487,7 @@ function dial(){
  const old=conn;conn=null;try{old&&old.close()}catch{}
  dialAt=now;openAt=0;
  if(!liveOn)stat('Looking for the host…',0);
- const c=conn=vp.connect('vigil-'+code,{reliable:true});
+ const c=conn=vp.connect('heat-'+code,{reliable:true});
  c.on('open',()=>{if(conn!==c)return;openAt=performance.now();lastRx=openAt;lastErr='';if(!liveOn&&!lpBusy)stat('Connecting video…',0)});
  c.on('data',m=>{lastRx=performance.now();onData(m)});
  c.on('close',()=>{if(conn===c)lost()});c.on('error',()=>{if(conn===c)lost()});
@@ -513,7 +513,7 @@ function onAlert(m){
  if(!$('#sheet').classList.contains('open')){unread++;badge()}
  toast('Motion · '+tm(e.ts),e.img);chime();navigator.vibrate&&navigator.vibrate([120,60,120]);
  if(document.hidden&&window.Notification&&Notification.permission==='granted'){try{new Notification('Motion detected',{body:tm(e.ts)})}catch{}}
- document.title='● Motion — Vigil';setTimeout(()=>document.title='Vigil',3000);list()}
+ document.title='● Motion — Heat';setTimeout(()=>document.title='Heat',3000);list()}
 async function rtt(){try{const c=mode==='host'?[...viewers.values()][0]?.call:call;if(!c)return;const r=await c.peerConnection.getStats();r.forEach(s=>{if(s.type==='candidate-pair'&&s.nominated&&s.currentRoundTripTime!=null)$(kind==='call'?'#cms':'#ms').textContent=Math.round(s.currentRoundTripTime*1e3)+' ms'})}catch{}}
 function callUI(){clearInterval(cti);ctk=0;cti=setInterval(()=>{if(callT0&&remoteOn)$('#ctm').textContent=hms(Date.now()-callT0);if(++ctk%3===0&&remoteOn)rtt()},1000)}
 function viewStart(c){
@@ -526,7 +526,7 @@ function viewStart(c){
   if(mode==='view'&&liveOn&&performance.now()-lastRx>(kind==='call'?9000:5000))lost();
   if(tk%2===0&&liveOn&&kind!=='call')rtt();
   hint()},1500)}
-function shot(){const v=$('#vv');if(!v.videoWidth)return;const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);c.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='vigil-'+Date.now()+'.png';a.click();toast('Snapshot saved')})}
+function shot(){const v=$('#vv');if(!v.videoWidth)return;const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);c.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='heat-'+Date.now()+'.png';a.click();toast('Snapshot saved')})}
 
 /* ---------- shared teardown + wiring ---------- */
 function stop(){
@@ -549,7 +549,7 @@ on('#ve',()=>{const s=$('#sheet');s.classList.toggle('open');if(s.classList.cont
 const copyText=(t,ok)=>{const p=navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject();p.then(()=>toast(ok)).catch(()=>toast(t))};
 on('#hcode',()=>copyText(code,'Code copied'));on('#pc',()=>copyText(code,'Code copied'));
 on('#pl',()=>copyText(inviteUrl(),'Invite link copied'));
-on('#ps',()=>{try{navigator.share({title:'Join me on Vigil',text:'Room code '+fmt(code),url:inviteUrl()}).catch(()=>{})}catch{}});
+on('#ps',()=>{try{navigator.share({title:'Join me on Heat',text:'Room code '+fmt(code),url:inviteUrl()}).catch(()=>{})}catch{}});
 $('#pop').onclick=e=>{if(e.target.id==='pop')$('#pop').classList.remove('s')};
 $('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();viewStart(v)}};
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
