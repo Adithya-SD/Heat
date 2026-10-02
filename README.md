@@ -13,6 +13,14 @@ Pick one on the home screen (**Video call** is the default):
 
 The host chooses the mode; whoever joins adopts it automatically.
 
+## Viewing: rotation, zoom, shortcuts
+
+- **Follows the sender's phone.** When the person sending video turns their phone, the picture on every viewer changes shape with it. On a phone or tablet the picture is also **turned 90° to fill the screen** when that makes it at least 25% bigger (a landscape feed on a portrait phone); the ⟳ button in the top bar cycles clockwise → counter-clockwise → off and is remembered. Desktop browsers never turn the picture.
+- **Never crops, never zooms by itself.** The whole picture is always shown. To look closer, *you* choose: tap the 🔍 button and **drag a box around the person or area** you want, or pinch / scroll the wheel / double-tap (double-click) to zoom at a point, drag to pan, and tap the button again to reset. Zoom clears on its own when the sender rotates their phone, because it would point at the wrong thing.
+- **Keyboard (desktop):** `M` mute · `V` camera · `C` chat · `Z` zoom · `F` full screen · `Esc` closes panels.
+- **Paste an invite link** (or `ABCD-1234`) straight into the code box to join.
+- A confirmation appears if you try to close a tab that is running a camera or a live view.
+
 ## Using it
 
 1. Open the deployed **HTTPS** URL on both devices (camera access is blocked on plain HTTP except `localhost`).

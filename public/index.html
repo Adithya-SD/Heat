@@ -108,11 +108,20 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 .vbox.off{display:none}
 .vbox.full{inset:0;z-index:0}
 .vbox.pip{right:14px;bottom:calc(max(16px,env(safe-area-inset-bottom)) + 96px);width:clamp(96px,24vw,150px);aspect-ratio:3/4;border-radius:20px;z-index:3;cursor:pointer;box-shadow:0 8px 30px rgba(0,0,0,.5),0 0 0 1.5px rgba(255,255,255,.55)}
-@media(min-aspect-ratio:1/1){.vbox.pip{aspect-ratio:16/9;width:clamp(160px,20vw,260px)}}
 .vbox video{width:100%;height:100%;display:block;object-fit:contain;background:#000}
-.vbox.pip video{object-fit:cover}
-@media(max-width:700px) and (orientation:portrait){.vbox.full video{object-fit:cover}}
-.vbox.mir video{transform:scaleX(-1)}
+.vbox.pip video{object-fit:contain}
+/* the picture is always shown whole: it is never cropped to fill the screen */
+.vbox.pip.land{aspect-ratio:var(--ar,16/9);width:clamp(150px,30vw,240px)}
+.vbox.pip.port{aspect-ratio:var(--ar,3/4);width:clamp(96px,24vw,150px)}
+.vbox.rotv video{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(var(--rd,90deg));object-fit:contain}
+/* manual zoom (only ever on request): frame holds the pointer events, layer is what moves */
+.zl{position:absolute;inset:0;transform-origin:0 0;will-change:transform}
+.zf{position:absolute;inset:0;touch-action:none}
+#rbox.full{touch-action:none}
+[data-zsel="1"]{cursor:crosshair}
+.zsel{position:absolute;display:none;z-index:6;border:1.5px dashed #fff;background:rgba(255,255,255,.14);border-radius:10px;pointer-events:none}
+.tb{display:flex;gap:8px;align-items:flex-start}
+.b.rb.off{opacity:.5}.vbox.mir video{transform:scaleX(-1)}
 .voff{position:absolute;inset:0;z-index:1;display:grid;place-content:center;justify-items:center;gap:8px;background:linear-gradient(160deg,#1c2340,#2a1b3d);color:var(--t2);font-weight:600}
 .voff svg.i{width:34px;height:34px}
 .pip .voff svg.i{width:22px;height:22px}.pip .voff span{font-size:11px}
@@ -152,6 +161,10 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></symbol>
 <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></symbol>
 <symbol id="i-hangup" viewBox="0 0 24 24"><path d="M10.7 13.3a16 16 0 0 0 3.4 2.6l1.3-1.3a2 2 0 0 1 2.1-.4 12.8 12.8 0 0 0 2.8.7 2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-3.3-2.7m-2.7-3.3A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7 12.8 12.8 0 0 0 .7 2.8 2 2 0 0 1-.4 2.1L8.1 9.9"/><path d="M23 1L1 23"/></symbol>
+<symbol id="i-rotate" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></symbol>
+<symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></symbol>
+<symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></symbol>
+<symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M8 11h6"/></symbol>
 <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></symbol>
 <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
 <symbol id="i-flip" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/></symbol>
@@ -185,8 +198,8 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 
 <!-- motion camera: viewer (also the neutral "connecting" screen before the room type is known) -->
 <section class="scr" id="viewS">
-<div class="stage"><video id="vv" muted playsinline autoplay></video><div class="roi" id="vroi"></div></div>
-<div class="top"><div class="glass pill"><i class="dot" id="vd"></i><span id="vst">Connecting…</span><small id="ms"></small></div><button class="glass b" id="vf" data-i="max" title="Full screen"></button></div>
+<div class="zf" id="vzf"><div class="zl" id="vzl"><div class="stage"><video id="vv" muted playsinline autoplay></video><div class="roi" id="vroi"></div></div></div></div>
+<div class="top"><div class="glass pill"><i class="dot" id="vd"></i><span id="vst">Connecting…</span><small id="ms"></small></div><div class="tb"><button class="glass b rb" id="vr" data-i="rotate" title="Auto-rotate view" hidden></button><button class="glass b" id="vz" data-i="zoom-in" title="Zoom into an area"></button><button class="glass b" id="vf" data-i="max" title="Full screen"></button></div></div>
 <aside class="glass sheet" id="sheet"><h3>Activity</h3><div id="evl"></div></aside>
 <div class="glass dock"><button class="b arm" data-i="shield" title="Motion alerts"></button><div class="sl"><input class="sens" type="range" min="1" max="10" step="1" title="Sensitivity"></div><div class="mt"><i id="mi"></i></div><button class="b" id="vs2" data-i="cam" title="Save snapshot"></button><button class="b" id="ve" data-i="list" title="Activity"><em class="bd" id="bd"></em></button><button class="b" id="vm" data-i="vol" title="Alert sound"></button><button class="b red" id="vx" data-i="x" title="Disconnect"></button></div>
 <div class="ov s" id="ov"><div class="glass c2"><div class="sp"></div><b id="ovt">Connecting…</b><small class="hint" id="ovh"></small><button class="ghost dgb" hidden>Check connection</button><button class="ghost" id="oc">Cancel</button></div></div>
@@ -194,9 +207,9 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border:0;border-radiu
 
 <!-- video call (host and guest) -->
 <section class="scr" id="callS">
-<div class="vbox off" id="rbox"><video id="rv" playsinline autoplay></video><div class="voff" id="roff" hidden><svg class="i"><use href="#i-video-off"/></svg><span>Camera off</span></div><div class="tag" id="rtag" hidden><svg class="i"><use href="#i-mic-off"/></svg>Muted</div></div>
+<div class="vbox off" id="rbox"><div class="zl" id="rzl"><video id="rv" playsinline autoplay></video></div><div class="voff" id="roff" hidden><svg class="i"><use href="#i-video-off"/></svg><span>Camera off</span></div><div class="tag" id="rtag" hidden><svg class="i"><use href="#i-mic-off"/></svg>Muted</div></div>
 <div class="vbox full" id="lbox"><video id="lv" muted playsinline autoplay></video><div class="voff" id="loff" hidden><svg class="i"><use href="#i-video-off"/></svg><span id="lofft">Camera off</span></div></div>
-<div class="top"><div class="glass pill"><i class="dot" id="cd"></i><span id="cst">Starting…</span><small id="ctm"></small><small id="cms"></small></div><button class="glass b" id="cfs" data-i="max" title="Full screen"></button></div>
+<div class="top"><div class="glass pill"><i class="dot" id="cd"></i><span id="cst">Starting…</span><small id="ctm"></small><small id="cms"></small></div><div class="tb"><button class="glass b rb" id="cr" data-i="rotate" title="Auto-rotate view" hidden></button><button class="glass b" id="cz" data-i="zoom-in" title="Zoom into an area"></button><button class="glass b" id="cfs" data-i="max" title="Full screen"></button></div></div>
 <aside class="glass sheet" id="chat"><h3>Chat</h3><div id="cl"></div><form id="cform" autocomplete="off"><input id="cin" placeholder="Message" maxlength="500"><button class="b" id="csend" type="submit" data-i="send" title="Send"></button></form></aside>
 <div class="glass dock"><button class="b" id="cm" data-i="mic" title="Mute"></button><button class="b" id="cc" data-i="video" title="Camera on/off"></button><button class="b" id="cf" data-i="flip" title="Switch camera"></button><button class="b" id="cs" data-i="monitor" title="Share screen" hidden></button><button class="b" id="ct" data-i="chat" title="Chat"><em class="bd" id="cbd"></em></button><button class="b" id="cv" data-i="share" title="Invite"></button><button class="b red" id="cx" data-i="hangup" title="Leave"></button></div>
 <div class="ov s" id="cov"><div class="glass c2"><div class="sp"></div><b id="covt">Starting…</b><small class="hint" id="covh"></small><button class="ghost dgb" hidden>Check connection</button><button class="ghost" id="coc">Cancel</button></div></div>
@@ -219,7 +232,7 @@ const ICE={iceServers:[
  {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'},
  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443?transport=tcp','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
 ]};
-const BUILD='2026-10-02.3'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-02.4'; /* shown on the home screen so you can confirm both devices run the same version */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
 const AL='ABCDEFGHJKMNPQRSTUVWXYZ23456789',gen=()=>[...crypto.getRandomValues(new Uint8Array(8))].map(n=>AL[n%31]).join('');
@@ -227,7 +240,7 @@ const norm=s=>s.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8),fmt=c=>c.lengt
 /* mode = this device's role (host|view); kind = the room type (call|watch), chosen by the host */
 let mode,kind,peer,stream,facing='environment',code,vp,conn,call,rt,wd,hb,cti,ot,wtm,tk=0,ctk=0,sid=0,lastRx=0,liveOn=0,muted=false,ac,wl,evs=[],unread=0,tto,bg,lid=0,ut=0,
  dialAt=0,openAt=0,startAt=0,lp=null,lpBusy=0,lastErr='',lastSt=['',0],
- remoteOn=0,swapped=0,micOn=1,camOn=1,rmic=1,rcam=1,callT0=0,scr=null,cUnread=0,waiting=0,camN=2;
+ zoomR=null,zoomV=null,rotHinted=0,rotMode=['cw','ccw','off'].includes(ls('rot'))?ls('rot'):'cw',remoteOn=0,swapped=0,micOn=1,camOn=1,rmic=1,rcam=1,callT0=0,scr=null,cUnread=0,waiting=0,camN=2;
 const viewers=new Map(),go=s=>{document.body.dataset.s=s;scrAt=performance.now();requestAnimationFrame(fit);layout()};
 const setIcon=(el,n)=>$('use',el).setAttribute('href','#i-'+n);
 
@@ -243,8 +256,20 @@ function applyPick(){$$('#seg button').forEach(b=>b.classList.toggle('on',b.data
 $$('#seg button').forEach(b=>b.onclick=()=>{pick=b.dataset.m;ls('km',pick);applyPick()});
 
 /* stage fitting + ROI */
-function fit(){$$('.scr').forEach(sc=>{const v=$('video',sc),s=$('.stage',sc),W=sc.clientWidth,H=sc.clientHeight;if(!v||!s||!v.videoWidth||!W)return;const k=Math.min(W/v.videoWidth,H/v.videoHeight),w=v.videoWidth*k,h=v.videoHeight*k;Object.assign(s.style,{width:w+'px',height:h+'px',left:(W-w)/2+'px',top:(H-h)/2+'px'})})}
-addEventListener('resize',fit);['hv','vv'].forEach(i=>['loadedmetadata','resize'].forEach(ev=>$('#'+i).addEventListener(ev,fit)));
+/* How to show a picture of vw×vh on a W×H screen. Phones and tablets turn it 90° when that makes it at least 25%
+   larger (a landscape feed on a portrait phone, or the reverse); otherwise it is shown whole. It is never cropped. */
+function viewMode(vw,vh,W,H){
+ const k0=Math.min(W/vw,H/vh),k1=Math.min(W/vh,H/vw);
+ if(rotMode!=='off'&&matchMedia('(pointer:coarse)').matches&&k1>k0*1.25)return{m:'rot',deg:rotMode==='ccw'?-90:90};
+ return{m:'contain'}}
+const rotHint=()=>{if(!rotHinted){rotHinted=1;toast('Turned to fit · tap ⟳ to change')}};
+function fit(){$$('.scr').forEach(sc=>{const v=$('video',sc),s=$('.stage',sc),W=sc.clientWidth,H=sc.clientHeight;if(!v||!s||!v.videoWidth||!W)return;
+ const vw=v.videoWidth,vh=v.videoHeight,isV=sc.id==='viewS',vm=isV?viewMode(vw,vh,W,H):{m:'contain'};
+ if(isV){const land=vw>=vh;if(sc._land!==undefined&&sc._land!==land&&zoomV)zoomV.reset();sc._land=land}   /* the sender turned their phone: drop any manual zoom */
+ const rot=vm.m==='rot',k=rot?Math.min(W/vh,H/vw):Math.min(W/vw,H/vh),w=vw*k,h=vh*k;
+ Object.assign(s.style,{width:w+'px',height:h+'px',left:(W-w)/2+'px',top:(H-h)/2+'px',transform:rot?`rotate(${vm.deg}deg)`:''});if(rot)rotHint()})}
+addEventListener('resize',()=>{fit();layout()});addEventListener('orientationchange',()=>setTimeout(()=>{fit();layout()},250));['hv','vv'].forEach(i=>['loadedmetadata','resize'].forEach(ev=>$('#'+i).addEventListener(ev,fit)));
+['rv','lv'].forEach(i=>['loadedmetadata','resize'].forEach(ev=>$('#'+i).addEventListener(ev,()=>layout())));
 function drawRoi(){const r=st.roi;$$('.roi').forEach(e=>Object.assign(e.style,{left:r.x*100+'%',top:r.y*100+'%',width:r.w*100+'%',height:r.h*100+'%'}));bg=null}
 function roiInit(el,stage){
  el.ondblclick=()=>{st.roi={x:.1,y:.1,w:.8,h:.8};drawRoi();pushSt()};
@@ -301,11 +326,21 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 const hms=ms=>{const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s%60).padStart(2,'0')};
 function cov(show,t){$('#cov').classList.toggle('s',!!show);if(t)$('#covt').textContent=t;if(!show)$('#covh').textContent=''}
 function cstat(t,ok,ov){lastSt=[t,ok];$('#cd').className='dot'+(ok?' ok':'');$('#cst').textContent=t;if(!ok)$('#cms').textContent='';cov(ov,t)}
+function boxFit(b,v,full,self,zm){
+ const vw=v.videoWidth,vh=v.videoHeight;v.style.width=v.style.height='';b.style.removeProperty('--ar');
+ if(!vw||!vh)return'';
+ const land=vw>=vh;if(zm&&b._land!==undefined&&b._land!==land)zm.reset();b._land=land;   /* sender rotated: drop any manual zoom */
+ if(!full){b.style.setProperty('--ar',vw+'/'+vh);return land?' land':' port'}                /* small picture keeps its own shape */
+ if(self)return'';
+ const sc=$('#callS'),W=sc.clientWidth,H=sc.clientHeight,vm=viewMode(vw,vh,W,H);
+ if(vm.m!=='rot')return'';
+ v.style.width=H+'px';v.style.height=W+'px';b.style.setProperty('--rd',vm.deg+'deg');rotHint();return' rotv'}
 function layout(){
  if(document.body.dataset.s!=='call')return;
- const rem=!!remoteOn,sw=rem&&swapped;
- $('#rbox').className='vbox '+(!rem?'off':sw?'pip':'full');
- $('#lbox').className='vbox '+(rem&&!sw?'pip':'full')+(facing==='user'&&!scr?' mir':'');
+ const rem=!!remoteOn,sw=rem&&swapped,rb=$('#rbox'),lb=$('#lbox'),rf=!rem?'off':sw?'pip':'full',lf=rem&&!sw?'pip':'full';
+ rb.className='vbox '+rf+(rf==='off'?'':boxFit(rb,$('#rv'),rf==='full',false,zoomR));
+ lb.className='vbox '+lf+(facing==='user'&&!scr?' mir':'')+boxFit(lb,$('#lv'),lf==='full',true,null);
+ if(rf!=='full'&&zoomR&&(zoomR.s>1||zoomR.sel))zoomR.reset();
  $('#roff').hidden=!(rem&&!rcam);$('#rtag').hidden=!(rem&&!rmic);
  $('#loff').hidden=!!(stream&&camOn);$('#lofft').textContent=stream?'Camera off':'No camera'}
 $('#lbox').onclick=$('#rbox').onclick=e=>{if(e.currentTarget.classList.contains('pip')){swapped=swapped?0:1;layout()}};
@@ -589,7 +624,7 @@ function stop(){
  remoteOn=swapped=waiting=liveOn=0;micOn=camOn=rmic=rcam=1;callT0=0;cUnread=0;
  $('#hv').srcObject=$('#vv').srcObject=$('#rv').srcObject=$('#lv').srcObject=null;
  $('#hroi').classList.remove('hit');$('#sheet').classList.remove('open');$('#chat').classList.remove('open');$('#pop').classList.remove('s');cov(0);
- $('#cl').innerHTML='';bdg($('#cbd'),0);$('#ctm').textContent=$('#cms').textContent='';ui2();go('home');refreshChip()}
+ zoomR&&zoomR.reset();zoomV&&zoomV.reset();$('#cl').innerHTML='';bdg($('#cbd'),0);$('#ctm').textContent=$('#cms').textContent='';ui2();go('home');refreshChip()}
 /* the host tells guests before it leaves, so they don't sit there retrying */
 function endCall(){if(mode==='host'){bc({t:'bye'});setTimeout(()=>{if(mode==='host')stop()},200)}else stop()}
 function refreshChip(){const l=ls('vc'),b=$('#rc');b.hidden=!l;if(l){b.textContent='Reconnect to '+fmt(l);b.onclick=()=>viewStart(l)}}
@@ -610,6 +645,79 @@ $('#bid').textContent='build '+BUILD;
 $('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();viewStart(v)}};
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
 roiInit($('#hroi'),$('#hostS .stage'));drawRoi();ui();ui2();applyPick();refreshChip();list();
+
+/* ---------- rotate-to-fit button (phones and tablets) ---------- */
+const ROT=['cw','ccw','off'],ROTN={cw:'clockwise',ccw:'counter-clockwise',off:'off'};
+function rotUi(){['#vr','#cr'].forEach(sel=>{const b=$(sel);setIcon(b,rotMode==='ccw'?'rotate-ccw':'rotate');b.classList.toggle('off',rotMode==='off');b.title='Auto-rotate: '+ROTN[rotMode]})}
+function cycleRot(){rotMode=ROT[(ROT.indexOf(rotMode)+1)%3];ls('rot',rotMode);rotUi();fit();layout();toast('Auto-rotate: '+ROTN[rotMode])}
+['#vr','#cr'].forEach(sel=>{$(sel).hidden=!matchMedia('(pointer:coarse)').matches;$(sel).onclick=cycleRot});rotUi();
+
+/* ---------- manual zoom: wheel / pinch / drag to pan / double-tap, or draw a box around what you want.
+   Nothing here ever runs on its own. ---------- */
+function makeZoom(frameSel,layerSel,active,btnSel){
+ const F=$(frameSel),L=$(layerSel),B=$(btnSel),z={s:1,x:0,y:0,sel:0},ptr=new Map(),sb=document.createElement('div');
+ sb.className='zsel';F.append(sb);let g=null,tap=null;
+ const box=()=>{const r=F.getBoundingClientRect();return{W:r.width,H:r.height,l:r.left,t:r.top}};
+ const rel=e=>{const b=box();return[e.clientX-b.l,e.clientY-b.t]};
+ const ui=()=>{const zoomed=z.s>1.001;setIcon(B,zoomed?'zoom-out':'zoom-in');B.classList.toggle('on',zoomed||!!z.sel);B.title=zoomed?'Reset zoom':z.sel?'Cancel':'Zoom into an area'};
+ const apply=()=>{const{W,H}=box();z.x=Math.min(0,Math.max(W-W*z.s,z.x));z.y=Math.min(0,Math.max(H-H*z.s,z.y));
+  L.style.transform=z.s>1.001?`translate(${z.x}px,${z.y}px) scale(${z.s})`:'';F.dataset.zsel=z.sel?'1':'';ui()};
+ z.reset=()=>{z.s=1;z.x=z.y=0;z.sel=0;g=null;ptr.clear();sb.style.display='none';apply()};
+ z.at=(px,py,f)=>{const s2=Math.min(8,Math.max(1,z.s*f));z.x=px-(px-z.x)*s2/z.s;z.y=py-(py-z.y)*s2/z.s;z.s=s2;apply()};
+ z.toggle=()=>{if(z.s>1.001)z.reset();else if(z.sel){z.sel=0;sb.style.display='none';apply()}else{z.sel=1;apply();toast('Drag a box around what you want to zoom into')}};
+ const ok=e=>active()&&!e.target.closest('.dock,.top,.sheet,.ov,.pop,button');
+ F.addEventListener('wheel',e=>{if(!active()||e.target.closest('.sheet'))return;e.preventDefault();const[p,q]=rel(e);z.at(p,q,Math.exp(-e.deltaY*.002))},{passive:false});
+ F.addEventListener('pointerdown',e=>{
+  if(!ok(e))return;
+  try{F.setPointerCapture(e.pointerId)}catch{}
+  const[p,q]=rel(e);ptr.set(e.pointerId,{x:p,y:q});
+  if(z.sel&&ptr.size===1){g={k:'sel',x0:p,y0:q};return}
+  if(ptr.size===2){const[a,b]=[...ptr.values()];g={k:'pinch',d:Math.hypot(a.x-b.x,a.y-b.y)||1,s:z.s,mx:(a.x+b.x)/2,my:(a.y+b.y)/2,tx:z.x,ty:z.y};return}
+  g={k:'pan',x0:p,y0:q,tx:z.x,ty:z.y,t:performance.now(),moved:0}});
+ F.addEventListener('pointermove',e=>{
+  if(!ptr.has(e.pointerId))return;
+  const[p,q]=rel(e);ptr.set(e.pointerId,{x:p,y:q});if(!g)return;
+  if(g.k==='sel')Object.assign(sb.style,{display:'block',left:Math.min(g.x0,p)+'px',top:Math.min(g.y0,q)+'px',width:Math.abs(p-g.x0)+'px',height:Math.abs(q-g.y0)+'px'});
+  else if(g.k==='pinch'&&ptr.size>=2){
+   const[a,b]=[...ptr.values()],d=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2,s2=Math.min(8,Math.max(1,g.s*d/g.d));
+   z.x=mx-(g.mx-g.tx)*s2/g.s;z.y=my-(g.my-g.ty)*s2/g.s;z.s=s2;apply()}   /* the point between the fingers stays put */
+  else if(g.k==='pan'){const dx=p-g.x0,dy=q-g.y0;if(Math.hypot(dx,dy)>8)g.moved=1;if(z.s>1.001){z.x=g.tx+dx;z.y=g.ty+dy;apply()}}});
+ const up=e=>{
+  if(!ptr.has(e.pointerId))return;
+  const[p,q]=rel(e);ptr.delete(e.pointerId);
+  if(g&&g.k==='sel'){
+   const w=Math.abs(p-g.x0),h=Math.abs(q-g.y0);sb.style.display='none';z.sel=0;
+   if(w>30&&h>30){const{W,H}=box(),ux=((p+g.x0)/2-z.x)/z.s,uy=((q+g.y0)/2-z.y)/z.s,s2=Math.min(8,Math.max(1,z.s*Math.min(W/w,H/h)));
+    z.s=s2;z.x=W/2-s2*ux;z.y=H/2-s2*uy;toast('Pinch or scroll to adjust · tap the magnifier to reset')}
+   g=null;apply();return}
+  if(g&&g.k==='pan'&&!g.moved&&performance.now()-g.t<350){   /* double-tap / double-click: zoom in at that point, or back out */
+   const n=performance.now();
+   if(tap&&n-tap.t<400&&Math.hypot(p-tap.x,q-tap.y)<30){tap=null;if(z.s>1.001)z.reset();else z.at(p,q,2.5)}else tap={t:n,x:p,y:q}}
+  if(g&&g.k==='pinch'&&ptr.size<2){const r=[...ptr.values()][0];g=r?{k:'pan',x0:r.x,y0:r.y,tx:z.x,ty:z.y,t:0,moved:1}:null}
+  else if(!ptr.size)g=null};
+ F.addEventListener('pointerup',up);F.addEventListener('pointercancel',up);
+ B.onclick=z.toggle;ui();return z}
+zoomR=makeZoom('#rbox','#rzl',()=>$('#rbox').classList.contains('full'),'#cz');
+zoomV=makeZoom('#vzf','#vzl',()=>document.body.dataset.s==='view','#vz');
+
+/* ---------- small conveniences ---------- */
+/* keyboard (desktop): M mute · V camera · C chat · Z zoom · F full screen · Esc closes panels */
+addEventListener('keydown',e=>{
+ if(e.key==='Escape'){['#pop','#dg'].forEach(x=>$(x).classList.remove('s'));$('#chat').classList.remove('open');$('#sheet').classList.remove('open');[zoomR,zoomV].forEach(z=>z&&z.sel&&z.toggle());const a=document.activeElement;if(a&&a.blur&&a!==document.body)a.blur();return}
+ if(e.ctrlKey||e.metaKey||e.altKey||/^(INPUT|TEXTAREA)$/.test((document.activeElement||{}).tagName||''))return;
+ const k=e.key.toLowerCase(),sc=document.body.dataset.s;
+ let h=1;
+ if(sc==='call'&&k==='m')toggleMic();else if(sc==='call'&&k==='v')toggleCam();else if(sc==='call'&&k==='c')toggleChat();
+ else if(sc==='call'&&k==='z')zoomR.toggle();else if(sc==='view'&&k==='z')zoomV.toggle();
+ else if(k==='f'&&sc!=='home')fs();else h=0;
+ if(h)e.preventDefault()});
+/* paste an invite link (or "ABCD-1234") straight into the code box */
+$('#ci').addEventListener('paste',e=>{
+ const t=((e.clipboardData||window.clipboardData).getData('text')||'').trim(),m=/join=([A-Z2-9]{8})/i.exec(t);
+ const c=m?m[1].toUpperCase():/^[A-Za-z0-9 -]{8,12}$/.test(t)?norm(t):'';
+ if(c.length===8){e.preventDefault();$('#ci').value=fmt(c);$('#ci').blur();viewStart(c)}});
+/* don't lose a running camera or call to a stray tab close */
+addEventListener('beforeunload',e=>{if(mode==='host'||(mode==='view'&&liveOn)){e.preventDefault();e.returnValue=''}});
 
 /* liquid glass. Each .glass element gets a displacement map built from its own rounded-rect shape: inside a bezel
    around the rim the backdrop is bent toward the centre (strongest at the very edge, none in the middle). Needs SVG
