@@ -2675,7 +2675,13 @@ function download(name,blob){const a=document.createElement('a');a.href=URL.crea
 async function copyTxt(s){try{await navigator.clipboard.writeText(s);toast('Copied to clipboard','ok')}catch(e){const i=document.createElement('input');i.value=s;document.body.appendChild(i);i.select();document.execCommand('copy');i.remove();toast('Copied to clipboard','ok')}}
 
 /* ============ state ============ */
-const ICE=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}];
+// STUN handles direct paths; the public OpenRelay TURN fallback makes connections
+// work across carrier NATs and stricter home routers too.
+const ICE=[
+ {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:global.stun.twilio.com:3478']},
+ {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+ {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'}
+];
 const S={role:null,room:'',pin:'',name:'',sig:null,stream:null,track:null,micTrack:null,
  viewers:new Map(),pc:null,dc:null,armed:false,sound:store.get('sound',true),notif:false,mic:false,
  roi:store.get('roi',{x:.62,y:.18,w:.3,h:.4}),sens:store.get('sens',50),cool:store.get('cool',5),minAct:store.get('minAct',15),
@@ -2799,7 +2805,7 @@ async function startHost(demo){
  setPill('warn','Registering…',true);$('#stRole').textContent='Host';$('#stSig').textContent='connecting';
  S.sigTok=genCode(16);
  S.sig=new Signal('heat-h-'+S.room);
- S.sig.on('msg',m=>{if(m.type==='OFFER')hostHandleOffer(m)});
+ S.sig.on('msg',m=>{if(m.type==='OFFER')hostHandleOffer(m);else if(m.type==='CANDIDATE')hostHandleCandidate(m)});
  S.sig.on('taken',()=>{setPill('bad','Room code taken');toast('That room code is in use — pick another','err')});
  S.sig.on('down',()=>{setPill('warn','Reconnecting…',true);$('#stSig').textContent='reconnecting'});
  try{await S.sig.connect()}catch(e){setPill('bad','Signaling failed');$('#stSig').textContent='failed';toast('Could not reach signaling — check connection','err');return}
@@ -2812,13 +2818,16 @@ async function hostHandleOffer(m){
  const p=m.payload,md=p.metadata||{};
  if(md.pin!==S.pin){S.sig.send('ANSWER',m.src,{sdp:p.sdp,type:'media',connectionId:p.connectionId,metadata:{err:'pin'}});return}
  const pc=new RTCPeerConnection({iceServers:ICE});
- const v={id:m.src,pc,dc:null,name:(md.name||'Viewer').slice(0,24),t0:Date.now(),bytes:0,br:0};
+ const pendingCandidates=[]; let remoteReady=false;
+ const v={id:m.src,pc,dc:null,name:(md.name||'Viewer').slice(0,24),t0:Date.now(),bytes:0,br:0,pendingCandidates:[],remoteReady:false};
  S.viewers.set(m.src,v);
  pc.onicecandidate=e=>{if(e.candidate)S.sig.send('CANDIDATE',m.src,{candidate:e.candidate.toJSON(),type:'media',connectionId:p.connectionId})};
  pc.ondatachannel=e=>{v.dc=e.channel;v.dc.onmessage=ev=>dcMsg(v,ev);v.dc.onopen=()=>{sendCfg(v);v.dc.send(JSON.stringify({t:'welcome',name:S.demo?'Demo feed':'Host'}));updateViewers()};v.dc.onclose=updateViewers};
  pc.onconnectionstatechange=()=>{if(['failed','closed','disconnected'].includes(pc.connectionState)){S.viewers.delete(m.src)}updateViewers()};
  try{
-  await pc.setRemoteDescription(p.sdp);
+  await pc.setRemoteDescription(p.sdp); remoteReady=true; v.remoteReady=true;
+  for(const candidate of pendingCandidates){try{await pc.addIceCandidate(candidate)}catch(e){console.warn('ICE candidate rejected',e)}}
+  for(const candidate of v.pendingCandidates){try{await pc.addIceCandidate(candidate)}catch(e){console.warn('ICE candidate rejected',e)}}
   const trs=pc.getTransceivers();
   const vtr=trs.find(t=>t.receiver&&t.receiver.track&&t.receiver.track.kind==='video');
   if(vtr){vtr.direction='sendonly';if(S.track)await vtr.sender.replaceTrack(S.track)}
@@ -2828,6 +2837,11 @@ async function hostHandleOffer(m){
  }catch(e){console.error('[v0] host offer fail',e);S.viewers.delete(m.src);return}
  S.sig.send('ANSWER',m.src,{sdp:pc.localDescription.toJSON(),type:'media',connectionId:p.connectionId,metadata:{ok:1}});
  updateViewers();
+}
+async function hostHandleCandidate(m){
+ const v=S.viewers.get(m.src); if(!v)return;
+ if(!v.remoteReady){v.pendingCandidates.push(m.payload.candidate);return}
+ try{await v.pc.addIceCandidate(m.payload.candidate)}catch(e){console.warn('ICE candidate rejected',e)}
 }
 function dcMsg(v,ev){let m;try{m=JSON.parse(ev.data)}catch(e){return}
  if(m.t==='ping')v.dc.send(JSON.stringify({t:'pong',ts:m.ts}));
@@ -2855,6 +2869,9 @@ let vRetry=null,vAttempt=0,vWantStop=false;
 async function startViewer(){
  S.role='viewer';S.room=($('#vCode').value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  S.pin=($('#vPin').value||'').replace(/\D/g,'');S.name=($('#vName').value||'').trim()||'Viewer';
+ // PeerJS uses the token in the signaling URL. The host creates one per session;
+ // viewers must also provide a real token (not the literal string "undefined").
+ S.sigTok=genCode(16);
  if(!S.room){toast('Enter a room code','err');return}
  if(!S.pin){toast('Enter the access PIN','err');return}
  store.set('name',S.name);
@@ -2872,6 +2889,7 @@ async function attemptConnect(){
  try{S.sig=new Signal('heat-v-'+genCode(10));await S.sig.connect()}catch(e){if(!vWantStop)vRetry=setTimeout(attemptConnect,wait);return}
  S.sig.on('down',()=>{if(S.pc&&S.pc.connectionState==='connected')setPill('warn','Reconnecting…',true)});
  const pc=new RTCPeerConnection({iceServers:ICE});S.pc=pc;
+ const pendingCandidates=[]; let remoteReady=false;
  const cid='c'+Date.now().toString(36);
  pc.addTransceiver('video',{direction:'recvonly'});pc.addTransceiver('audio',{direction:'recvonly'});
  S.dc=pc.createDataChannel('control');bindViewerDc();
@@ -2888,8 +2906,11 @@ async function attemptConnect(){
    const md=m.payload.metadata||{};
    if(md.err==='pin'){setPill('bad','Wrong PIN');toast('Wrong PIN — check with the host','err');vWantStop=true;return}
    if(md.err){setPill('bad','Rejected');vWantStop=true;return}
-   try{await pc.setRemoteDescription(m.payload.sdp)}catch(e){console.error('[v0] answer',e);scheduleRetry()}
-  }else if(m.type==='CANDIDATE'){try{await pc.addIceCandidate(m.payload.candidate)}catch(e){}}
+   try{await pc.setRemoteDescription(m.payload.sdp);remoteReady=true;for(const c of pendingCandidates)await pc.addIceCandidate(c)}catch(e){console.error('[v0] answer',e);scheduleRetry()}
+  }else if(m.type==='CANDIDATE'){
+   if(remoteReady){try{await pc.addIceCandidate(m.payload.candidate)}catch(e){console.warn('ICE candidate rejected',e)}}
+   else pendingCandidates.push(m.payload.candidate);
+  }
  });
  await pc.setLocalDescription();
  S.sig.send('OFFER',hostId(),{sdp:pc.localDescription.toJSON(),type:'media',connectionId:cid,metadata:{pin:S.pin,name:S.name,v:1}});
