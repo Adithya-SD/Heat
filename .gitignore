@@ -1,3 +1,6 @@
 .build
 .env.development.local
 .vercel
+node_modules
+tests/out
+.DS_Store

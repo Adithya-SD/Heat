@@ -1,0 +1,23 @@
+{
+  "id": "./",
+  "name": "Heat",
+  "short_name": "Heat",
+  "description": "Private video calls and motion cameras, device to device. No accounts, no video server.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07070c",
+  "theme_color": "#07070c",
+  "categories": ["communication", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Start a video call", "short_name": "Video call", "url": "./?start=call" },
+    { "name": "Start a motion camera", "short_name": "Motion camera", "url": "./?start=watch" }
+  ]
+}

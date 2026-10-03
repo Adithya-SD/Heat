@@ -1,0 +1,14 @@
+{
+  "name": "heat-tests",
+  "private": true,
+  "description": "Browser tests for Heat (kept apart from the deployed site; Vercel never installs these)",
+  "scripts": {
+    "test": "bash run-all.sh",
+    "unit": "node api.js && node e2ee-basic.js && node e2ee.js"
+  },
+  "dependencies": {
+    "node-turn": "^0.0.6",
+    "peer": "^1.0.2",
+    "playwright-core": "^1.50.0"
+  }
+}
