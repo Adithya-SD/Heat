@@ -1,0 +1,10 @@
+.gradle/
+.kotlin/
+build/
+*.iml
+local.properties
+keystore.properties
+*.jks
+*.keystore
+captures/
+.idea/
