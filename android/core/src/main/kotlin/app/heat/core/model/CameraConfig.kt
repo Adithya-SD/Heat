@@ -84,6 +84,9 @@ data class Zone(
     val width: Float = 0.32f,
     val height: Float = 0.32f
 ) {
+    val right: Float get() = x + width
+    val bottom: Float get() = y + height
+
     /** Clamped into the frame, size preserved where possible. */
     fun sanitized(): Zone {
         val w = width.coerceIn(MIN_SIZE, 1f)
