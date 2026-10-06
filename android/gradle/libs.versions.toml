@@ -10,7 +10,7 @@ playServicesWearable = "18.2.0"
 kotlinxSerialization = "1.7.3"
 coroutines = "1.9.0"
 junit = "4.13.2"
-skiko = "0.9.4"
+skiko = "0.153.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,6 +34,8 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+skiko-windows = { group = "org.jetbrains.skiko", name = "skiko-awt-runtime-windows-x64", version.ref = "skiko" }
+skiko-linux = { group = "org.jetbrains.skiko", name = "skiko-awt-runtime-linux-x64", version.ref = "skiko" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

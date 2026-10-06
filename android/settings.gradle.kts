@@ -29,7 +29,7 @@ rootProject.name = "HeatAndroid"
 // :wear          watch viewer/remote app
 include(":core")
 // include(":platform")
-// include(":glass")
-// include(":glass-preview")
+// include(":glass")  # WIP: host/surface/governor not written or compiled yet
+include(":glass-preview")
 // include(":phone")
 // include(":wear")

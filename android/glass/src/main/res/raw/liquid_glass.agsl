@@ -1,0 +1,236 @@
+// Heat Liquid Glass: one pass, any shape.
+//
+// Applied as a RenderEffect over a layer that holds the backdrop (camera preview,
+// wallpaper, anything). `content` is that layer's own rendered pixels. For every
+// pixel inside a glass shape we ask "if this were a slab of curved glass, where
+// would the light that reaches me have come from?", then sample the backdrop
+// there. The same file runs on Android (AGSL) and, unchanged, in the JVM preview
+// tool (Skia), which is how the look is checked without a device.
+//
+// Physics, in short:
+//   * Each shape is a signed-distance field (SDF): negative inside, 0 on the edge.
+//     The distance from the edge, `depth`, drives everything, so the glass follows
+//     its outline exactly: rounded rectangles, circles, capsules and rings all
+//     come from the same code.
+//   * The glass surface is flat in the middle and rises through a bevel of width
+//     `bezel` along a squircle curve, h(t) = (1 - (1-t)^4)^(1/4), t = depth/bezel.
+//     Its slope is steep at the rim and zero in the middle.
+//   * A ray travelling straight down meets that surface and refracts by Snell's
+//     law (air -> glass, index `uIor`). On the bevel it is bent toward the middle
+//     of the shape, so the rim shows stretched content from further inside; in
+//     the flat middle nothing is displaced.
+//   * Red, green and blue use slightly different displacements (dispersion),
+//     which gives the coloured fringe on high-contrast edges.
+//   * Light from `uLight` catches the rim as a thin specular line, with a weaker
+//     one on the opposite edge, plus a soft inner glow.
+//   * A frosted tint and scrim keep text on top readable on any backdrop.
+//
+// Quality tiers (uQuality): 0 = tint + rim only (cheapest), 1 = refraction,
+// 2 = refraction + dispersion + frost blur. The app steps down automatically if
+// frames start to miss their deadline.
+
+// AGSL has no preprocessor: the lens capacity (8) is written as a literal below and must match GlassLook.6.
+
+uniform shader content;
+
+uniform float2 uSize;                // size of the layer in px
+uniform float uCount;                // number of active lenses
+uniform float4 uRect[8];    // left, top, right, bottom (px)
+uniform float4 uShape[8];   // cornerRadius px, kind (0 rrect, 1 ring), ringThickness px, unused
+uniform float4 uLook[8];    // bezel px, strength 0..1, tint 0..1, scrim 0..1
+
+uniform float2 uLight;               // unit vector pointing TOWARD the light, in screen space
+uniform float uIor;                  // refractive index, ~1.5
+uniform float uThick;                // glass thickness scale, px
+uniform float uDispersion;           // 0..0.3, spread between R/G/B displacement
+uniform float uSpec;                 // rim highlight strength
+uniform float uBlur;                 // frost radius px
+uniform float uQuality;              // 0, 1 or 2
+uniform float uShadow;               // drop shadow strength 0..1
+uniform float uSaturation;           // backdrop saturation inside glass, ~1.15
+
+// ── shapes ────────────────────────────────────────────────────────────
+
+float sdRoundRect(float2 p, float2 c, float2 halfSize, float r) {
+    float2 q = abs(p - c) - (halfSize - r);
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
+// Outward unit normal of the rounded rectangle SDF (== gradient of the distance).
+float2 nRoundRect(float2 p, float2 c, float2 halfSize, float r) {
+    float2 w = p - c;
+    float2 s = float2(w.x < 0.0 ? -1.0 : 1.0, w.y < 0.0 ? -1.0 : 1.0);
+    float2 q = abs(w) - (halfSize - r);
+    float2 g;
+    if (q.x > 0.0 || q.y > 0.0) {
+        g = normalize(max(q, 0.0) + 1e-5);
+    } else {
+        g = (q.x > q.y) ? float2(1.0, 0.0) : float2(0.0, 1.0);
+    }
+    return s * g;
+}
+
+float sdRing(float2 p, float2 c, float outerR, float thickness) {
+    float mid = outerR - thickness * 0.5;
+    return abs(length(p - c) - mid) - thickness * 0.5;
+}
+
+float2 nRing(float2 p, float2 c, float outerR, float thickness) {
+    float2 w = p - c;
+    float len = max(length(w), 1e-4);
+    float mid = outerR - thickness * 0.5;
+    return (w / len) * (len < mid ? -1.0 : 1.0);
+}
+
+// ── bevel profile ─────────────────────────────────────────────────────
+
+// Height (0 at the rim, 1 on the flat) and slope of the squircle bevel.
+float bevelH(float t) {
+    float u = 1.0 - t;
+    float u2 = u * u;
+    return pow(max(1.0 - u2 * u2, 1e-4), 0.25);
+}
+
+float bevelSlope(float t) {
+    float u = 1.0 - t;
+    float u3 = u * u * u;
+    float inner = max(1.0 - u3 * u, 1e-4);
+    return u3 * pow(inner, -0.75);
+}
+
+// Refract a ray travelling straight down (0,0,-1) through a surface whose xy
+// slope is `slopeXY` (pointing outward). Returns the xy offset, in px, at which
+// the ray reaches the bottom of a slab `thickness` thick. Negative multiples of
+// the outward normal: the ray is bent toward the middle of the shape.
+float2 refractOffset(float2 outward, float slope, float thickness, float eta) {
+    float3 n = normalize(float3(outward * slope, 1.0));
+    float cosi = n.z;                                   // -dot(n, I) with I = (0,0,-1)
+    float k = 1.0 - eta * eta * (1.0 - cosi * cosi);
+    float root = sqrt(max(k, 0.0));
+    float3 r = float3(0.0, 0.0, -eta) + (eta * cosi - root) * n;
+    return r.xy * (thickness / max(-r.z, 1e-3));
+}
+
+half3 saturate3(half3 c, float s) {
+    half l = dot(c, half3(0.299, 0.587, 0.114));
+    return mix(half3(l), c, half(s));
+}
+
+float hash12(float2 p) {
+    float3 p3 = fract(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+half4 main(float2 fc) {
+    int count = int(uCount);
+
+    // Find the topmost lens covering this pixel (later entries are on top), and
+    // the strongest drop shadow cast onto it from any lens.
+    int hit = -1;
+    float hitD = 0.0;
+    float shadow = 0.0;
+    for (int i = 0; i < 8; i++) {
+        if (i >= count) break;
+        float4 r = uRect[i];
+        // Far from this lens (beyond its shadow): nothing to do. This is what keeps the pass cheap,
+        // because on a typical screen almost every pixel is nowhere near any glass.
+        if (fc.x < r.x - 24.0 || fc.x > r.z + 24.0 || fc.y < r.y - 24.0 || fc.y > r.w + 30.0) continue;
+        float4 sh = uShape[i];
+        float4 lk = uLook[i];
+        float2 c = float2(r.x + r.z, r.y + r.w) * 0.5;
+        float2 hs = float2(r.z - r.x, r.w - r.y) * 0.5;
+        float d;
+        float dShadow;
+        float2 off = float2(0.0, 5.0);
+        if (sh.y < 0.5) {
+            d = sdRoundRect(fc, c, hs, sh.x);
+            dShadow = sdRoundRect(fc - off, c, hs, sh.x);
+        } else {
+            d = sdRing(fc, c, hs.x, sh.z);
+            dShadow = sdRing(fc - off, c, hs.x, sh.z);
+        }
+        if (d < 0.5) { hit = i; hitD = d; }
+        shadow = max(shadow, (1.0 - smoothstep(0.0, 16.0, dShadow)) * lk.y);
+    }
+
+    half4 base = content.eval(fc);
+
+    if (hit < 0) {
+        // Outside every lens: only the soft shadow.
+        base.rgb *= half(1.0 - shadow * uShadow * 0.28);
+        return base;
+    }
+
+    // Re-derive the hit lens (arrays cannot be indexed by a runtime int in every GPU
+    // driver, so select with a constant-bounded loop).
+    float4 r = float4(0.0);
+    float4 sh = float4(0.0);
+    float4 lk = float4(0.0);
+    for (int j = 0; j < 8; j++) {
+        if (j == hit) { r = uRect[j]; sh = uShape[j]; lk = uLook[j]; }
+    }
+    float2 c = float2(r.x + r.z, r.y + r.w) * 0.5;
+    float2 hs = float2(r.z - r.x, r.w - r.y) * 0.5;
+
+    float depth = max(-hitD, 0.0);
+    float2 outward;
+    float maxBevel;
+    if (sh.y < 0.5) {
+        outward = nRoundRect(fc, c, hs, sh.x);
+        maxBevel = min(hs.x, hs.y);
+    } else {
+        outward = nRing(fc, c, hs.x, sh.z);
+        maxBevel = sh.z * 0.5;
+    }
+
+    float bezel = max(min(lk.x, maxBevel), 1.0);
+    float strength = lk.y;
+    float t = clamp(depth / bezel, 0.0, 1.0);
+    float rim = 1.0 - t;
+
+    // ── refraction ───────────────────────────────────────────────────
+    float2 disp = float2(0.0);
+    if (uQuality > 0.5 && t < 0.999) {
+        float tc = max(t, 0.015);                         // the slope is infinite exactly at the rim
+        float slope = (uThick / bezel) * bevelSlope(tc);
+        float thickness = uThick * (0.35 + bevelH(tc));
+        disp = refractOffset(outward, min(slope, 6.0), thickness, 1.0 / uIor) * strength;
+    }
+
+    half3 col;
+    if (uQuality > 1.5) {
+        // Dispersion: three displacements, three samples, plus a 5-tap frost.
+        float2 dr = disp * (1.0 - uDispersion);
+        float2 dg = disp;
+        float2 db = disp * (1.0 + uDispersion);
+        float b = uBlur;
+        half rr = content.eval(fc + dr).r * 0.4 + 0.15 * (content.eval(fc + dr + float2(b, 0.0)).r + content.eval(fc + dr - float2(b, 0.0)).r + content.eval(fc + dr + float2(0.0, b)).r + content.eval(fc + dr - float2(0.0, b)).r);
+        half gg = content.eval(fc + dg).g * 0.4 + 0.15 * (content.eval(fc + dg + float2(b, 0.0)).g + content.eval(fc + dg - float2(b, 0.0)).g + content.eval(fc + dg + float2(0.0, b)).g + content.eval(fc + dg - float2(0.0, b)).g);
+        half bb = content.eval(fc + db).b * 0.4 + 0.15 * (content.eval(fc + db + float2(b, 0.0)).b + content.eval(fc + db - float2(b, 0.0)).b + content.eval(fc + db + float2(0.0, b)).b + content.eval(fc + db - float2(0.0, b)).b);
+        col = half3(rr, gg, bb);
+    } else {
+        col = content.eval(fc + disp).rgb;
+    }
+
+    // ── material ─────────────────────────────────────────────────────
+    col = saturate3(col, uSaturation);
+    col = mix(col, half3(1.0), half(lk.z));              // frosted white tint
+    col *= half(1.0 - lk.w);                             // scrim for legibility
+
+    // ── light ────────────────────────────────────────────────────────
+    float facing = dot(outward, uLight);                  // +1 toward the light
+    float rimLine = exp(-depth / 1.6);                    // hair-thin edge line
+    float rimSoft = exp(-depth / max(bezel * 0.45, 2.0)); // wider soft glow
+    float spec = pow(max(facing, 0.0), 2.2) + 0.45 * pow(max(-facing, 0.0), 2.2);
+    col += half3(1.0) * half(uSpec * strength * (spec * rimLine * 0.95 + spec * rimSoft * 0.16));
+    col += half3(1.0) * half(strength * rim * rim * 0.045 * (0.6 + 0.4 * facing));
+
+    // Dither: gradients on dark glass band badly without it.
+    col += half3(half((hash12(fc) - 0.5) / 255.0));
+
+    // Anti-aliased edge between glass and the shadowed backdrop.
+    float cover = smoothstep(0.5, -0.5, hitD);
+    half3 outside = base.rgb * half(1.0 - shadow * uShadow * 0.28);
+    return half4(mix(outside, clamp(col, 0.0, 1.0), half(cover)), base.a);
+}
