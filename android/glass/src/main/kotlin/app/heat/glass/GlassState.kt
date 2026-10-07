@@ -82,6 +82,10 @@ class GlassState(maxQuality: Int = if (GlassSupport.shader) 2 else 0) {
 
     var look by mutableStateOf(GlassLook())
 
+    /** True once the shader compiled on this device. Until then (or forever, on old Android) surfaces draw the flat look. */
+    var shaderReady by mutableStateOf(false)
+        internal set
+
     internal var version by mutableIntStateOf(0)
         private set
 

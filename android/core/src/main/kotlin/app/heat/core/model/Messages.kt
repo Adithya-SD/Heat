@@ -89,6 +89,10 @@ sealed interface Msg {
         val stream: StreamInfo? = null,
         val lenses: List<LensInfo> = emptyList(),
         val activeLens: String? = null,
+        /** Label of the lens producing the picture, e.g. "1x" or "0.5x". */
+        val lensLabel: String = "",
+        /** True when the zoom is past the lens's own reach, i.e. a crop of the sensor. */
+        val digitalZoom: Boolean = false,
         val hasTorch: Boolean = false,
         val recording: Boolean = false,
         val storageUsedMb: Int = 0,

@@ -139,9 +139,14 @@ data class StreamSettings(
     /** Ceiling for live video. AUTO climbs and falls with the link; the others cap it. */
     val quality: StreamQuality = StreamQuality.AUTO,
     /** Allow the camera microphone to be streamed when a viewer asks for sound. */
-    val allowAudio: Boolean = true
-)  {
-    fun sanitized() = this
+    val allowAudio: Boolean = true,
+    /**
+     * 0 = as crisp as the link allows, 100 = a deliberately coarse trickle. For when a smooth soft
+     * picture beats a sharp stuttering one. Same control and meaning as the earlier app's bezel mode.
+     */
+    val muddiness: Int = 0
+) {
+    fun sanitized() = copy(muddiness = muddiness.coerceIn(0, 100))
 }
 
 @Serializable

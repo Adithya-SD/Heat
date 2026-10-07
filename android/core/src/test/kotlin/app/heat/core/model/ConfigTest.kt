@@ -201,21 +201,6 @@ class ConfigTest {
     }
 
     @Test
-    fun unacknowledged_edits_are_resent_after_a_reconnect_and_not_lost() {
-        val (host, sync) = hostAndViewer()
-        sync.edit { it.copy(detect = it.detect.copy(sensitivity = 33)) }  // lost in transit
-        sync.edit { it.copy(detect = it.detect.copy(cooldownSec = 44)) }  // lost in transit
-
-        val resend = sync.onSessionUp()
-        assertEquals(listOf(1, 2), resend.map { it.seq })
-        resend.forEach { host.apply(it.patch) }
-        sync.onRemote(host.state(2))
-        assertEquals(33, host.config.detect.sensitivity)
-        assertEquals(44, host.config.detect.cooldownSec)
-        assertEquals(33, sync.effective!!.detect.sensitivity)
-    }
-
-    @Test
     fun a_camera_restart_with_a_lower_revision_does_not_wedge_the_viewer() {
         val sync = ConfigSync()
         sync.onRemote(Msg.ConfigState(57, 0, CameraConfig()))

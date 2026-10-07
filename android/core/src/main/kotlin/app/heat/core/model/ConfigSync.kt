@@ -50,8 +50,8 @@ class ConfigHost(initial: CameraConfig, initialRev: Long = 0) {
  * echo corrects the UI within one round trip, and nothing can get stuck,
  * because a pending edit is dropped the moment the camera acknowledges it.
  *
- * After a reconnect, [onSessionUp] returns the edits that were never
- * acknowledged so a slider move made during a blip is not lost.
+ * Edits are never lost to a reconnect: they travel on the reliable channel,
+ * which keeps them until the camera acknowledges and resends on any new route.
  */
 class ConfigSync {
     private class Pending(val seq: Int, val patch: JsonObject)
@@ -93,14 +93,6 @@ class ConfigSync {
         val p = Pending(nextSeq++, patch)
         pending += p
         Msg.SetConfig(p.seq, p.patch)
-    }
-
-    /** New session with the same camera: renumber and resend everything not yet acknowledged. */
-    fun onSessionUp(): List<Msg.SetConfig> = synchronized(lock) {
-        val old = pending.toList()
-        pending.clear()
-        nextSeq = 1
-        old.map { Pending(nextSeq++, it.patch) }.also { pending += it }.map { Msg.SetConfig(it.seq, it.patch) }
     }
 
     private fun compute(): CameraConfig? {
