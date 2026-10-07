@@ -99,6 +99,9 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
     val videoW = stream?.width ?: 0
     val videoH = stream?.height ?: 0
     val rotation = stream?.rotation ?: 0
+    // The view's layout listener outlives this composition's values, so it reads the latest through this holder.
+    val live = remember { IntArray(3) }
+    live[0] = videoW; live[1] = videoH; live[2] = rotation
 
     // Showing the picture means: ask for video, route it to the decoder, and undo all of it the moment we leave.
     LifecycleResumeEffect(client) {
@@ -160,7 +163,7 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
                                 override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
                             }
                             addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-                                (v as TextureView).setTransform(previewMatrix(v.width.toFloat(), v.height.toFloat(), videoW, videoH, rotation))
+                                (v as TextureView).setTransform(previewMatrix(v.width.toFloat(), v.height.toFloat(), live[0], live[1], live[2]))
                             }
                         }
                     },

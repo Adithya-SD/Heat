@@ -46,6 +46,7 @@ import app.heat.glass.Heat
 import app.heat.glass.HeatIcon
 import app.heat.glass.HeatIconView
 import app.heat.glass.HeatText
+import app.heat.platform.fingerprint
 import app.heat.wear.WatchHub
 import kotlinx.serialization.json.jsonObject
 
@@ -66,7 +67,7 @@ fun WatchRoot(hub: WatchHub) {
         when {
             client == null -> Waiting(paired = pairing != null)
             screen == Screen.Cameras -> CamerasScreen(hub, cameras, client) { screen = Screen.Camera }
-            screen == Screen.Settings -> SettingsScreen(client, cameras) { screen = Screen.Camera }
+            screen == Screen.Settings -> SettingsScreen(client, cameras, hub) { screen = Screen.Camera }
             else -> CameraScreen(client, hub, glass, onCameras = { screen = Screen.Cameras }, onSettings = { screen = Screen.Settings })
         }
     }
@@ -125,8 +126,11 @@ private fun CameraRow(c: CameraClient, selected: Boolean, onClick: () -> Unit) {
 // ── settings ─────────────────────────────────────────────────────────
 
 @Composable
-private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, back: () -> Unit) {
+private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, hub: WatchHub, back: () -> Unit) {
     val config by client.config.collectAsState()
+    val link by client.linkState.collectAsState()
+    val status by client.status.collectAsState()
+    val pairing by hub.pairing.collectAsState()
     val c = config
     val list = rememberScalingLazyListState()
     ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -174,7 +178,26 @@ private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, ba
                 }
             }
         }
+        // Connection details: what to read out if something will not connect.
+        item { SectionLabel("Connection") }
+        item { Info("Link", link.phase.name.lowercase().replaceFirstChar(Char::uppercase) + (link.carrier?.let { " · ${it.label}" } ?: "")) }
+        if (link.standby.isNotEmpty()) item { Info("Standby", link.standby.joinToString { it.label }) }
+        if (link.rttMs >= 0) item { Info("Round trip", "${link.rttMs} ms") }
+        client.link.lastFailure?.let { f -> item { Info("Last failure", f.name.lowercase()) } }
+        item { Info("Pairing code", pairing?.key?.fingerprint() ?: "none") }
+        item { Info("Camera", client.cameraId.short) }
+        status?.stream?.let { s -> item { Info("Stream", "${s.width}x${s.height} · ${s.bitrate / 1000} kbps") } }
         item { Spacer(Modifier.height(28.dp)) }
+    }
+}
+
+@Composable
+private fun Info(label: String, value: String) {
+    Shell {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            HeatText(label, size = 11, color = Heat.TextDim, modifier = Modifier.weight(1f))
+            HeatText(value, size = 11, weight = FontWeight.SemiBold, maxLines = 1)
+        }
     }
 }
 

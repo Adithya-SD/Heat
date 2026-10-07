@@ -13,6 +13,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 /** Who we are paired with: the shared key, and (on a viewer) the phone that handed it over. */
 class Pairing(val key: GroupKey, val hub: DeviceId?, val hubName: String?)
@@ -96,7 +97,17 @@ class Vault(context: Context) {
         atomicWrite(File(dir, "$name.bin"), cipher.iv + ct)
     }
 
-    private fun wrappingKey(): SecretKey {
+    /** Hardware-backed when the Keystore works; an app-private file key when it does not (better than a crash loop). */
+    private fun wrappingKey(): SecretKey = try {
+        keystoreKey()
+    } catch (t: Throwable) {
+        Log.w(TAG, "Keystore unavailable, using an app-private key file", t)
+        val f = File(dir, "wrap.key")
+        val bytes = if (f.exists()) f.readBytes() else Crypto.random(32).also { atomicWrite(f, it) }
+        SecretKeySpec(bytes, "AES")
+    }
+
+    private fun keystoreKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
