@@ -94,8 +94,30 @@ data class Zone(
         return Zone(x.coerceIn(0f, 1f - w), y.coerceIn(0f, 1f - h), w, h)
     }
 
+    /**
+     * This zone as seen after the picture is rotated [deg] clockwise (0, 90, 180 or 270).
+     * Zones are stored in sensor space; screens show the picture upright, so they convert with this and back.
+     */
+    fun rotated(deg: Int): Zone = when (((deg % 360) + 360) % 360) {
+        90 -> Zone(1f - (y + height), x, height, width)
+        180 -> Zone(1f - (x + width), 1f - (y + height), width, height)
+        270 -> Zone(y, 1f - (x + width), height, width)
+        else -> this
+    }
+
+    /** Inverse of [rotated]. */
+    fun unrotated(deg: Int): Zone = rotated(360 - (((deg % 360) + 360) % 360))
+
     companion object {
         const val MIN_SIZE = 0.06f
+
+        /** A normalized point under the same clockwise rotation as [rotated]. */
+        fun rotatePoint(x: Float, y: Float, deg: Int): Pair<Float, Float> = when (((deg % 360) + 360) % 360) {
+            90 -> (1f - y) to x
+            180 -> (1f - x) to (1f - y)
+            270 -> y to (1f - x)
+            else -> x to y
+        }
     }
 }
 

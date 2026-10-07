@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The watch half of the pair; the phone looks this up to know a wrist is reachable. Wire format: never change it. -->
+    <string-array name="android_wear_capabilities" tools:ignore="UnusedResources">
+        <item>heat_watch</item>
+    </string-array>
+</resources>

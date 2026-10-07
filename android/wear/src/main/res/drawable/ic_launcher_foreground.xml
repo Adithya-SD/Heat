@@ -1,0 +1,8 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- A flame: the Heat mark. -->
+    <path android:fillColor="#FF7A2F"
+        android:pathData="M54,22 C58,34 70,40 70,56 C70,68 62,78 54,78 C46,78 38,68 38,56 C38,50 41,45 44,41 C45,46 48,48 50,48 C50,40 49,30 54,22 Z" />
+    <path android:fillColor="#FFC247"
+        android:pathData="M54,50 C56,56 61,59 61,66 C61,71 58,74 54,74 C50,74 47,71 47,66 C47,62 49,60 51,57 C52,60 53,60 54,60 C53,56 53,53 54,50 Z" />
+</vector>

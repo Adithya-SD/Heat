@@ -21,7 +21,9 @@ data class StreamInfo(
     val height: Int = 0,
     val fps: Int = 0,
     val bitrate: Int = 0,
-    val codec: String = "avc"
+    val codec: String = "avc",
+    /** Degrees clockwise to rotate the picture for it to appear upright (the sensor is mounted sideways). */
+    val rotation: Int = 0
 )
 
 @Serializable

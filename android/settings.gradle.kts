@@ -28,8 +28,8 @@ rootProject.name = "HeatAndroid"
 // :phone         camera + hub app
 // :wear          watch viewer/remote app
 include(":core")
-// include(":platform")
+include(":platform")
 include(":glass")
 include(":glass-preview")
-// include(":phone")
-// include(":wear")
+include(":phone")
+include(":wear")

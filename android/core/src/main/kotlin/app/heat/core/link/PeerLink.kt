@@ -302,13 +302,13 @@ class PeerLink(
      * Sets (or replaces, or with null removes) how to reach the peer over [kind].
      * An existing live session on the old route is left alone and ends on its own.
      */
-    fun setDialer(kind: CarrierKind, dialer: Dialer?) {
+    fun setDialer(kind: CarrierKind, dialer: Dialer?, retry: RetryPolicy = policy) {
         synchronized(lock) {
             maintainers.remove(kind)?.stop()
             if (dialer != null) {
                 val m = DialMaintainer(
                     dialer, self, group, peer, scope, clock, conversation, conversation.sessions,
-                    sessionConfig, policy, onPhase = { recompute() }
+                    sessionConfig, retry, onPhase = { recompute() }
                 )
                 maintainers[kind] = m
                 if (running) m.start()

@@ -230,3 +230,49 @@ class ConfigTest {
         assertEquals(before, host.config)
     }
 }
+
+class ZoneRotationTest {
+    private val z = Zone(0.1f, 0.2f, 0.3f, 0.4f)
+
+    @Test
+    fun rotating_by_a_full_turn_in_quarters_returns_the_original() {
+        var r = z
+        repeat(4) { r = r.rotated(90) }
+        assertEquals(z.x, r.x, 1e-5f); assertEquals(z.y, r.y, 1e-5f)
+        assertEquals(z.width, r.width, 1e-5f); assertEquals(z.height, r.height, 1e-5f)
+    }
+
+    @Test
+    fun unrotated_is_the_inverse_for_every_quarter() {
+        for (deg in listOf(0, 90, 180, 270)) {
+            val back = z.rotated(deg).unrotated(deg)
+            assertEquals("deg $deg x", z.x, back.x, 1e-5f); assertEquals("deg $deg y", z.y, back.y, 1e-5f)
+            assertEquals("deg $deg w", z.width, back.width, 1e-5f); assertEquals("deg $deg h", z.height, back.height, 1e-5f)
+        }
+    }
+
+    @Test
+    fun a_rotated_zone_stays_inside_the_frame_and_swaps_its_extents() {
+        val r = z.rotated(90)
+        assertEquals(z.height, r.width, 1e-5f)
+        assertEquals(z.width, r.height, 1e-5f)
+        assertTrue(r.x >= 0f && r.y >= 0f && r.right <= 1.0001f && r.bottom <= 1.0001f)
+    }
+
+    @Test
+    fun the_zone_centre_moves_like_a_point_does() {
+        for (deg in listOf(0, 90, 180, 270)) {
+            val r = z.rotated(deg)
+            val (px, py) = Zone.rotatePoint(z.x + z.width / 2, z.y + z.height / 2, deg)
+            assertEquals("deg $deg", px, r.x + r.width / 2, 1e-5f)
+            assertEquals("deg $deg", py, r.y + r.height / 2, 1e-5f)
+        }
+    }
+
+    @Test
+    fun a_corner_goes_where_a_quarter_turn_clockwise_puts_it() {
+        // Top-left corner of the frame goes to the top-right after rotating the picture 90 degrees clockwise.
+        val (x, y) = Zone.rotatePoint(0f, 0f, 90)
+        assertEquals(1f, x, 1e-5f); assertEquals(0f, y, 1e-5f)
+    }
+}

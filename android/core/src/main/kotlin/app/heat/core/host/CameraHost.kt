@@ -95,6 +95,11 @@ class CameraHost(
     private val _armed = MutableStateFlow(false)
     val armed: StateFlow<Boolean> = _armed.asStateFlow()
 
+    private val _armingDeadline = MutableStateFlow(0L)
+
+    /** When the arming countdown ends, on [Clock.SYSTEM]'s timeline, or 0 when none is running. */
+    val armingDeadline: StateFlow<Long> = _armingDeadline.asStateFlow()
+
     private val _viewerCount = MutableStateFlow(0)
     val viewerCount: StateFlow<Int> = _viewerCount.asStateFlow()
 
@@ -127,8 +132,9 @@ class CameraHost(
         }
     }
 
-    init {
-        backend.onConfig(configHost.config, null)
+    /** Applies the stored configuration to the platform. Separate from construction so the owner can finish wiring first. */
+    fun start() {
+        synchronized(lock) { backend.onConfig(configHost.config, null) }
     }
 
     // ── platform inputs ──────────────────────────────────────────────
@@ -267,6 +273,7 @@ class CameraHost(
     private fun applyArm(armed: Boolean, delaySec: Int?) {
         armingJob?.cancel()
         armingEndsMs = 0
+        _armingDeadline.value = 0
         if (!armed) {
             if (_armed.value) {
                 _armed.value = false
@@ -285,11 +292,13 @@ class CameraHost(
             return
         }
         armingEndsMs = clock.nowMs() + delay * 1000L
+        _armingDeadline.value = armingEndsMs
         broadcastStatusLocked(reliable = true)
         armingJob = scope.launch {
             delay(delay * 1000L)
             synchronized(lock) {
                 armingEndsMs = 0
+                _armingDeadline.value = 0
                 _armed.value = true
                 backend.onArmed(true)
                 broadcastStatusLocked(reliable = true)

@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -14,6 +16,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
@@ -31,7 +34,8 @@ import kotlin.math.min
  *
  * **Animate a glass surface through layout** (size, offset, `animateContentSize`),
  * not through `graphicsLayer` transforms: layout changes are seen by the shader
- * in the same frame, while pure layer transforms are not reported.
+ * in the same frame, while pure layer transforms are not reported. Parameters
+ * ([tint], [strength], [scrim]) may be animated freely.
  *
  * At most [GlassState.MAX_LENSES] surfaces are shaded at once; any beyond that
  * (and everything on devices without AGSL, or when [refract] is false) gets
@@ -52,46 +56,53 @@ fun GlassSurface(
 ) {
     val density = LocalDensity.current.density
     val id = remember(state) { state.newId() }
+    val coordsHolder = remember { arrayOfNulls<LayoutCoordinates>(1) }
 
-    DisposableEffect(id, refract) {
-        onDispose { state.remove(id) }
+    // Reads the *latest* parameters whenever it runs, whether from layout or from recomposition.
+    val push = rememberUpdatedState {
+        val c = coordsHolder[0]
+        if (!refract) {
+            state.remove(id)
+        } else if (c != null && c.isAttached) {
+            val p = c.positionInWindow()
+            val w = c.size.width.toFloat()
+            val h = c.size.height.toFloat()
+            val half = min(w, h) / 2f
+            val radius = when (shape) {
+                is GlassShape.Rounded -> min(shape.radiusDp * density, half)
+                is GlassShape.Ring -> half
+            }
+            state.set(
+                LensSpec(
+                    id = id,
+                    left = p.x, top = p.y, right = p.x + w, bottom = p.y + h,
+                    radiusPx = radius,
+                    ring = shape is GlassShape.Ring,
+                    ringThicknessPx = (shape as? GlassShape.Ring)?.thicknessDp?.times(density) ?: 0f,
+                    bezelPx = bezel.value * density,
+                    strength = strength,
+                    tint = tint,
+                    scrim = scrim
+                )
+            )
+        }
     }
+
+    SideEffect { push.value() }
+    DisposableEffect(id) { onDispose { state.remove(id) } }
 
     Box(
         modifier
             .onGloballyPositioned { c ->
-                if (!refract) {
-                    state.remove(id)
-                    return@onGloballyPositioned
-                }
-                val p = c.positionInWindow()
-                val w = c.size.width.toFloat()
-                val h = c.size.height.toFloat()
-                val half = min(w, h) / 2f
-                val radius = when (shape) {
-                    is GlassShape.Rounded -> min(shape.radiusDp * density, half)
-                    is GlassShape.Ring -> half
-                }
-                state.set(
-                    LensSpec(
-                        id = id,
-                        left = p.x, top = p.y, right = p.x + w, bottom = p.y + h,
-                        radiusPx = radius,
-                        ring = shape is GlassShape.Ring,
-                        ringThicknessPx = (shape as? GlassShape.Ring)?.thicknessDp?.times(density) ?: 0f,
-                        bezelPx = bezel.value * density,
-                        strength = strength,
-                        tint = tint,
-                        scrim = scrim
-                    )
-                )
+                coordsHolder[0] = c
+                push.value()
             }
             .drawBehind {
                 // Subscribing to the version re-runs this when the shader takes over or gives up this surface.
                 @Suppress("UNUSED_EXPRESSION")
                 state.version
-                val shaded = refract && state.shaderReady && state.quality >= 0 && state.isShaded(id)
-                if (!shaded) drawFlatGlass(shape, density)
+                val shaded = refract && state.shaderReady && state.isShaded(id)
+                if (!shaded) drawFlatGlass(shape, density, tint)
             },
         content = content
     )
@@ -102,9 +113,12 @@ fun GlassSurface(
  * inner edge. No backdrop sampling, so it costs almost nothing, and it keeps
  * the same silhouette and light direction as the shader version.
  */
-private fun DrawScope.drawFlatGlass(shape: GlassShape, density: Float) {
+private fun DrawScope.drawFlatGlass(shape: GlassShape, density: Float, tint: Float) {
     val rim = 1.2f * density
-    val fill = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.20f), Color.White.copy(alpha = 0.07f)))
+    val boost = (tint - 0.045f).coerceAtLeast(0f)
+    val fill = Brush.verticalGradient(
+        listOf(Color.White.copy(alpha = 0.20f + boost), Color.White.copy(alpha = 0.07f + boost * 0.6f))
+    )
     val edge = Brush.linearGradient(
         0f to Color.White.copy(alpha = 0.70f),
         0.5f to Color.White.copy(alpha = 0.10f),
