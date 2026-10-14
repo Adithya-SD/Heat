@@ -17,7 +17,7 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="Heat"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault">
+        android:theme="@style/HeatWatch">
 
         <uses-library android:name="com.google.android.wearable" android:required="false" />
 
@@ -26,7 +26,7 @@
             android:exported="true"
             android:taskAffinity=""
             android:launchMode="singleTask"
-            android:theme="@android:style/Theme.DeviceDefault">
+            android:theme="@style/HeatWatch">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
