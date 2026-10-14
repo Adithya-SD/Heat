@@ -39,18 +39,29 @@ object DataLayerNames {
 class StreamDuplex(
     private val input: InputStream,
     private val output: OutputStream,
+    /** Names the carrier in the I/O trace. */
+    private val label: String = "dl",
     private val onClose: () -> Unit
 ) : ByteDuplex {
     @Volatile private var closed = false
 
+    // Trace the first few operations of every channel with their timing: link latency is the thing that decides how
+    // fast a watch connects, and it is only visible from the inside.
+    private val born = android.os.SystemClock.elapsedRealtime()
+    private var traced = 0
+    private fun trace(what: String, n: Int) {
+        if (traced++ < 40) Log.i("HeatDataLayer", "io[$label]: $what $n B at +${android.os.SystemClock.elapsedRealtime() - born} ms")
+    }
+
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int =
-        withContext(Dispatchers.IO) { input.read(buffer, offset, length) }
+        withContext(Dispatchers.IO) { input.read(buffer, offset, length).also { if (it > 0) trace("read", it) } }
 
     override suspend fun write(buffer: ByteArray, offset: Int, length: Int) =
         withContext(Dispatchers.IO) {
             if (closed) throw IOException("closed")
             output.write(buffer, offset, length)
             output.flush()
+            trace("write", length)
         }
 
     override fun close() {
@@ -71,21 +82,33 @@ class DataLayerDialer(
     context: Context,
     private val capability: String = DataLayerNames.PHONE_CAPABILITY
 ) : Dialer {
+    private companion object {
+        const val TAG = "HeatDataLayer"
+    }
+
     override val kind = CarrierKind.BLUETOOTH
     private val appContext = context.applicationContext
 
     override suspend fun dial(): ByteDuplex {
+        val t0 = android.os.SystemClock.elapsedRealtime()
+        fun lap(what: String) = Log.i(TAG, "dial: $what at +${android.os.SystemClock.elapsedRealtime() - t0} ms")
+        // Experiment: how much of the first call's time is the connection to Play services itself?
+        val connected = Wearable.getNodeClient(appContext).connectedNodes.await()
+        lap("connected nodes (${connected.size})")
         val capabilityClient = Wearable.getCapabilityClient(appContext)
         val nodes = capabilityClient.getCapability(capability, CapabilityClient.FILTER_REACHABLE).await().nodes
+        lap("capability lookup (${nodes.size} nodes)")
         val node = nodes.firstOrNull { it.isNearby } ?: nodes.firstOrNull()
             ?: Wearable.getNodeClient(appContext).connectedNodes.await().firstOrNull { it.isNearby }
             ?: throw IOException("no paired device reachable")
 
         val client = Wearable.getChannelClient(appContext)
         val channel = client.openChannel(node.id, DataLayerNames.LINK_PATH).await()
+        lap("channel open")
         return try {
             val input = client.getInputStream(channel).await()
             val output = client.getOutputStream(channel).await()
+            lap("streams ready")
             StreamDuplex(input, output) { client.close(channel) }
         } catch (e: Exception) {
             runCatching { client.close(channel) }

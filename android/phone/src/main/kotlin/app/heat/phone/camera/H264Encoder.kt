@@ -47,14 +47,16 @@ class H264Encoder(
 
     /** Starts the encoder and returns its input Surface (give it to the camera), or null if the device cannot. */
     @Synchronized
-    fun start(width: Int, height: Int, fps: Int, bitrate: Int): Surface? {
+    fun start(width: Int, height: Int, fps: Int, bitrate: Int, gopSec: Int = 1): Surface? {
         stop()
         return try {
             val format = MediaFormat.createVideoFormat(MIME, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, gopSec.coerceAtLeast(1))
+                // The camera runs at its own rate; this makes the encoder skip frames to hold the profile's rate.
+                setInteger(MediaFormat.KEY_MAX_FPS_TO_ENCODER, fps)
                 setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
                 setInteger(MediaFormat.KEY_LATENCY, 0)
                 setInteger(MediaFormat.KEY_PRIORITY, 0)

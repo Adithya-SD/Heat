@@ -34,6 +34,13 @@ object Heat {
     val TextDim = Color(0xB8F5F5F7)
     val TextFaint = Color(0x80F5F5F7)
     val Hairline = Color(0x26FFFFFF)
+
+    // Matte chrome for surfaces that sit over live video: solid, quiet, no refraction (and so no cost per frame).
+    val Matte = Color(0xFF111116)
+    val MatteHi = Color(0xFF1B1B22)
+    val Ember0 = Color(0xFFFF4A12)
+    val Ember1 = Color(0xFFFFA23D)
+    val EmberGlow = Color(0xFFFFC27A)
 }
 
 enum class HeatIcon {

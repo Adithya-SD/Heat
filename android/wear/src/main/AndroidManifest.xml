@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <uses-feature android:name="android.hardware.type.watch" />
 
@@ -30,6 +32,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Holds the process (and so the connection) for a few minutes after the app is left: the next open is instant. -->
+        <service
+            android:name=".WatchLinkService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <meta-data android:name="com.google.android.wearable.standalone" android:value="false" />
     </application>

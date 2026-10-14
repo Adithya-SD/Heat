@@ -18,6 +18,9 @@ import app.heat.platform.DataLayerDialer
 import app.heat.platform.DataLayerHooks
 import app.heat.platform.DataLayerNames
 import app.heat.platform.GroupSync
+import app.heat.platform.Hints
+import app.heat.platform.RfcommDialer
+import app.heat.platform.hasBluetoothConnect
 import app.heat.platform.KnownCameras
 import app.heat.platform.MulticastLockHolder
 import app.heat.platform.Pairing
@@ -55,6 +58,7 @@ class WatchHub(context: Context) {
     val vault = Vault(appContext)
     val deviceId: DeviceId = vault.deviceId()
     private val known = KnownCameras(appContext)
+    val hints = Hints(appContext)
     private val multicast = MulticastLockHolder(appContext)
     private val selectionFile = File(File(appContext.filesDir, "heat").apply { mkdirs() }, "selected.txt")
 
@@ -94,6 +98,11 @@ class WatchHub(context: Context) {
     private val bluetoothPolicy = RetryPolicy(dialTimeoutMs = 8_000, maxMs = 8_000)
 
     @Volatile private var foreground = false
+
+    /** Whether someone is looking at the watch now, and when they last were: the warm link service reads these. */
+    val isForeground: Boolean get() = foreground
+    @Volatile var lastForegroundMs = android.os.SystemClock.elapsedRealtime()
+        private set
 
     /** Whether the Wi-Fi network we asked for is currently ours; for the diagnostics page. */
     val onWifi: Boolean get() = wifi.connected
@@ -138,6 +147,7 @@ class WatchHub(context: Context) {
     fun setForeground(visible: Boolean) {
         if (foreground == visible) return
         foreground = visible
+        lastForegroundMs = android.os.SystemClock.elapsedRealtime()
         if (visible) {
             wifiReleaseJob?.cancel()
             wifi.acquire()
@@ -253,6 +263,34 @@ class WatchHub(context: Context) {
                     decoder.submit(flags and MediaFlags.KEYFRAME != 0, pts, data, off, len)
                 }
                 c.start()
+                val born = android.os.SystemClock.elapsedRealtime()
+                scope.launch {
+                    // Timeline of this camera's link, for working out where connection time goes.
+                    c.linkState.collect { ls ->
+                        Log.i(TAG, "link ${id.short}: ${ls.phase} via ${ls.carrier} standby=${ls.standby} rtt=${ls.rttMs} at +${android.os.SystemClock.elapsedRealtime() - born} ms")
+                    }
+                }
+                scope.launch {
+                    // Round trip while connected, every few seconds: the number that explains how the link feels.
+                    while (true) {
+                        delay(4_000)
+                        val ls = c.linkState.value
+                        if (ls.phase == app.heat.core.link.LinkState.Phase.UP) Log.i(TAG, "rtt ${id.short}: ${ls.rttMs} ms via ${ls.carrier}")
+                    }
+                }
+                scope.launch {
+                    // What the picture looks like is remembered so the next start can build its decoder before the
+                    // camera has said anything, instead of waiting for the first status message.
+                    c.status.collect { st ->
+                        val s = st?.stream ?: return@collect
+                        if (s.width > 0 && s.height > 0) hints.setGeometry(id.hex, Hints.Geometry(s.width, s.height, s.rotation))
+                    }
+                }
+                scope.launch {
+                    decoder.rendered.collect { n ->
+                        if (n == 1L) Log.i(TAG, "first picture on screen at +${android.os.SystemClock.elapsedRealtime() - born} ms after the camera became known")
+                    }
+                }
                 scope.launch {
                     c.alerts.collect { a ->
                         val profile = c.config.value?.alerts?.watchHaptics ?: HapticProfile.NORMAL
@@ -274,9 +312,53 @@ class WatchHub(context: Context) {
         }
     }
 
+    /**
+     * Two ways over Bluetooth, tried in waves. The direct socket goes at once: it needs nothing but the bonded
+     * phone's address, which was learned last time. The Data Layer is the fallback, started only if the direct
+     * socket has not made it within a moment, and let go again once the direct one is up: a spare that pings
+     * all day for nothing is just battery.
+     */
     private fun addBluetooth(c: CameraClient) {
-        if (!c.link.hasDialer(CarrierKind.BLUETOOTH)) {
-            c.link.setDialer(CarrierKind.BLUETOOTH, DataLayerDialer(appContext, DataLayerNames.PHONE_CAPABILITY), bluetoothPolicy)
+        scope.launch {
+            var provenAt = 0L
+            while (true) {
+                val permitted = hasBluetoothConnect(appContext)
+                if (permitted && !c.link.hasDialer(CarrierKind.BT_DIRECT)) {
+                    c.link.setDialer(CarrierKind.BT_DIRECT, RfcommDialer(appContext, hints), directPolicy)
+                }
+                val ls = c.linkState.value
+                val directUp = ls.carrier == CarrierKind.BT_DIRECT || CarrierKind.BT_DIRECT in ls.standby
+                if (directUp) {
+                    // Proven. Give it a few seconds to be sure it is not a flash in the pan, then drop the spare.
+                    if (c.link.hasDialer(CarrierKind.BLUETOOTH)) {
+                        if (provenAt == 0L) provenAt = clock.nowMs()
+                        if (clock.nowMs() - provenAt > 4_000) c.link.dropCarrier(CarrierKind.BLUETOOTH)
+                    }
+                } else {
+                    provenAt = 0
+                    if (!c.link.hasDialer(CarrierKind.BLUETOOTH)) {
+                        // Wave two: only after the direct socket has had its chance (or at once if it cannot be tried).
+                        if (permitted) delay(1_200)
+                        val still = c.linkState.value
+                        val directNow = still.carrier == CarrierKind.BT_DIRECT || CarrierKind.BT_DIRECT in still.standby
+                        if (!directNow && !c.link.hasDialer(CarrierKind.BLUETOOTH)) {
+                            c.link.setDialer(CarrierKind.BLUETOOTH, DataLayerDialer(appContext, DataLayerNames.PHONE_CAPABILITY), bluetoothPolicy)
+                        }
+                    }
+                }
+                delay(1_000)
+            }
+        }
+    }
+
+    private val directPolicy = RetryPolicy(minMs = 400, maxMs = 6_000, dialTimeoutMs = 6_000)
+
+    /** The user just allowed Bluetooth: start using the direct route now instead of at the next launch. */
+    fun bluetoothPermissionGranted() {
+        _pairing.value?.hub?.let { clients[it] }?.let { c ->
+            if (!c.link.hasDialer(CarrierKind.BT_DIRECT) && hasBluetoothConnect(appContext)) {
+                c.link.setDialer(CarrierKind.BT_DIRECT, RfcommDialer(appContext, hints), directPolicy)
+            }
         }
     }
 

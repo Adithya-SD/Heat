@@ -190,6 +190,11 @@ class CameraHost(
         return sent
     }
 
+    /** The carrier each video-watching viewer is currently on. The slowest of these sets what the encoder may send. */
+    fun videoCarriers(): List<CarrierKind> = viewers.values.mapNotNull { v ->
+        if (v.watch?.video != true) null else registry.existing(v.id)?.sessions?.best()?.kind
+    }
+
     fun sendAudio(ptsUs: Long, data: ByteArray, offset: Int, length: Int) {
         for (v in viewers.values) {
             if (v.watch?.audio != true) continue

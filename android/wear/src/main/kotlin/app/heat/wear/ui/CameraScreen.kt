@@ -4,7 +4,12 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
+import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -27,14 +32,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
@@ -42,15 +53,19 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.heat.core.control.BezelController
 import app.heat.core.control.BezelMode
 import app.heat.core.host.CameraClient
-import app.heat.core.link.CarrierKind
 import app.heat.core.link.LinkState
 import app.heat.core.model.Zone
 import app.heat.glass.GlassHost
@@ -61,11 +76,15 @@ import app.heat.glass.Heat
 import app.heat.glass.HeatIcon
 import app.heat.glass.HeatIconView
 import app.heat.glass.HeatText
+import app.heat.wear.LastPicture
 import app.heat.wear.Rotary
 import app.heat.wear.WatchHaptics
 import app.heat.wear.WatchHub
 import app.heat.wear.previewMatrix
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The camera, full face, with one menu.
@@ -92,6 +111,14 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
     val overlay by bezel.overlay.collectAsState()
     val placing by bezel.placing.collectAsState()
 
+    // While the tracker is being placed every button is hidden, so the Back button is the way out: it moves on to the
+    // next control (and the buttons come back with it). Outside the tracker it keeps its normal job.
+    BackHandler(enabled = placing) { bezel.cycleMode(1) }
+
+    // Where the menu chip is, so a finger on it is a tap on the menu and not a placement of the tracker box.
+    var chipBounds by remember { mutableStateOf(Rect.Zero) }
+    val chipNow by rememberUpdatedState(chipBounds)
+
     // Every click of the bezel goes straight to the controller, whatever has focus.
     DisposableEffect(bezel) {
         val mine: (Float) -> Unit = { bezel.onDetents(it) }
@@ -102,11 +129,33 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
     val decoder = remember(client) { hub.decoder(client) }
     val rendered by decoder.rendered.collectAsState()
     var surface by remember { mutableStateOf<Surface?>(null) }
+    var textureView by remember { mutableStateOf<TextureView?>(null) }
 
+    // The last picture from this camera, shown dimmed the instant the screen opens and faded out when live video starts.
+    val still by produceState<Bitmap?>(null, client) { value = withContext(Dispatchers.IO) { LastPicture.load(ctx, client.cameraId.hex) } }
+    val stillAlpha by animateFloatAsState(if (rendered > 0) 0f else 0.55f, tween(450), label = "still")
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle, client) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE && decoder.rendered.value > 0) {
+                val tv = textureView
+                if (tv != null && tv.isAvailable) {
+                    val bmp = runCatching { tv.getBitmap(192, 192) }.getOrNull()
+                    if (bmp != null) scope.launch(Dispatchers.IO) { LastPicture.save(ctx, client.cameraId.hex, bmp) }
+                }
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    // Until the camera reports its picture size, assume what it said last time: the decoder can be built now
+    // instead of after the first status message. If the guess is wrong the real report rebuilds it.
+    val cached = remember(client) { hub.hints.geometry(client.cameraId.hex) }
     val stream = status?.stream
-    val videoW = stream?.width ?: 0
-    val videoH = stream?.height ?: 0
-    val rotation = stream?.rotation ?: 0
+    val videoW = stream?.width ?: cached?.width ?: 0
+    val videoH = stream?.height ?: cached?.height ?: 0
+    val rotation = stream?.rotation ?: cached?.rotation ?: 0
     // The view's layout listener outlives this composition's values, so it reads the latest through this holder.
     val live = remember { IntArray(3) }
     live[0] = videoW; live[1] = videoH; live[2] = rotation
@@ -134,6 +183,7 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
                 AndroidView(
                     factory = { c ->
                         TextureView(c).apply {
+                            textureView = this
                             isOpaque = true
                             surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                                 override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) { surface = Surface(st) }
@@ -155,6 +205,11 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
                     update = { tv -> tv.setTransform(previewMatrix(tv.width.toFloat(), tv.height.toFloat(), videoW, videoH, rotation)) },
                     modifier = Modifier.fillMaxSize()
                 )
+                still?.let { bmp ->
+                    if (stillAlpha > 0.01f) {
+                        Image(bmp.asImageBitmap(), null, Modifier.fillMaxSize().alpha(stillAlpha), contentScale = ContentScale.Crop)
+                    }
+                }
                 ZoneOverlay(cfg?.detect?.zone, videoW, videoH, rotation, active = placing)
             }
         }
@@ -166,6 +221,11 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
                     // Put the box under the finger the instant it lands, and keep it there as the finger moves.
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        // A finger on the menu chip belongs to the chip: leave it alone.
+                        if (chipNow.inflate(6f).contains(down.position)) {
+                            do { val e = awaitPointerEvent() } while (e.changes.any { it.pressed })
+                            return@awaitEachGesture
+                        }
                         placeZone(bezel, down.position, size.width, size.height, videoW, videoH, rotation)
                         do {
                             val event = awaitPointerEvent()
@@ -189,9 +249,11 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
             // The menu.
             GlassSurface(
                 glass,
-                Modifier.align(Alignment.TopCenter).padding(top = 18.dp).pointerInput(Unit) {
-                    detectTapGestures(onTap = { bezel.cycleMode(1) }, onLongPress = { bezel.cycleMode(-1) })
-                },
+                Modifier.align(Alignment.TopCenter).padding(top = 18.dp)
+                    .onGloballyPositioned { chipBounds = it.boundsInParent() }
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { bezel.cycleMode(1) }, onLongPress = { bezel.cycleMode(-1) })
+                    },
                 shape = GlassShape.Capsule, bezel = 9.dp, tint = 0.03f, scrim = 0.10f
             ) {
                 Row(Modifier.padding(start = 10.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -260,7 +322,7 @@ private fun LinkDot(link: LinkState) {
         LinkState.Phase.UNPAIRED -> Heat.Red
         else -> Heat.Amber
     }
-    val icon = if (link.carrier == CarrierKind.BLUETOOTH) HeatIcon.Bluetooth else HeatIcon.Wifi
+    val icon = if (link.carrier?.isBluetooth == true) HeatIcon.Bluetooth else HeatIcon.Wifi
     HeatIconView(icon, color, 12.dp)
 }
 

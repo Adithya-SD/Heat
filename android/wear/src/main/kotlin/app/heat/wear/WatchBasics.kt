@@ -18,7 +18,12 @@ class HeatWearApp : Application() {
         // Start dialing before the first screen exists. The activity's own first access just waits for this
         // (the lazy is synchronized), so there is exactly one hub, and the connection is under way while the
         // window is still being built.
-        Thread({ hub }, "heat-warmup").start()
+        Thread({
+            // Play services takes a second or more to answer its first call on a watch; asking now, in parallel with
+            // everything else, means the Data Layer fallback is ready if the direct Bluetooth route is not.
+            runCatching { com.google.android.gms.wearable.Wearable.getNodeClient(this).localNode }
+            hub
+        }, "heat-warmup").start()
     }
 }
 

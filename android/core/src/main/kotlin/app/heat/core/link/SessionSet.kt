@@ -66,6 +66,9 @@ class SessionSet(private val onChange: () -> Unit = {}) {
 
     fun closeAll() = entries.forEach { it.session.close() }
 
+    /** Says goodbye on every session that travels by [kind]; the others carry on. */
+    fun closeKind(kind: CarrierKind) = entries.filter { it.kind == kind }.forEach { it.session.close() }
+
     companion object {
         /**
          * Pings go out every 2 s, so a healthy link is never silent for much more

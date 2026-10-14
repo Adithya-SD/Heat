@@ -1,5 +1,8 @@
 package app.heat.wear
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -43,11 +46,30 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hub = (application as HeatWearApp).hub
         setContent { WatchRoot(hub) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            // Direct Bluetooth to the phone needs this runtime permission. Asked once; the Data Layer carries on without it.
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_BLUETOOTH && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            hub.bluetoothPermissionGranted()
+        }
+    }
+
+    private companion object {
+        const val REQUEST_BLUETOOTH = 71
     }
 
     override fun onStart() {
         super.onStart()
         hub.setForeground(true)
+        // Keep the process (and the link) alive for a while after we leave: the next open is then instant.
+        runCatching { startForegroundService(android.content.Intent(this, WatchLinkService::class.java)) }
     }
 
     override fun onResume() {

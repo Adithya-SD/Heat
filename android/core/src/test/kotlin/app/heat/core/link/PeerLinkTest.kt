@@ -58,7 +58,8 @@ class PeerLinkTest {
         override val kind: CarrierKind,
         private val cam: CameraSide,
         private val scope: TestScope? = null,
-        private val autoCutAfterMs: Long = -1
+        private val autoCutAfterMs: Long = -1,
+        private val latencyMs: Long = 0
     ) : Dialer {
         val links = CopyOnWriteArrayList<MemoryLink>()
         val attempts = AtomicInteger()
@@ -67,6 +68,8 @@ class PeerLinkTest {
             attempts.incrementAndGet()
             if (!reachable) throw IOException("unreachable")
             val link = MemoryLink()
+            link.faultsA.latencyMs = latencyMs
+            link.faultsB.latencyMs = latencyMs
             links += link
             cam.acceptor.accept(kind, link.b)
             if (autoCutAfterMs >= 0) scope!!.backgroundScope.launch { delay(autoCutAfterMs); link.cut() }
@@ -344,6 +347,55 @@ class PeerLinkTest {
         l.start()
         advanceTimeBy(6_000); runCurrent()
         assertEquals(LinkState.Phase.UP, l.state.value.phase)
+    }
+
+    @Test
+    fun a_message_queued_before_connecting_arrives_after_three_flights_not_five() = runTest {
+        // Over a slow link every flight is what you wait for: HELLO, CHALLENGE, then FINISH together with the
+        // first record. The old handshake also waited for READY before sending anything.
+        val cam = CameraSide(this)
+        val l = link(Events())
+        l.setDialer(CarrierKind.LAN, FakeDialer(CarrierKind.LAN, cam, latencyMs = 100))
+        l.send("watch".toByteArray())
+        l.start()
+        var t = 0
+        while (cam.events.messages.isEmpty() && t < 3_000) { advanceTimeBy(10); runCurrent(); t += 10 }
+        assertEquals(listOf("watch"), cam.events.messages.toList())
+        assertTrue("took $t ms for a 100 ms link", t <= 450)
+    }
+
+    @Test
+    fun a_wrong_key_is_still_reported_as_unpaired_even_though_the_dialer_started_before_the_answer() = runTest {
+        val cam = CameraSide(this, key = GroupKey.generate())      // the camera holds a different key
+        val l = link(Events())
+        l.setDialer(CarrierKind.LAN, FakeDialer(CarrierKind.LAN, cam))
+        l.start()
+        settle(2_000)
+        assertEquals(LinkState.Phase.UNPAIRED, l.state.value.phase)
+        assertEquals(HandshakeFailure.AUTH, l.lastFailure)
+    }
+
+    @Test
+    fun dropping_a_standby_carrier_closes_it_stops_redialing_it_and_leaves_the_best_untouched() = runTest {
+        val cam = CameraSide(this)
+        val l = link(Events())
+        val bt = FakeDialer(CarrierKind.BLUETOOTH, cam)
+        l.setDialer(CarrierKind.BT_DIRECT, FakeDialer(CarrierKind.BT_DIRECT, cam))
+        l.setDialer(CarrierKind.BLUETOOTH, bt)
+        l.start()
+        settle()
+        assertEquals(CarrierKind.BT_DIRECT, l.state.value.carrier)          // the direct socket outranks the Data Layer
+        assertEquals(setOf(CarrierKind.BLUETOOTH), l.state.value.standby)
+
+        l.dropCarrier(CarrierKind.BLUETOOTH)
+        settle(3_000)
+        assertEquals(LinkState.Phase.UP, l.state.value.phase)
+        assertEquals(CarrierKind.BT_DIRECT, l.state.value.carrier)
+        assertTrue(l.state.value.standby.isEmpty())
+        assertFalse(l.hasDialer(CarrierKind.BLUETOOTH))
+        val attemptsAfterDrop = bt.attempts.get()
+        settle(10_000)
+        assertEquals(attemptsAfterDrop, bt.attempts.get())                  // and it stays dropped
     }
 
     @Test

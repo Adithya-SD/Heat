@@ -20,11 +20,19 @@ import android.util.Log
 import android.util.Range
 import android.util.Size
 import android.view.Surface
+import app.heat.core.camera.CameraProfile
+import app.heat.core.camera.LensEntry
+import app.heat.core.camera.LensGraph
+import app.heat.core.camera.LensStrategy
+import app.heat.core.camera.ZoomSmoother
 import app.heat.core.model.AntiFlicker
 import app.heat.core.model.Facing
 import app.heat.core.model.NightMode
+import app.heat.core.model.WhiteBalance
 import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
+import kotlin.math.hypot
 
 /**
  * Camera2, driven directly.
@@ -33,13 +41,20 @@ import kotlin.math.abs
  *  - a **preview** surface (the on-screen TextureView), only while the UI is visible;
  *  - an **encoder** surface, straight into the hardware H.264 encoder (zero copy,
  *    no CPU colour conversion: the earlier app converted every frame on the CPU);
- *  - a small **analysis** YUV reader for the motion engine, always on.
+ *  - a small **analysis** YUV reader for the motion engine, only while something needs it.
  *
- * Every public method just posts to the camera thread, and every callback is
- * validated against a generation counter, so a stale callback from a session
- * that has since been replaced can never touch the current one. The camera
- * being taken by another app, unplugged by the system or failing to configure
- * are all expected, reported, and retried, never crashes.
+ * ## Zoom
+ * Every requested zoom goes through a [ZoomSmoother], and the engine advances it once per captured frame from
+ * the frame's own sensor timestamp, so each frame is exposed at exactly the zoom the smoother says it should be.
+ * The picture moves like it is on rails whether the target came from a pinch, a slider, a lens button or the
+ * watch's bezel. Several lenses are arranged on one zoom axis by [LensGraph]: if the phone exposes one logical
+ * camera that spans them, its firmware changes lens; if it exposes the lenses as separate cameras, the engine
+ * changes device at the boundary (with hysteresis so hovering on the boundary cannot flap).
+ *
+ * Every public method just posts to the camera thread, and every callback is validated against a generation
+ * counter, so a stale callback from a session that has since been replaced can never touch the current one.
+ * Repeated updates are coalesced: only the newest request is ever applied. The camera being taken by another
+ * app, unplugged by the system or failing to configure are all expected, reported, and retried, never crashes.
  */
 @SuppressLint("MissingPermission")
 class CameraEngine(context: Context, private val listener: Listener) {
@@ -49,6 +64,12 @@ class CameraEngine(context: Context, private val listener: Listener) {
         fun onLuma(y: ByteArray, width: Int, height: Int, rowStride: Int, timestampMs: Long)
         fun onInfo(info: Info)
         fun onError(message: String?)
+
+        /** The zoom actually being shown (smoothed), a few times a second while it moves and once when it settles. */
+        fun onZoom(zoom: Float, lens: LensEntry?) = Unit
+
+        /** True while the camera is being switched to another lens device and no new frames are flowing. */
+        fun onLensSwitch(switching: Boolean) = Unit
     }
 
     data class Info(
@@ -62,7 +83,13 @@ class CameraEngine(context: Context, private val listener: Listener) {
         val evMax: Int,
         val previewSize: Size,
         val analysisSize: Size,
-        val encoderSizes: List<Size>
+        val encoderSizes: List<Size>,
+        val manualFocus: Boolean,
+        val manualExposure: Boolean,
+        val lenses: List<LensEntry>,
+        val strategy: LensStrategy,
+        /** One readable paragraph of what was found and what was decided, for the diagnostics page. */
+        val diagnostics: String
     )
 
     /** What the user wants from the sensor. Changing anything but [facing] only updates the repeating request. */
@@ -74,6 +101,12 @@ class CameraEngine(context: Context, private val listener: Listener) {
         val night: NightMode = NightMode.AUTO,
         val lockExposure: Boolean = false,
         val antiFlicker: AntiFlicker = AntiFlicker.AUTO,
+        /** -1 = autofocus, otherwise 0 (far) .. 100 (nearest). */
+        val focus: Int = -1,
+        val whiteBalance: WhiteBalance = WhiteBalance.AUTO,
+        val iso: Int = 0,
+        val shutterDenom: Int = 0,
+        val blendLenses: Boolean = true,
         /** Lower the frame rate: nobody is watching and nothing needs 30 fps. */
         val lowPower: Boolean = false
     )
@@ -90,6 +123,9 @@ class CameraEngine(context: Context, private val listener: Listener) {
     private var previewSize: Size? = null
     private var encoderSurface: Surface? = null
     private var device: CameraDevice? = null
+    private var openId: String? = null
+    private var wantedId: String? = null
+    private val badIds = HashSet<String>()
     private var opening = false
     private var openedFacing: Facing? = null
     private var session: CameraCaptureSession? = null
@@ -105,7 +141,27 @@ class CameraEngine(context: Context, private val listener: Listener) {
     private var lastLumaMs = 0L
     private var yBuf = ByteArray(0)
 
-    @Volatile var analysisIntervalMs = 66L
+    // Lens planning and zoom.
+    private var profiles: List<CameraProfile>? = null
+    private var graph: LensGraph? = null
+    private var graphFacing: Facing? = null
+    private var graphBlend = true
+    private var smoother: ZoomSmoother? = null
+    private var lastFrameNs = 0L
+    private var lastZoomReportMs = 0L
+    private var reportedSettled = true
+    private var switching = false
+    private var switchStartedMs = 0L
+    private var openAfterClose = false
+
+    // Updates from any thread land here; only the newest is ever applied.
+    private val pendingDesired = AtomicReference<Desired?>(null)
+
+    /** Milliseconds between analysis frames the motion engine gets. */
+    @Volatile var analysisIntervalMs = 100L
+
+    /** When false the analysis reader just discards frames: no copy, no motion work. */
+    @Volatile var analysisEnabled = true
 
     /** Sizes the hardware encoder input can take, valid once the camera is open. */
     val encoderSizes: List<Size> get() = info?.encoderSizes.orEmpty()
@@ -124,13 +180,12 @@ class CameraEngine(context: Context, private val listener: Listener) {
         closeAll()
     }
 
-    fun update(next: Desired) = handler.post {
-        val facingChanged = next.facing != desired.facing
-        desired = next
-        if (facingChanged && device != null) {
-            closeAll()
+    fun update(next: Desired) {
+        if (pendingDesired.getAndSet(next) != null) return    // a newer one replaces it; the queued task will see it
+        handler.post {
+            val n = pendingDesired.getAndSet(null) ?: return@post
+            applyDesired(n)
         }
-        reconcile()
     }
 
     fun setPreview(surface: Surface?, size: Size?) = handler.post {
@@ -155,6 +210,22 @@ class CameraEngine(context: Context, private val listener: Listener) {
 
     // ── state machine ────────────────────────────────────────────────
 
+    private fun applyDesired(next: Desired) {
+        val facingChanged = next.facing != desired.facing
+        val blendChanged = next.blendLenses != desired.blendLenses
+        desired = next
+        Log.i(TAG, "desired: zoom ${next.zoom} facing ${next.facing} (open=$openId smoother=${smoother?.zoom}->${smoother?.target})")
+        if (facingChanged) {
+            smoother = null
+            wantedId = null
+            if (device != null) closeAll()
+        }
+        if (blendChanged) graph = null
+        ensureGraph()
+        smoother?.setTarget(next.zoom)
+        reconcile()
+    }
+
     private fun reconcile() {
         if (!wanted) return
         val dev = device
@@ -172,28 +243,88 @@ class CameraEngine(context: Context, private val listener: Listener) {
         }
     }
 
-    private fun pickCameraId(facing: Facing): String? {
-        val want = if (facing == Facing.FRONT) CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK
-        var best: String? = null
-        var bestSpan = -1f
-        for (id in manager.cameraIdList) {
-            val c = runCatching { manager.getCameraCharacteristics(id) }.getOrNull() ?: continue
-            if (c.get(CameraCharacteristics.LENS_FACING) != want) continue
-            val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toList().orEmpty()
-            if (CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE !in caps) continue
-            // Prefer the logical camera that spans every lens (widest zoom range): the HAL then picks the lens for us.
-            val r = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
-            val span = if (r != null) r.upper - r.lower else 0f
-            if (span > bestSpan) {
-                bestSpan = span
-                best = id
-            }
+    // ── lens planning ────────────────────────────────────────────────
+
+    private fun profile(id: String, c: CameraCharacteristics): CameraProfile {
+        val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toList().orEmpty()
+        val facing = if (c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT) Facing.FRONT else Facing.REAR
+        val physical = if (CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in caps) c.physicalCameraIds.toList() else emptyList()
+        val zr = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+        val physicalF35 = HashMap<String, Float>()
+        for (pid in physical) {
+            val pc = runCatching { manager.getCameraCharacteristics(pid) }.getOrNull() ?: continue
+            focal35(pc)?.let { physicalF35[pid] = it }
         }
-        return best
+        return CameraProfile(
+            id = id,
+            facing = facing,
+            usable = CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE in caps,
+            physicalIds = physical,
+            zoomMin = zr?.lower ?: 1f,
+            zoomMax = zr?.upper ?: 1f,
+            focal35 = focal35(c),
+            physicalFocal35 = physicalF35
+        )
     }
 
+    /** 35mm-equivalent focal length: the lens's focal length scaled by how much smaller the sensor is than a 36x24 frame. */
+    private fun focal35(c: CameraCharacteristics): Float? {
+        val f = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull() ?: return null
+        val s = c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE) ?: return null
+        val diag = hypot(s.width, s.height)
+        return if (diag > 0f) f * 43.27f / diag else null
+    }
+
+    private fun ensureGraph() {
+        if (graph != null && graphFacing == desired.facing && graphBlend == desired.blendLenses) {
+            // A plan without a smoother cannot happen: whoever built one needs the other.
+            val g = graph
+            if (smoother == null && g != null) smoother = ZoomSmoother(desired.zoom, g.zoomMin, g.zoomMax)
+            return
+        }
+        val all = profiles ?: runCatching {
+            manager.cameraIdList.mapNotNull { id ->
+                runCatching { profile(id, manager.getCameraCharacteristics(id)) }.getOrNull()
+            }
+        }.getOrDefault(emptyList()).also { profiles = it }
+        graph = LensGraph.build(all.filter { it.id !in badIds }, desired.facing, desired.blendLenses)
+        graphFacing = desired.facing
+        graphBlend = desired.blendLenses
+        graph?.let { g ->
+            // A new plan can have a new zoom range: carry the current position over into a smoother that fits it.
+            val from = smoother?.zoom ?: desired.zoom
+            smoother = ZoomSmoother(from, g.zoomMin, g.zoomMax).also { it.setTarget(desired.zoom) }
+            Log.i(TAG, "lens plan: ${g.strategy} device=${g.deviceId} ${g.note}")
+        }
+    }
+
+    /** Which camera device should be serving [z]. Only ever differs from the plan's device when lenses are separate cameras. */
+    private fun deviceFor(z: Float): String? {
+        val g = graph ?: return null
+        if (g.strategy != LensStrategy.SWITCH) return g.deviceId
+        val ladder = (g.switchTargets + (g.deviceId to 1f)).filterKeys { it !in badIds }.toList().sortedBy { it.second }
+        val pick = ladder.lastOrNull { it.second <= z * 1.0001f } ?: ladder.first()
+        val cur = openId
+        if (cur != null && cur != pick.first) {
+            val curRatio = ladder.firstOrNull { it.first == cur }?.second
+            // Hysteresis: leaving a lens downward needs a clear step past its edge, so hovering on a boundary cannot flap.
+            if (curRatio != null && pick.second < curRatio && z > curRatio * 0.98f) return cur
+        }
+        return pick.first
+    }
+
+    private fun lensRatioOfOpenDevice(): Float {
+        val g = graph ?: return 1f
+        val id = openId ?: return 1f
+        return if (g.strategy == LensStrategy.SWITCH && id != g.deviceId) g.switchTargets[id] ?: 1f else 1f
+    }
+
+    // ── opening ──────────────────────────────────────────────────────
+
     private fun openCamera() {
-        val id = pickCameraId(desired.facing)
+        ensureGraph()
+        val g = graph
+        val id = wantedId?.takeIf { it !in badIds } ?: deviceFor(smoother?.zoom ?: desired.zoom) ?: g?.deviceId
         if (id == null) {
             listener.onError("No ${desired.facing.name.lowercase()} camera")
             scheduleRetry()
@@ -211,12 +342,21 @@ class CameraEngine(context: Context, private val listener: Listener) {
                     }
                     opening = false
                     device = camera
+                    openId = id
                     openedFacing = desired.facing
                     retryDelayMs = 500L
                     buildReader()
                     listener.onInfo(computeInfo(id).also { info = it })
                     listener.onError(null)
+                    lastFrameNs = 0
                     reconcile()
+                }
+
+                override fun onClosed(camera: CameraDevice) {
+                    if (openAfterClose) {
+                        openAfterClose = false
+                        handler.post { if (wanted && device == null && !opening) openCamera() }
+                    }
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
@@ -229,12 +369,19 @@ class CameraEngine(context: Context, private val listener: Listener) {
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
-                    Log.w(TAG, "camera error $error")
+                    Log.w(TAG, "camera $id error $error")
                     camera.close()
                     if (gen == generation) {
                         device = null
+                        openId = null
                         opening = false
                         session = null
+                        // A lens camera that cannot be opened is dropped from the plan; the main lens carries on.
+                        if (g != null && id != g.deviceId && error != CameraDevice.StateCallback.ERROR_CAMERA_IN_USE) {
+                            badIds += id
+                            wantedId = null
+                            graph = null
+                        }
                         listener.onError(
                             when (error) {
                                 CameraDevice.StateCallback.ERROR_CAMERA_IN_USE -> "Camera is in use by another app"
@@ -248,8 +395,13 @@ class CameraEngine(context: Context, private val listener: Listener) {
                 }
             })
         } catch (e: Exception) {
-            Log.w(TAG, "openCamera failed", e)
+            Log.w(TAG, "openCamera($id) failed", e)
             opening = false
+            if (g != null && id != g.deviceId) {
+                badIds += id
+                wantedId = null
+                graph = null
+            }
             listener.onError("Cannot open camera: ${e.message}")
             scheduleRetry()
         }
@@ -266,24 +418,48 @@ class CameraEngine(context: Context, private val listener: Listener) {
 
     private fun computeInfo(id: String): Info {
         val c = chars!!
+        val g = graph
         val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
-        val zoom = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
         val ev = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
         val isFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         val encSizes = map.getOutputSizes(MediaCodec::class.java)?.filter { it.width * 3 == it.height * 4 }?.sortedBy { it.width }.orEmpty()
+        val afOff = CameraCharacteristics.CONTROL_AF_MODE_OFF in (c.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty())
+        val manualFocus = afOff && (c.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
+        val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toList().orEmpty()
+        val aeOff = CameraCharacteristics.CONTROL_AE_MODE_OFF in (c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES)?.toList().orEmpty())
+        val manualExposure = aeOff && CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR in caps
+        val zr = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
         return Info(
             cameraId = id,
             facing = if (isFront) Facing.FRONT else Facing.REAR,
             sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90,
-            zoomMin = zoom?.lower ?: 1f,
-            zoomMax = (zoom?.upper ?: 1f).coerceAtMost(10f),
+            zoomMin = g?.zoomMin ?: zr?.lower ?: 1f,
+            zoomMax = g?.zoomMax ?: (zr?.upper ?: 1f).coerceAtMost(10f),
             hasTorch = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true,
             evMin = ev?.lower ?: 0,
             evMax = ev?.upper ?: 0,
             previewSize = pickPreviewSize(map.getOutputSizes(android.graphics.SurfaceTexture::class.java)),
             analysisSize = reader?.let { Size(it.width, it.height) } ?: Size(320, 240),
-            encoderSizes = encSizes
+            encoderSizes = encSizes,
+            manualFocus = manualFocus,
+            manualExposure = manualExposure,
+            lenses = g?.lenses.orEmpty(),
+            strategy = g?.strategy ?: LensStrategy.LOGICAL,
+            diagnostics = diagnosticsText(id, g, zr)
         )
+    }
+
+    private fun diagnosticsText(id: String, g: LensGraph?, zr: Range<Float>?): String = buildString {
+        append("Open camera: ").append(id)
+        append(" · zoom range ").append(zr?.let { "${it.lower}-${it.upper}x" } ?: "n/a").append('\n')
+        append("Plan: ").append(g?.strategy ?: "none").append(" · ").append(g?.note ?: "no plan").append('\n')
+        val all = profiles.orEmpty()
+        append("Cameras seen: ")
+        append(all.joinToString { p ->
+            val logical = if (p.physicalIds.isNotEmpty()) "[logical ${p.physicalIds.joinToString("+")}]" else ""
+            "${p.id}${if (p.facing == Facing.FRONT) "F" else ""}${if (!p.usable) "x" else ""}$logical"
+        })
+        if (badIds.isNotEmpty()) append('\n').append("Could not open: ").append(badIds.joinToString())
     }
 
     /** Largest 4:3 size up to 1280x960: sharp enough for a phone screen, cheap enough to keep the pipeline fast. */
@@ -303,6 +479,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
             r.setOnImageAvailableListener({ rd ->
                 val img = rd.acquireLatestImage() ?: return@setOnImageAvailableListener
                 try {
+                    if (!analysisEnabled) return@setOnImageAvailableListener
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastLumaMs < analysisIntervalMs) return@setOnImageAvailableListener
                     lastLumaMs = now
@@ -386,6 +563,74 @@ class CameraEngine(context: Context, private val listener: Listener) {
         }
     }
 
+    // ── requests and zoom ────────────────────────────────────────────
+
+    /** One call per captured frame: this is what makes the zoom move at the camera's own pace. */
+    private val frameCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureStarted(s: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+            if (s !== session) return
+            if (switching) {
+                switching = false
+                Log.i(TAG, "lens switch complete in ${SystemClock.elapsedRealtime() - switchStartedMs} ms")
+                listener.onLensSwitch(false)
+            }
+            onFrame(timestamp)
+        }
+    }
+
+    private fun onFrame(timestampNs: Long) {
+        val sm = smoother ?: return
+        val dt = if (lastFrameNs == 0L) 1f / 30f else ((timestampNs - lastFrameNs) / 1e9f).coerceIn(0.001f, 0.25f)
+        lastFrameNs = timestampNs
+        if (graph?.strategy == LensStrategy.SWITCH) {
+            val want = deviceFor(sm.zoom)
+            if (want != null && want != openId) {
+                switchTo(want)
+                return
+            }
+        }
+        if (sm.settled) {
+            if (!reportedSettled) {
+                reportedSettled = true
+                reportZoom(sm.zoom, force = true)
+            }
+            return
+        }
+        if (reportedSettled) Log.i(TAG, "zoom moving: ${sm.zoom} -> ${sm.target} on device $openId")
+        reportedSettled = false
+        sm.step(dt)
+
+        // Separate lens cameras: cross the boundary by changing device. The smoother keeps its place meanwhile.
+        val want = deviceFor(sm.zoom)
+        if (want != null && want != openId && graph?.strategy == LensStrategy.SWITCH) {
+            switchTo(want)
+            return
+        }
+        applyRequest()
+        reportZoom(sm.zoom, force = false)
+    }
+
+    private fun reportZoom(zoom: Float, force: Boolean) {
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastZoomReportMs < 90) return
+        lastZoomReportMs = now
+        listener.onZoom(zoom, graph?.lensFor(zoom))
+    }
+
+    private fun switchTo(id: String) {
+        Log.i(TAG, "lens switch: ${openId} -> $id at ${smoother?.zoom}")
+        wantedId = id
+        switching = true
+        switchStartedMs = SystemClock.elapsedRealtime()
+        listener.onLensSwitch(true)
+        openAfterClose = true
+        closeAll()
+        // The next camera opens the moment the old one reports itself closed (some HALs refuse a second rear camera
+        // until the first has let go). If that callback never comes, a timer opens it anyway.
+        retryDelayMs = 450L
+        scheduleRetry()
+    }
+
     private fun applyRequest() {
         val dev = device ?: return
         val s = session ?: return
@@ -399,28 +644,72 @@ class CameraEngine(context: Context, private val listener: Listener) {
 
             b.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
             val afModes = c.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty()
-            if (CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes) {
+            val minFocus = c.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+            if (desired.focus >= 0 && minFocus > 0f && CameraCharacteristics.CONTROL_AF_MODE_OFF in afModes) {
+                // Fixed focus: 0 is infinity, 100 is the nearest the lens can reach (focus distance is in diopters).
+                b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                b.set(CaptureRequest.LENS_FOCUS_DISTANCE, minFocus * desired.focus / 100f)
+            } else if (CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes) {
                 b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
             }
-            b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-            b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, pickFps(c, desired))
+
+            val fps = pickFps(c, desired)
+            val manual = desired.iso > 0 || desired.shutterDenom > 0
+            val canManual = CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR in
+                (c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toList().orEmpty()) &&
+                CameraCharacteristics.CONTROL_AE_MODE_OFF in (c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES)?.toList().orEmpty())
+            if (manual && canManual) {
+                applyManualExposure(b, c)
+            } else {
+                b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps)
+                val ev = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
+                if (ev != null) b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, desired.exposure.coerceIn(ev.lower, ev.upper))
+                b.set(CaptureRequest.CONTROL_AE_LOCK, desired.lockExposure)
+            }
             b.set(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, antibanding(c, desired.antiFlicker))
 
-            val ev = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
-            if (ev != null) b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, desired.exposure.coerceIn(ev.lower, ev.upper))
-            b.set(CaptureRequest.CONTROL_AE_LOCK, desired.lockExposure)
+            val awbModes = c.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)?.toList().orEmpty()
+            val awb = awbMode(desired.whiteBalance)
+            if (awb in awbModes) b.set(CaptureRequest.CONTROL_AWB_MODE, awb)
             b.set(CaptureRequest.CONTROL_AWB_LOCK, desired.lockExposure)
 
             val zr = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
-            if (zr != null) b.set(CaptureRequest.CONTROL_ZOOM_RATIO, desired.zoom.coerceIn(zr.lower, zr.upper))
+            if (zr != null) {
+                val z = (smoother?.zoom ?: desired.zoom) / lensRatioOfOpenDevice()
+                b.set(CaptureRequest.CONTROL_ZOOM_RATIO, z.coerceIn(zr.lower, zr.upper))
+            }
 
             if (desired.torch && c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true) {
                 b.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH)
             }
-            s.setRepeatingRequest(b.build(), null, handler)
+            s.setRepeatingRequest(b.build(), frameCallback, handler)
         } catch (e: Exception) {
             Log.w(TAG, "applyRequest failed", e)
         }
+    }
+
+    /** ISO and shutter fixed by hand. Whichever is left on auto gets a sensible stand-in, since the sensor cannot be half manual. */
+    private fun applyManualExposure(b: CaptureRequest.Builder, c: CameraCharacteristics) {
+        b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+        val isoRange = c.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+        val timeRange = c.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+        val iso = if (desired.iso > 0) desired.iso else 400
+        val denom = if (desired.shutterDenom > 0) desired.shutterDenom else 60
+        val ns = (1_000_000_000L / denom)
+        if (isoRange != null) b.set(CaptureRequest.SENSOR_SENSITIVITY, iso.coerceIn(isoRange.lower, isoRange.upper))
+        val exposure = if (timeRange != null) ns.coerceIn(timeRange.lower, timeRange.upper) else ns
+        b.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure)
+        // A frame cannot be shorter than its exposure: a slow shutter lowers the frame rate rather than being refused.
+        b.set(CaptureRequest.SENSOR_FRAME_DURATION, maxOf(exposure, 33_333_333L))
+    }
+
+    private fun awbMode(w: WhiteBalance): Int = when (w) {
+        WhiteBalance.AUTO -> CaptureRequest.CONTROL_AWB_MODE_AUTO
+        WhiteBalance.DAYLIGHT -> CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT
+        WhiteBalance.CLOUDY -> CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT
+        WhiteBalance.TUNGSTEN -> CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT
+        WhiteBalance.FLUORESCENT -> CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT
     }
 
     /** Day: as fast as the sensor allows. Night: the lowest range the sensor offers, so the shutter can stay open. */
@@ -458,6 +747,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
         builtEncoder = null
         runCatching { device?.close() }
         device = null
+        openId = null
         runCatching { reader?.close() }
         reader = null
     }

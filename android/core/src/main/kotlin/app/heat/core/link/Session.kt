@@ -38,7 +38,10 @@ enum class CloseReason {
     IO,
 
     /** The outbound control queue overflowed: the peer stopped reading entirely. */
-    OVERLOAD
+    OVERLOAD,
+
+    /** The server refused us right after our proof (wrong key): it never sent READY. Retrying will not help. */
+    REJECTED
 }
 
 /** Media stream ids. Each has its own delivery policy, see [Session]. */
@@ -137,6 +140,9 @@ class Session(
 
     private val writer = RecordWriter(io, handshake.tx)
     private val reader = RecordReader(io, handshake.rx)
+
+    /** True until the server's READY has been read (dialer side, optimistic handshake). */
+    @Volatile private var awaitingReady = handshake.awaitingReady
 
     private val closed = AtomicBoolean(false)
     @Volatile private var closing = false
@@ -260,6 +266,11 @@ class Session(
                 lastRxMs = clock.nowMs()
                 stats.bytesRx.addAndGet((n + 4 + 16).toLong())
                 val p = reader.plain
+                if (awaitingReady) {
+                    if (n != 1 || p[0].toInt() != RecordType.READY) throw ProtocolException("expected READY")
+                    awaitingReady = false
+                    continue
+                }
                 when (p[0].toInt()) {
                     RecordType.CONTROL -> notifyHandler { handler.onControl(p, 1, n - 1) }
 
@@ -405,6 +416,9 @@ class Session(
     private fun failFrom(e: Throwable) {
         when {
             closed.get() || closing -> finish(CloseReason.LOCAL, null)
+            // Never got READY: the server did not accept our proof and hung up. That is a wrong key, not a bad link.
+            awaitingReady && (e is AuthenticationException || e is ProtocolException || e is EOFException) ->
+                finish(CloseReason.REJECTED, "server refused the proof")
             e is AuthenticationException -> finish(CloseReason.CORRUPT, e.message)
             e is ProtocolException -> finish(CloseReason.PROTOCOL, e.message)
             e is EOFException -> finish(CloseReason.PEER_GONE, null)

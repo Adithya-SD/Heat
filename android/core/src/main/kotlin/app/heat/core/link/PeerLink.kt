@@ -203,6 +203,7 @@ class DialMaintainer(
             link.onHandlerError(e)
         }
         val reason = closed.await()
+        if (reason == CloseReason.REJECTED) throw HandshakeException(HandshakeFailure.AUTH, "peer refused our proof")
         return Ended(reason, clock.nowMs() - upAt)
     }
 }
@@ -318,6 +319,16 @@ class PeerLink(
     }
 
     fun hasDialer(kind: CarrierKind): Boolean = synchronized(lock) { kind in maintainers }
+
+    /**
+     * Gives up on [kind] altogether: stops dialing it and closes its session. For when a better route has proved
+     * itself and the slower standby would only cost battery (it pings, and answers pings, all day).
+     */
+    fun dropCarrier(kind: CarrierKind) {
+        synchronized(lock) { maintainers.remove(kind)?.stop() }
+        conversation.sessions.closeKind(kind)
+        recompute()
+    }
 
     /** Something changed that makes connecting newly possible. Retry now. */
     fun nudge() = synchronized(lock) { maintainers.values.forEach { it.nudge() } }

@@ -34,15 +34,11 @@ object StreamPlan {
      * will probably be Wi-Fi a second later would make the picture flicker), and offering Bluetooth megabits
      * only turns every frame into a drop.
      */
-    fun carrierCap(link: CarrierKind?): Int = when (link) {
-        CarrierKind.BLUETOOTH -> BLUETOOTH.maxBps
-        else -> Int.MAX_VALUE
-    }
+    fun carrierCap(link: CarrierKind?): Int = if (link?.isBluetooth == true) BLUETOOTH.maxBps else Int.MAX_VALUE
 
-    fun profileFor(link: CarrierKind?): StreamProfile = when (link) {
-        CarrierKind.BLUETOOTH -> BLUETOOTH
-        else -> WIFI // LAN, relay, or unknown: start with the wide profile; the governor backs off fast.
-    }
+    fun profileFor(link: CarrierKind?): StreamProfile =
+        if (link?.isBluetooth == true) BLUETOOTH else WIFI // LAN, relay, or unknown: start wide; the governor backs off fast.
+
 
     /** The most bits the current conditions justify. The governor adapts underneath this. */
     fun ceiling(

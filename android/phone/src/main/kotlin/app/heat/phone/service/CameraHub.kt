@@ -1,10 +1,8 @@
 package app.heat.phone.service
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.SurfaceTexture
 import android.os.BatteryManager
-import android.os.Build
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -12,6 +10,8 @@ import android.util.Log
 import android.util.Size
 import android.view.OrientationEventListener
 import android.view.Surface
+import app.heat.core.camera.LensEntry
+import app.heat.core.camera.LensStrategy
 import app.heat.core.host.BitrateGovernor
 import app.heat.core.host.CameraBackend
 import app.heat.core.host.CameraHost
@@ -19,11 +19,13 @@ import app.heat.core.host.StreamPlan
 import app.heat.core.host.StreamProfile
 import app.heat.core.link.Acceptor
 import app.heat.core.link.Beacon
+import app.heat.core.link.CarrierKind
 import app.heat.core.link.Session
 import app.heat.core.link.TcpListener
 import app.heat.core.model.AlertKind
 import app.heat.core.model.CameraConfig
 import app.heat.core.model.Facing
+import app.heat.core.model.LensInfo
 import app.heat.core.model.ProtoJson
 import app.heat.core.model.StreamInfo
 import app.heat.core.model.Tier
@@ -35,10 +37,12 @@ import app.heat.platform.DataLayerHooks
 import app.heat.platform.GroupSync
 import app.heat.platform.MulticastLockHolder
 import app.heat.platform.NetworkWatcher
+import app.heat.platform.RfcommListener
 import app.heat.platform.Vault
 import app.heat.platform.fingerprint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -62,12 +66,24 @@ data class HubState(
     val sensorOrientation: Int = 90,
     val zoomMin: Float = 0.5f,
     val zoomMax: Float = 10f,
+    /** The zoom actually on screen right now (smoothed), as opposed to the one asked for. */
+    val zoomNow: Float = 1f,
+    val lenses: List<LensEntry> = emptyList(),
+    val lensStrategy: LensStrategy = LensStrategy.LOGICAL,
+    val activeLens: LensEntry? = null,
+    /** True while the camera is hopping to another lens and no new frames are flowing. */
+    val lensSwitching: Boolean = false,
+    val cameraDiagnostics: String = "",
     val hasTorch: Boolean = false,
+    val manualFocus: Boolean = false,
+    val manualExposure: Boolean = false,
     val battery: Int = -1,
     val thermal: Int = 0,
     val lastMotionMs: Long = 0,
     val motionPercent: Float = 0f,
-    val calibrating: Boolean = false
+    val calibrating: Boolean = false,
+    val carrier: CarrierKind? = null,
+    val encoderLabel: String = ""
 )
 
 @Serializable
@@ -92,23 +108,36 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
     private val engine = CameraEngine(appContext, this)
     private val motion = MotionEngine()
     private val encoder = H264Encoder(::onEncoded)
-    private val governor = BitrateGovernor(StreamPlan.WIFI)
+    private val governor = BitrateGovernor(StreamPlan.GOVERNOR_RANGE)
 
     private val _state = MutableStateFlow(HubState(pairingFingerprint = groupKey.fingerprint()))
     val state: StateFlow<HubState> = _state.asStateFlow()
 
+    private val startedAt = android.os.SystemClock.elapsedRealtime()
+    private val marks = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Logs how long after the hub was created each milestone happened, once. This is how start-up speed is measured. */
+    private fun mark(what: String) {
+        if (marks.putIfAbsent(what, 1L) != null) return
+        Log.i(TAG, "timeline: $what at +${android.os.SystemClock.elapsedRealtime() - startedAt} ms")
+    }
+
+    private var watchRequestedAt = 0L
     private var info: CameraEngine.Info? = null
     private var profile: StreamProfile = StreamPlan.WIFI
     private var streaming = Triple(false, false, Tier.MAX)
     private var deviceRotation = 0
     private var thermal = 0
     private val lastCounters = WeakHashMap<Session, LongArray>()
+    private var slowestCarrier: CarrierKind? = null
+    private var btOnlySinceMs = 0L
 
     private val wake = (appContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
         .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "heat:armed")
     private val multicast = MulticastLockHolder(appContext)
     private lateinit var beacon: Beacon
     private lateinit var tcp: TcpListener
+    private lateinit var rfcomm: RfcommListener
     private lateinit var network: NetworkWatcher
     private lateinit var orientation: OrientationEventListener
 
@@ -118,6 +147,10 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         override fun onConfig(new: CameraConfig, old: CameraConfig?) = applyConfig(new, old)
         override fun onArmed(armed: Boolean) = applyArmed(armed)
         override fun onStreaming(video: Boolean, audio: Boolean, tier: Tier) {
+            if (video && !streaming.first) {
+                watchRequestedAt = android.os.SystemClock.elapsedRealtime()
+                Log.i(TAG, "timeline: a viewer asked for video at +${watchRequestedAt - startedAt} ms")
+            }
             streaming = Triple(video, audio, tier)
             updateBitrate()
         }
@@ -130,6 +163,10 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         ProtoJson.decodeFromString(StoredConfig.serializer(), configFile.readText())
     }.getOrNull() ?: StoredConfig(0, CameraConfig())
 
+    // A slider drag or a bezel spin changes the config dozens of times a second; the file only needs the last.
+    private var saveJob: Job? = null
+    @Volatile private var latest: StoredConfig = stored
+
     val host: CameraHost = CameraHost(
         name = { host.config.value.label },
         scope = scope,
@@ -137,7 +174,14 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         initial = stored.config,
         initialRev = stored.rev,
         backend = backend,
-        persist = { c, rev -> scope.launch(Dispatchers.IO) { save(c, rev) } }
+        persist = { c, rev ->
+            latest = StoredConfig(rev, c)
+            saveJob?.cancel()
+            saveJob = scope.launch(Dispatchers.IO) {
+                delay(SAVE_DEBOUNCE_MS)
+                save(latest)
+            }
+        }
     )
 
     // ── lifecycle ────────────────────────────────────────────────────
@@ -148,6 +192,8 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         tcp = TcpListener(scope, acceptor)
         if (!tcp.start()) Log.w(TAG, "TCP port ${TcpListener.DEFAULT_PORT} unavailable: Wi-Fi viewers cannot connect")
         DataLayerHooks.acceptor = acceptor
+        rfcomm = RfcommListener(appContext, scope, acceptor).also { it.start() }
+        mark("accepting viewers (Wi-Fi and Bluetooth)")
 
         multicast.acquire()
         beacon = Beacon(deviceId, groupKey, scope, clock)
@@ -184,6 +230,8 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
 
         // The encoder runs for the life of the service so a viewer attaching costs a keyframe, not a session rebuild.
         startEncoder(StreamPlan.WIFI)
+        engine.analysisIntervalMs = 100L
+        engine.analysisEnabled = motion.isEnabled()
         engine.start(desiredFrom(host.config.value))
 
         scope.launch {
@@ -200,11 +248,14 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         runCatching { orientation.disable() }
         runCatching { beacon.stop() }
         runCatching { tcp.stop() }
+        runCatching { rfcomm.stop() }
         multicast.release()
         host.close()
         engine.release()
         encoder.release()
         if (wake.isHeld) wake.release()
+        saveJob?.cancel()
+        runCatching { save(latest) }
         scope.cancel()
     }
 
@@ -233,13 +284,28 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
     }
 
     override fun onInfo(info: CameraEngine.Info) {
+        mark("camera open")
         this.info = info
         _state.value = _state.value.copy(
-            cameraReady = true, sensorOrientation = info.sensorOrientation, zoomMin = info.zoomMin, zoomMax = info.zoomMax, hasTorch = info.hasTorch
+            cameraReady = true, sensorOrientation = info.sensorOrientation, zoomMin = info.zoomMin, zoomMax = info.zoomMax,
+            hasTorch = info.hasTorch, manualFocus = info.manualFocus, manualExposure = info.manualExposure,
+            lenses = info.lenses, lensStrategy = info.strategy, cameraDiagnostics = info.diagnostics,
+            activeLens = _state.value.activeLens ?: info.lenses.firstOrNull { it.ratio >= 0.99f }
         )
         // The reader's size is known only now; the motion engine's grid does not care, but a restart clears learned noise.
         motion.reset()
         pushStatus()
+    }
+
+    override fun onZoom(zoom: Float, lens: LensEntry?) {
+        _state.value = _state.value.copy(zoomNow = zoom, activeLens = lens ?: _state.value.activeLens)
+        pushStatus()
+    }
+
+    override fun onLensSwitch(switching: Boolean) {
+        _state.value = _state.value.copy(lensSwitching = switching)
+        // A different lens is a different picture: the next frame must not be a delta against the old one.
+        if (!switching) encoder.requestKeyframe()
     }
 
     override fun onError(message: String?) {
@@ -251,27 +317,64 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
 
     private fun startEncoder(p: StreamProfile) {
         profile = p
-        val surface = encoder.start(p.width, p.height, p.fps, governor.bps.coerceIn(p.minBps, p.maxBps))
+        val surface = encoder.start(p.width, p.height, p.fps, governor.bps.coerceIn(p.minBps, p.maxBps), p.gopSec)
         if (surface == null) {
             _state.value = _state.value.copy(error = "Video encoder unavailable on this phone", encoding = false)
         } else {
             engine.setEncoder(surface)
-            _state.value = _state.value.copy(encoding = true)
+            _state.value = _state.value.copy(encoding = true, encoderLabel = "${p.width}x${p.height}@${p.fps}")
         }
     }
 
     private fun onEncoded(flags: Int, ptsUs: Long, data: ByteArray, offset: Int, length: Int) {
+        mark("first encoded frame")
+        val asked = watchRequestedAt
+        if (asked != 0L && flags and app.heat.core.link.MediaFlags.KEYFRAME != 0) {
+            watchRequestedAt = 0
+            Log.i(TAG, "timeline: first keyframe (${length} bytes) out ${android.os.SystemClock.elapsedRealtime() - asked} ms after the viewer asked")
+        }
         host.sendVideo(flags, ptsUs, data, offset, length)
     }
 
     private fun ceiling(): Int {
         val c = host.config.value
-        return StreamPlan.ceiling(profile, streaming.third, c.stream.quality, c.stream.muddiness, thermal)
+        return StreamPlan.ceiling(profile, streaming.third, c.stream.quality, c.stream.muddiness, thermal, slowestCarrier)
     }
 
     /** A viewer's wishes changed: re-apply the ceiling now rather than waiting for the next second. */
     private fun updateBitrate() {
         if (encoder.running) encoder.setBitrate(governor.sample(accumulatedOffered, accumulatedDropped, ceiling(), clock.nowMs()))
+        pushStatus()
+    }
+
+    /**
+     * Follow the viewers' road. While anyone is on Wi-Fi the wide profile stays. If every viewer has been on
+     * Bluetooth for a good while, the encoder drops to the small profile (a keyframe on a slow link is the thing
+     * that makes pictures stall, and it scales with resolution). The wait matters: a watch that connects over
+     * Bluetooth first and finds Wi-Fi a second later must not make the picture restart twice.
+     */
+    private fun followCarriers(carriers: List<CarrierKind>, now: Long) {
+        slowestCarrier = carriers.firstOrNull { it.isBluetooth } ?: carriers.firstOrNull()
+        if (carriers.isEmpty()) {
+            btOnlySinceMs = 0
+            return
+        }
+        val btOnly = carriers.all { it.isBluetooth }
+        if (!btOnly) {
+            btOnlySinceMs = 0
+            if (profile != StreamPlan.WIFI) switchProfile(StreamPlan.WIFI, startBps = 2_000_000)
+            return
+        }
+        if (btOnlySinceMs == 0L) btOnlySinceMs = now
+        if (now - btOnlySinceMs >= BT_SETTLE_MS && profile != StreamPlan.BLUETOOTH) {
+            switchProfile(StreamPlan.BLUETOOTH, startBps = (StreamPlan.BLUETOOTH.maxBps * 0.7).toInt())
+        }
+    }
+
+    private fun switchProfile(p: StreamProfile, startBps: Int) {
+        Log.i(TAG, "encoder profile -> ${p.width}x${p.height}@${p.fps}")
+        governor.reset(startBps)
+        startEncoder(p)
         pushStatus()
     }
 
@@ -285,6 +388,11 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         night = c.camera.night,
         lockExposure = c.camera.lockExposure,
         antiFlicker = c.camera.antiFlicker,
+        focus = c.camera.focus,
+        whiteBalance = c.camera.whiteBalance,
+        iso = c.camera.iso,
+        shutterDenom = c.camera.shutterDenom,
+        blendLenses = c.camera.blendLenses,
         lowPower = !streaming.first && host.armed.value && !screenWanted
     )
 
@@ -300,6 +408,8 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
 
     private fun applyArmed(armed: Boolean) {
         motion.setEnabled(armed)
+        // With nothing to detect, the analysis stream costs a copy and a pass per frame for no reason.
+        engine.analysisEnabled = armed
         if (armed && !wake.isHeld) wake.acquire()
         if (!armed && wake.isHeld) wake.release()
         engine.update(desiredFrom(host.config.value))
@@ -339,6 +449,8 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
             else -> 2
         }
 
+        followCarriers(host.videoCarriers(), clock.nowMs())
+
         // Aggregate congestion across every viewer's best session this second.
         var offered = 0L
         var dropped = 0L
@@ -373,9 +485,9 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         if (charging || level > (power.lowBatteryWarnPercent + 5)) warnedLow = false
 
         if (++tickCount % 5 == 0) {
-            Log.i(TAG, "alive: encoder frames=${encoder.framesOut} ${encoder.bitrate / 1000}kbps viewers=${host.viewerCount.value} cam=${_state.value.cameraReady} armed=${host.armed.value}")
+            Log.i(TAG, "alive: encoder frames=${encoder.framesOut} ${encoder.bitrate / 1000}kbps ${_state.value.encoderLabel} viewers=${host.viewerCount.value} via=$slowestCarrier cam=${_state.value.cameraReady} armed=${host.armed.value}")
         }
-        _state.value = _state.value.copy(battery = level, thermal = thermal, streamKbps = encoder.bitrate / 1000)
+        _state.value = _state.value.copy(battery = level, thermal = thermal, streamKbps = encoder.bitrate / 1000, carrier = slowestCarrier)
         host.updateStatus { it.copy(battery = level, charging = charging, thermal = thermal) }
         pushStatus()
     }
@@ -388,31 +500,38 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
     private fun pushStatus() {
         val i = info
         val c = host.config.value
+        val s = _state.value
         val rotation = if (i == null) 0 else {
             val dev = if (i.facing == Facing.FRONT) -deviceRotation else deviceRotation
             (i.sensorOrientation + dev + 360) % 360
         }
-        val digital = c.camera.zoom >= 1.05f
+        val lens = s.activeLens
+        val digital = lens != null && s.zoomNow >= lens.ratio * 1.05f
         host.updateStatus {
             it.copy(
                 streaming = streaming.first && encoder.running,
                 stream = if (encoder.running) StreamInfo(encoder.width, encoder.height, profile.fps, encoder.bitrate, "avc", rotation) else null,
-                lenses = emptyList(),
-                lensLabel = if (c.camera.zoom < 0.95f) "0.5x" else "1x",
+                lenses = s.lenses.map { l -> LensInfo(l.id, l.label, l.ratio) },
+                activeLens = lens?.id,
+                lensLabel = lens?.let { l -> "${l.label}x" } ?: if (c.camera.zoom < 0.95f) "0.5x" else "1x",
                 digitalZoom = digital,
                 hasTorch = i?.hasTorch == true,
-                error = _state.value.error
+                manualFocus = i?.manualFocus == true,
+                manualExposure = i?.manualExposure == true,
+                error = s.error
             )
         }
     }
 
-    private fun save(c: CameraConfig, rev: Long) {
+    private fun save(c: StoredConfig) {
         runCatching {
-            Vault.atomicWrite(configFile, ProtoJson.encodeToString(StoredConfig.serializer(), StoredConfig(rev, c)).toByteArray())
+            Vault.atomicWrite(configFile, ProtoJson.encodeToString(StoredConfig.serializer(), c).toByteArray())
         }.onFailure { Log.w(TAG, "could not save config", it) }
     }
 
     private companion object {
         const val TAG = "HeatHub"
+        const val SAVE_DEBOUNCE_MS = 400L
+        const val BT_SETTLE_MS = 10_000L
     }
 }

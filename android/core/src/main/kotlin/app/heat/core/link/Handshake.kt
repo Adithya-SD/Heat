@@ -32,7 +32,12 @@ class HandshakeException(val failure: HandshakeFailure, message: String, cause: 
 class HandshakeResult internal constructor(
     val peer: DeviceId,
     internal val tx: AeadStream,
-    internal val rx: AeadStream
+    internal val rx: AeadStream,
+    /**
+     * The server's READY has not been read yet: the dialer sent its proof and went straight on. The session must
+     * treat the first record it reads as READY, and a failure before it as the server refusing us.
+     */
+    internal val awaitingReady: Boolean = false
 )
 
 /**
@@ -45,6 +50,12 @@ class HandshakeResult internal constructor(
  *   FINISH HMAC(auth, "client" | HELLO | serverId | nS | serverProof)  ─►
  *                                      ◄─  READY (first AES-GCM record)
  * ```
+ *
+ * The dialer does not wait for READY. Once its proof is sent it already has both session keys and can send its
+ * first records in the same breath, so a connection costs two flights instead of three before data moves; over
+ * a Bluetooth link that is worth hundreds of milliseconds. READY is still checked, as the first record the
+ * session reads: if the server was not satisfied it says so and hangs up, and that is reported exactly as
+ * before (the key does not match), just a moment later.
  *
  * - Both sides prove knowledge of the key before either accepts the other, and
  *   each proof covers the peer's fresh nonce, so a recorded session cannot be
@@ -81,7 +92,9 @@ object Handshake {
         self: DeviceId,
         group: GroupKey,
         expect: DeviceId? = null,
-        timeoutMs: Long = TIMEOUT_MS
+        timeoutMs: Long = TIMEOUT_MS,
+        /** Start sending before the server's READY arrives (see above). Off only for tests that want the old, strict shape. */
+        optimistic: Boolean = true
     ): HandshakeResult = guarded(io, timeoutMs) {
         val clientNonce = Crypto.random(NONCE)
         val hello = ByteArray(1 + GroupKey.TAG_SIZE + DeviceId.SIZE + NONCE)
@@ -117,6 +130,7 @@ object Handshake {
         val keys = deriveKeys(group, clientNonce, serverNonce, hello)
         val tx = AeadStream(keys.c2s, keys.c2sPrefix)
         val rx = AeadStream(keys.s2c, keys.s2cPrefix)
+        if (optimistic) return@guarded HandshakeResult(serverId, tx, rx, awaitingReady = true)
 
         // The server's first record proves it derived the same keys. Waiting for
         // it here is what turns "the server hung up on us" into a precise

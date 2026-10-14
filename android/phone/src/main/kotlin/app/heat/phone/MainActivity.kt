@@ -47,6 +47,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** Camera and notifications to run, Bluetooth so the watch can connect over the fast direct route. */
+private fun permissionsWanted(): Array<String> =
+    arrayOf(Manifest.permission.CAMERA, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
+
 @Composable
 private fun PhoneRoot() {
     val ctx = LocalContext.current
@@ -57,7 +61,7 @@ private fun PhoneRoot() {
         cameraGranted = has(Manifest.permission.CAMERA)
     }
     LaunchedEffect(Unit) {
-        if (!cameraGranted) launcher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.POST_NOTIFICATIONS))
+        if (!cameraGranted) launcher.launch(permissionsWanted())
     }
     LaunchedEffect(cameraGranted) {
         if (cameraGranted) CameraService.start(ctx)
@@ -76,12 +80,12 @@ private fun PhoneRoot() {
             ) {
                 HeatText("Heat needs the camera", size = 22, align = TextAlign.Center)
                 HeatText("It watches the room and streams to your watch. Nothing leaves your network.", size = 15, color = Heat.TextDim, align = TextAlign.Center, modifier = Modifier.padding(vertical = 14.dp))
-                GlassPillButton(glass, "Allow camera", { launcher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.POST_NOTIFICATIONS)) }, refract = false)
+                GlassPillButton(glass, "Allow camera", { launcher.launch(permissionsWanted()) }, refract = false)
             }
 
             h == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { HeatText("Starting camera…", color = Heat.TextDim) }
             screen == "settings" -> SettingsScreen(h, glass) { screen = "live" }
-            else -> LiveScreen(h, glass) { screen = "settings" }
+            else -> LiveScreen(h) { screen = "settings" }
         }
     }
 }

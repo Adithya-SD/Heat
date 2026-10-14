@@ -12,11 +12,20 @@ enum class CarrierKind(val rank: Int, val label: String) {
     /** TCP over the local network. Wide, low latency, not always there. */
     LAN(0, "Wi-Fi"),
 
-    /** Wearable Data Layer channel straight to the paired phone. Always there, narrow. */
-    BLUETOOTH(1, "Bluetooth"),
+    /**
+     * A Bluetooth socket straight to the bonded phone. Narrow, but with no middleman: it connects in a fraction of
+     * a second and a message crosses it in tens of milliseconds, because Play services is not in the path.
+     */
+    BT_DIRECT(1, "Bluetooth"),
+
+    /** Wearable Data Layer channel to the paired phone. Always there, narrow, and slower to start and to answer. */
+    BLUETOOTH(2, "Bluetooth"),
 
     /** Through another of our devices that can reach the camera when we cannot. */
-    RELAY(2, "Relay")
+    RELAY(3, "Relay");
+
+    /** Either Bluetooth route: what decides how much video can be sent. */
+    val isBluetooth: Boolean get() = this == BT_DIRECT || this == BLUETOOTH
 }
 
 /** Opens an outgoing connection to one specific peer over one carrier. */

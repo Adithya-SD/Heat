@@ -1,8 +1,12 @@
 package app.heat.phone.ui
 
+import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.view.TextureView
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -21,40 +25,61 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.heat.core.camera.ZoomSmoother
+import app.heat.core.control.BezelController
+import app.heat.core.control.BezelMode
+import app.heat.core.control.Controls
+import app.heat.core.model.Facing
 import app.heat.core.model.Zone
 import app.heat.core.util.Clock
-import app.heat.glass.GlassHost
-import app.heat.glass.GlassShape
-import app.heat.glass.GlassState
-import app.heat.glass.GlassSurface
 import app.heat.glass.Heat
-import app.heat.glass.HeatText
 import app.heat.glass.HeatIcon
 import app.heat.glass.HeatIconView
+import app.heat.glass.HeatText
 import app.heat.phone.service.CameraHub
 import kotlinx.coroutines.delay
 
+/**
+ * The camera view.
+ *
+ * Deliberately matte: it sits over a live picture, and glass over moving video is both busy to look at and costly
+ * to draw every frame. The picture is the hero; around it is quiet dark chrome, with ember (the colour of heat) for
+ * whatever is live. One big control at the bottom, a ruler above it that adjusts whichever setting is chosen in
+ * the row of chips, and the same settings, worded the same way, that the watch's menu offers.
+ */
 @Composable
-fun LiveScreen(hub: CameraHub, glass: GlassState, onSettings: () -> Unit) {
+fun LiveScreen(hub: CameraHub, onSettings: () -> Unit) {
     val config by hub.host.config.collectAsState()
     val armed by hub.host.armed.collectAsState()
     val viewers by hub.host.viewerCount.collectAsState()
@@ -63,115 +88,179 @@ fun LiveScreen(hub: CameraHub, glass: GlassState, onSettings: () -> Unit) {
 
     var aiming by remember { mutableStateOf(false) }
     var peekUntil by remember { mutableStateOf(0L) }
+    var active by remember { mutableStateOf(BezelMode.ZOOM) }
     val now = rememberTicker(armed || armingEnds > 0)
+
+    // A camera view that goes dark on its own is not a camera view. While armed the app draws its own black
+    // screen to save power, so the system's timeout is left alone then.
+    val view = LocalView.current
+    DisposableEffect(armed) {
+        view.keepScreenOn = !armed
+        onDispose { view.keepScreenOn = false }
+    }
 
     val remaining = if (armingEnds > 0) ((armingEnds - now + 999) / 1000).toInt().coerceAtLeast(0) else 0
     val blackout = armed && config.power.blackoutWhileArmed && now > peekUntil
 
-    GlassHost(
-        glass, Modifier.fillMaxSize().background(Color.Black),
-        backdrop = {
-            Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-                Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f)) {
-                    CameraPreview(hub, Modifier.fillMaxSize())
-                    // Zones live in sensor space; the preview shows the picture upright, so convert both ways.
-                    val up = hubState.sensorOrientation
-                    ZoneOverlay(config.detect.zone.rotated(up), editing = aiming, motion = hubState.motionPercent) { z ->
-                        hub.host.editLocally { it.copy(detect = it.detect.copy(zone = z.unrotated(up))) }
+    // The zoom that is drawn follows the requested one with the same smoothing the camera uses, once per display
+    // frame, so rulers and readouts glide at the screen's refresh rate rather than at the camera's report rate.
+    val target = config.camera.zoom
+    val zoomShown = remember { mutableFloatStateOf(target) }
+    val smoother = remember(hubState.zoomMin, hubState.zoomMax) {
+        ZoomSmoother(zoomShown.floatValue, hubState.zoomMin.coerceAtMost(1f), hubState.zoomMax.coerceAtLeast(1f))
+    }
+    LaunchedEffect(target, smoother) {
+        smoother.setTarget(target)
+        var last = 0L
+        while (!smoother.settled) {
+            val t = withFrameNanos { it }
+            val dt = if (last == 0L) 1f / 60f else ((t - last) / 1e9f).coerceIn(0.001f, 0.1f)
+            last = t
+            zoomShown.floatValue = smoother.step(dt)
+        }
+        zoomShown.floatValue = smoother.zoom
+    }
+    // This phone cannot keep two rear lenses open at once, so changing lens takes the camera about a second to
+    // reopen. Rather than a frozen or black picture, the last frame is kept on screen, blurred behind and
+    // still moving with the zoom in front (so going 1x to 0.5x shrinks the old picture away), and dissolved into
+    // the new lens when its first frame arrives.
+    var previewView by remember { mutableStateOf<TextureView?>(null) }
+    var frozen by remember { mutableStateOf<Bitmap?>(null) }
+    val freezeZoom = remember { mutableFloatStateOf(1f) }
+    val dissolve = remember { Animatable(0f) }
+    LaunchedEffect(hubState.lensSwitching) {
+        if (hubState.lensSwitching) {
+            val tv = previewView
+            val bmp = if (tv != null && tv.isAvailable) runCatching { tv.getBitmap(432, 576) }.getOrNull() else null
+            if (bmp != null) {
+                frozen = bmp
+                freezeZoom.floatValue = zoomShown.floatValue
+                dissolve.snapTo(1f)
+            }
+        } else if (frozen != null) {
+            dissolve.animateTo(0f, tween(520))
+            frozen = null
+        }
+    }
+
+    val setZoom: (Float) -> Unit = { z ->
+        val c = z.coerceIn(hubState.zoomMin, hubState.zoomMax)
+        hub.host.editLocally { it.copy(camera = it.camera.copy(zoom = c)) }
+    }
+    val currentTarget by rememberUpdatedState(target)
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        // The picture, 4:3, full width. Pinch anywhere on it to zoom.
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.fillMaxWidth().aspectRatio(3f / 4f).pointerInput(aiming) {
+                    if (!aiming) detectTransformGestures { _, _, zoom, _ -> if (zoom != 1f) setZoom(currentTarget * zoom) }
+                }
+            ) {
+                CameraPreview(hub, Modifier.fillMaxSize()) { previewView = it }
+                frozen?.let { bmp ->
+                    val img = remember(bmp) { bmp.asImageBitmap() }
+                    Box(Modifier.matchParentSize().graphicsLayer { alpha = dissolve.value }) {
+                        Image(img, null, Modifier.matchParentSize().blur(26.dp).graphicsLayer { scaleX = 1.25f; scaleY = 1.25f; alpha = 0.8f }, contentScale = ContentScale.Crop)
+                        Image(
+                            img, null,
+                            Modifier.matchParentSize().graphicsLayer {
+                                val s = (zoomShown.floatValue / freezeZoom.floatValue).coerceIn(0.25f, 6f)
+                                scaleX = s; scaleY = s
+                            },
+                            contentScale = ContentScale.Crop
+                        )
                     }
+                }
+                // Zones live in sensor space; the preview shows the picture upright, so convert both ways.
+                val up = hubState.sensorOrientation
+                ZoneOverlay(config.detect.zone.rotated(up), editing = aiming, motion = hubState.motionPercent) { z ->
+                    hub.host.editLocally { it.copy(detect = it.detect.copy(zone = z.unrotated(up))) }
                 }
             }
         }
-    ) {
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
-            // ── top: status ──
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                GlassSurface(glass, shape = GlassShape.Capsule, bezel = 14.dp) {
-                    Row(Modifier.padding(horizontal = 18.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(9.dp).background(if (armed) Heat.Green else if (remaining > 0) Heat.Amber else Heat.TextFaint, androidx.compose.foundation.shape.CircleShape))
-                        Spacer(Modifier.width(10.dp))
-                        HeatText(
-                            when {
-                                remaining > 0 -> "Arming in $remaining"
-                                armed -> "Watching"
-                                else -> "Ready"
-                            },
-                            size = 15, weight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        HeatIconView(HeatIcon.Eye, if (viewers > 0) Heat.Orange else Heat.TextFaint, 17.dp)
-                        Spacer(Modifier.width(4.dp))
-                        HeatText("$viewers", size = 15, color = if (viewers > 0) Heat.Orange else Heat.TextFaint)
-                    }
-                }
-                GlassSurface(glass, shape = GlassShape.Capsule, refract = false) {
-                    Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-                        HeatText(if (hubState.battery >= 0) "${hubState.battery}%" else "", size = 14, color = Heat.TextDim)
-                    }
-                }
-            }
+
+        // Quiet scrims so the chrome reads over any picture.
+        Box(Modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent))))
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(420.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000)))))
+
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            TopBar(armed, remaining, viewers, hubState.battery, hubState.carrier?.label, onFlip = {
+                hub.host.editLocally { it.copy(camera = it.camera.copy(facing = if (it.camera.facing == Facing.REAR) Facing.FRONT else Facing.REAR)) }
+            }, onSettings = onSettings)
 
             hubState.error?.let { err ->
                 Spacer(Modifier.height(10.dp))
-                GlassSurface(glass, Modifier.fillMaxWidth(), shape = GlassShape.Rounded(18f), refract = false, tint = 0.18f) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        HeatIconView(HeatIcon.Alert, Heat.Amber, 20.dp)
-                        Spacer(Modifier.width(10.dp))
-                        HeatText(err, size = 14)
-                    }
+                Row(
+                    Modifier.padding(horizontal = 16.dp).fillMaxWidth().matte(RoundedCornerShape(16.dp), Color(0xFF2A1B0A)).padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HeatIconView(HeatIcon.Alert, Heat.Amber, 20.dp)
+                    Spacer(Modifier.width(10.dp))
+                    HeatText(err, size = 14)
                 }
             }
 
             Spacer(Modifier.weight(1f))
 
-            // ── zoom ──
+            // ── the lens buttons and the ruler ──
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                GlassSurface(glass, shape = GlassShape.Capsule, refract = false) {
-                    Row(Modifier.padding(5.dp)) {
-                        for (z in listOf(0.5f, 1f, 2f, 5f)) {
-                            val on = kotlin.math.abs(config.camera.zoom - z) < 0.06f
-                            Box(
-                                Modifier.size(width = 54.dp, height = 36.dp).background(if (on) Color(0x44FFFFFF) else Color.Transparent, androidx.compose.foundation.shape.CircleShape)
-                                    .tappable({ hub.host.editLocally { it.copy(camera = it.camera.copy(zoom = z)) } }),
-                                contentAlignment = Alignment.Center
-                            ) { HeatText(if (z < 1f) "0.5" else "${z.toInt()}×", size = 15, weight = FontWeight.SemiBold, color = if (on) Heat.Orange else Heat.Text) }
-                        }
-                    }
+                LensButtons(hubState.lenses, hubState.zoomMax, { zoomShown.floatValue }, onSelect = { setZoom(it) })
+            }
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                val detent = Controls.detentFor(active)
+                if (active == BezelMode.ZOOM || detent == null) {
+                    LogRuler(
+                        zoomState = { zoomShown.floatValue },
+                        minZoom = hubState.zoomMin, maxZoom = hubState.zoomMax,
+                        stops = hubState.lenses.map { it.ratio },
+                        onTarget = { setZoom(it) },
+                        onDragging = {}
+                    )
+                } else {
+                    DetentRuler(
+                        detent.labels, detent.read(config),
+                        onIndex = { i -> hub.host.editLocally { c -> detent.write(c, i) } }
+                    )
                 }
+            }
+            Spacer(Modifier.height(12.dp))
+
+            // ── the controls ──
+            ChipRow {
+                ControlChip(BezelMode.ZOOM, liveZoomText(zoomShown.floatValue), active == BezelMode.ZOOM, isSwitch = false, on = false) { active = BezelMode.ZOOM }
+                ControlChip(BezelMode.EXPOSURE, BezelController.describe(BezelMode.EXPOSURE, config), active == BezelMode.EXPOSURE, false, false) { active = BezelMode.EXPOSURE }
+                if (hubState.manualFocus) ControlChip(BezelMode.FOCUS, BezelController.describe(BezelMode.FOCUS, config), active == BezelMode.FOCUS, false, false) { active = BezelMode.FOCUS }
+                ControlChip(BezelMode.WHITE_BALANCE, BezelController.describe(BezelMode.WHITE_BALANCE, config), active == BezelMode.WHITE_BALANCE, false, false) { active = BezelMode.WHITE_BALANCE }
+                if (hubState.manualExposure) {
+                    ControlChip(BezelMode.ISO, BezelController.describe(BezelMode.ISO, config), active == BezelMode.ISO, false, false) { active = BezelMode.ISO }
+                    ControlChip(BezelMode.SHUTTER, BezelController.describe(BezelMode.SHUTTER, config), active == BezelMode.SHUTTER, false, false) { active = BezelMode.SHUTTER }
+                }
+                ControlChip(BezelMode.NIGHT, BezelController.describe(BezelMode.NIGHT, config), active == BezelMode.NIGHT, false, false) { active = BezelMode.NIGHT }
+                if (hubState.hasTorch) {
+                    val sw = Controls.switchFor(BezelMode.FLASH)!!
+                    ControlChip(BezelMode.FLASH, "", false, true, sw.read(config)) { hub.host.editLocally { c -> sw.write(c, !sw.read(c)) } }
+                }
+                val lock = Controls.switchFor(BezelMode.LOCK)!!
+                ControlChip(BezelMode.LOCK, "", false, true, lock.read(config)) { hub.host.editLocally { c -> lock.write(c, !lock.read(c)) } }
+                ControlChip(BezelMode.TRACKER, "", aiming, false, false) { aiming = !aiming }
             }
             Spacer(Modifier.height(14.dp))
 
-            // ── bottom controls ──
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GlassIconButton(glass, HeatIcon.Bolt, { hub.host.editLocally { it.copy(camera = it.camera.copy(torch = !it.camera.torch)) } }, active = config.camera.torch)
-                GlassIconButton(glass, HeatIcon.Aim, { aiming = !aiming }, active = aiming)
-                GlassPillButton(
-                    glass,
-                    label = when {
-                        remaining > 0 -> "Cancel"
-                        armed -> "Disarm"
-                        else -> "Arm"
-                    },
-                    onClick = {
-                        if (armed || remaining > 0) hub.host.setArmed(false) else hub.host.setArmed(true)
-                    },
-                    modifier = Modifier.weight(1f),
-                    accent = if (armed) Heat.Green else Heat.Orange,
-                    subLabel = if (!armed && remaining == 0 && config.detect.armDelaySec > 0) "in ${config.detect.armDelaySec}s" else null
-                )
-                GlassIconButton(glass, HeatIcon.Flip, {
-                    hub.host.editLocally {
-                        it.copy(camera = it.camera.copy(facing = if (it.camera.facing == app.heat.core.model.Facing.REAR) app.heat.core.model.Facing.FRONT else app.heat.core.model.Facing.REAR))
-                    }
-                })
-                GlassIconButton(glass, HeatIcon.Gear, onSettings)
-            }
+            // ── the big one ──
+            ArmTrack(
+                armed = armed, arming = remaining, delaySec = config.detect.armDelaySec,
+                onArm = { hub.host.setArmed(true) },
+                onDisarm = { hub.host.setArmed(false) },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(Modifier.height(14.dp))
         }
 
         if (blackout) {
             Box(
-                Modifier.fillMaxSize().background(Color.Black)
-                    .tappable({ peekUntil = Clock.SYSTEM.nowMs() + 10_000 }),
+                Modifier.fillMaxSize().background(Color.Black).tappable({ peekUntil = Clock.SYSTEM.nowMs() + 10_000 }),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -180,6 +269,44 @@ fun LiveScreen(hub: CameraHub, glass: GlassState, onSettings: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TopBar(armed: Boolean, remaining: Int, viewers: Int, battery: Int, carrier: String?, onFlip: () -> Unit, onSettings: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.matte(CircleShape).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(9.dp).background(if (armed) Heat.Green else if (remaining > 0) Heat.Amber else Heat.TextFaint, CircleShape))
+            Spacer(Modifier.width(9.dp))
+            HeatText(if (remaining > 0) "Arming $remaining" else if (armed) "Watching" else "Ready", size = 14, weight = FontWeight.SemiBold)
+            if (viewers > 0) {
+                Spacer(Modifier.width(10.dp))
+                HeatIconView(HeatIcon.Eye, Heat.Ember1, 16.dp)
+                Spacer(Modifier.width(3.dp))
+                HeatText("$viewers", size = 14, color = Heat.Ember1, weight = FontWeight.SemiBold)
+                if (carrier != null) {
+                    Spacer(Modifier.width(8.dp))
+                    HeatIconView(if (carrier == "Wi-Fi") HeatIcon.Wifi else HeatIcon.Bluetooth, Heat.TextDim, 14.dp)
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        if (battery >= 0) {
+            Row(Modifier.matte(CircleShape).padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                HeatText("$battery%", size = 13, color = if (battery <= 20) Heat.Amber else Heat.TextDim, weight = FontWeight.Medium)
+            }
+            Spacer(Modifier.width(8.dp))
+        }
+        RoundButton(HeatIcon.Flip, onFlip)
+        Spacer(Modifier.width(8.dp))
+        RoundButton(HeatIcon.Gear, onSettings)
+    }
+}
+
+@Composable
+private fun RoundButton(icon: HeatIcon, onClick: () -> Unit) {
+    Box(Modifier.size(42.dp).matte(CircleShape).tappable(onClick), contentAlignment = Alignment.Center) {
+        HeatIconView(icon, Heat.Text, 20.dp)
     }
 }
 
@@ -197,10 +324,11 @@ private fun rememberTicker(active: Boolean): Long {
 }
 
 @Composable
-private fun CameraPreview(hub: CameraHub, modifier: Modifier) {
+private fun CameraPreview(hub: CameraHub, modifier: Modifier, onView: (TextureView) -> Unit) {
     AndroidView(
         factory = { ctx ->
             TextureView(ctx).apply {
+                onView(this)
                 isOpaque = true
                 surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                     override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) = hub.attachPreview(st)
@@ -223,7 +351,7 @@ private fun ZoneOverlay(zone: Zone, editing: Boolean, motion: Float, onChange: (
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wPx = constraints.maxWidth.toFloat()
         val hPx = constraints.maxHeight.toFloat()
-        val current by androidx.compose.runtime.rememberUpdatedState(zone)
+        val current by rememberUpdatedState(zone)
         val gestureModifier = if (editing) {
             Modifier.pointerInput(Unit) {
                 detectTransformGestures { _, pan, scale, _ ->
@@ -240,7 +368,7 @@ private fun ZoneOverlay(zone: Zone, editing: Boolean, motion: Float, onChange: (
             val r = Offset(zone.x * size.width, zone.y * size.height)
             val s = Size(zone.width * size.width, zone.height * size.height)
             val hot = motion > 1f
-            val color = if (hot) Heat.Orange else Color.White.copy(alpha = if (editing) 0.95f else 0.45f)
+            val color = if (hot) Heat.Ember1 else Color.White.copy(alpha = if (editing) 0.95f else 0.45f)
             drawRoundRect(
                 color, r, s, CornerRadius(10.dp.toPx()),
                 style = Stroke(if (editing) 2.5.dp.toPx() else 1.5.dp.toPx(), pathEffect = if (editing) null else PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
