@@ -41,7 +41,7 @@ data class CameraConfig(
          */
         val PER_CAMERA_PATHS: Set<String> = setOf(
             "label",
-            "camera.facing", "camera.lensId", "camera.zoom", "camera.torch",
+            "camera.facing", "camera.lensId", "camera.zoom", "camera.torch", "camera.focus",
             "detect.zone"
         )
     }
@@ -57,6 +57,24 @@ enum class NightMode { AUTO, DAY, NIGHT }
 enum class AntiFlicker { AUTO, HZ50, HZ60, OFF }
 
 @Serializable
+enum class WhiteBalance { AUTO, DAYLIGHT, CLOUDY, TUNGSTEN, FLUORESCENT }
+
+/** The discrete positions the bezel walks through for settings that are lists, not ranges. */
+object CameraSteps {
+    /** 0 = automatic. */
+    val ISO: List<Int> = listOf(0, 100, 200, 400, 800, 1600, 3200)
+
+    /** The shutter is 1/N second. 0 = automatic. */
+    val SHUTTER: List<Int> = listOf(0, 8, 15, 30, 60, 125, 250, 500, 1000, 2000)
+
+    /** -1 = autofocus, then 0 (far) to 100 (nearest) in fives. */
+    val FOCUS: List<Int> = listOf(-1) + (0..100 step 5)
+
+    fun nearest(list: List<Int>, value: Int): Int =
+        list.indices.minByOrNull { kotlin.math.abs(list[it] - value) } ?: 0
+}
+
+@Serializable
 data class CameraSettings(
     val facing: Facing = Facing.REAR,
     /** Physical camera id of the chosen lens, or null for the default main lens. */
@@ -69,12 +87,30 @@ data class CameraSettings(
     val night: NightMode = NightMode.AUTO,
     /** Freeze exposure and white balance. Stops auto-exposure steps being read as motion. */
     val lockExposure: Boolean = false,
-    val antiFlicker: AntiFlicker = AntiFlicker.AUTO
+    val antiFlicker: AntiFlicker = AntiFlicker.AUTO,
+    /** -1 = continuous autofocus. 0..100 = fixed focus, from far (0) to the nearest the lens can reach (100). */
+    val focus: Int = -1,
+    val whiteBalance: WhiteBalance = WhiteBalance.AUTO,
+    /** 0 = automatic. Anything else fixes the sensor's sensitivity; with [shutterDenom] it takes exposure into manual. */
+    val iso: Int = 0,
+    /** 0 = automatic. Otherwise the shutter is 1/N second. */
+    val shutterDenom: Int = 0,
+    /**
+     * Run the neighbouring lens alongside while zooming and cross-fade between them, so a change of lens is
+     * a transition instead of a jump. Costs a little power only while the zoom is moving near a lens boundary.
+     */
+    val blendLenses: Boolean = true
 ) {
     fun sanitized() = copy(
         zoom = zoom.coerceIn(0.5f, 10f),
-        exposure = exposure.coerceIn(-12, 12)
+        exposure = exposure.coerceIn(-12, 12),
+        focus = focus.coerceIn(-1, 100),
+        iso = if (iso <= 0) 0 else iso.coerceIn(25, 12_800),
+        shutterDenom = if (shutterDenom <= 0) 0 else shutterDenom.coerceIn(2, 32_000)
     )
+
+    /** True when either exposure value is fixed by hand. */
+    val manualExposure: Boolean get() = iso > 0 || shutterDenom > 0
 }
 
 @Serializable

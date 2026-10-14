@@ -25,8 +25,16 @@ class SessionSet(private val onChange: () -> Unit = {}) {
 
     private val entries = CopyOnWriteArrayList<Entry>()
 
+    /**
+     * One carrier is one route to this peer. A newer session on the same carrier means the peer re-dialed
+     * (its old socket died, or its address changed), so the older one is stale: retire it now instead of
+     * letting it count as "healthy" for the seconds it takes to time out, which would send video into a
+     * pipe nobody is reading.
+     */
     fun add(kind: CarrierKind, session: Session) {
+        val stale = entries.filter { it.kind == kind && it.session !== session }
         entries += Entry(kind, session)
+        stale.forEach { it.session.close() }
         onChange()
     }
 

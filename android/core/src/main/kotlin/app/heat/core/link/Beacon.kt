@@ -118,7 +118,8 @@ class Beacon(
     /** Where to send. Defaults to the limited and subnet broadcast addresses; tests pass loopback. */
     private val targets: () -> List<InetSocketAddress> = { broadcastTargets(DEFAULT_PORT) },
     private val announceMs: Long = ANNOUNCE_MS,
-    private val expireMs: Long = EXPIRE_MS
+    private val expireMs: Long = EXPIRE_MS,
+    private val binder: SocketBinder = SocketBinder.None
 ) {
     private val _peers = MutableStateFlow<Map<DeviceId, DiscoveredPeer>>(emptyMap())
 
@@ -145,6 +146,7 @@ class Beacon(
         val s = try {
             // Not apply{}: inside it, a bare `port` is the socket's own (unconnected) getPort() = -1.
             val sock = DatagramSocket(null)
+            binder.bind(sock)
             sock.reuseAddress = true
             sock.broadcast = true
             sock.bind(InetSocketAddress(port))

@@ -322,6 +322,47 @@ class HostClientTest {
     }
 
     @Test
+    fun a_keyframe_asked_for_inside_the_quiet_window_is_delayed_not_lost() = runTest {
+        val r = Rig(this)
+        val (c, _) = r.client()
+        r.settle(1_000)
+        val base = r.backend.keyframes.get()              // the link coming up already asked for one
+        c.watch(video = true)
+        r.settle(50)
+        assertEquals(base + 1, r.backend.keyframes.get()) // attaching forces one at once
+
+        // The decoder came up a moment later and asked again: inside the 300 ms window.
+        c.needKeyframe(); c.needKeyframe(); c.needKeyframe()
+        r.settle(50)
+        assertEquals(base + 1, r.backend.keyframes.get()) // not a storm...
+        r.settle(400)
+        assertEquals(base + 2, r.backend.keyframes.get()) // ...but the viewer is not left without a picture
+
+        r.settle(400)                                     // the delayed keyframe opened a new window; let it pass
+        c.needKeyframe()
+        r.settle(20)
+        assertEquals(base + 3, r.backend.keyframes.get()) // outside the window it is immediate again
+    }
+
+    @Test
+    fun a_new_picture_size_reaches_viewers_at_once_but_a_bitrate_change_does_not_chatter() = runTest {
+        val r = Rig(this)
+        val (c, _) = r.client()
+        r.settle()
+        r.host.updateStatus { it.copy(stream = app.heat.core.model.StreamInfo(640, 480, 30, 1_000_000, "avc", 90)) }
+        r.settle(60)                                       // far less than the 1 s status tick
+        assertEquals(640, c.status.value!!.stream!!.width)
+
+        r.host.updateStatus { it.copy(stream = it.stream!!.copy(bitrate = 500_000)) }
+        r.settle(60)
+        assertEquals(1_000_000, c.status.value!!.stream!!.bitrate)   // bitrate rides the periodic tick
+
+        r.host.updateStatus { it.copy(stream = app.heat.core.model.StreamInfo(320, 240, 15, 300_000, "avc", 90)) }
+        r.settle(60)
+        assertEquals(320, c.status.value!!.stream!!.width)
+    }
+
+    @Test
     fun a_viewer_cannot_be_confused_with_another_cameras_settings() = runTest {
         // Two cameras, one viewer object each: edits to one never appear on the other.
         val r1 = Rig(this)

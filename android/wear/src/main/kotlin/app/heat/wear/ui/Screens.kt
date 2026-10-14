@@ -36,6 +36,8 @@ import app.heat.core.host.CameraClient
 import app.heat.core.link.LinkState
 import app.heat.core.model.AntiFlicker
 import app.heat.core.model.CameraConfig
+import app.heat.core.model.CameraSteps
+import app.heat.core.model.WhiteBalance
 import app.heat.core.model.ConfigPatch
 import app.heat.core.model.HapticProfile
 import app.heat.core.model.NightMode
@@ -153,6 +155,11 @@ private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, hu
             item { Toggle("Lock exposure", c.camera.lockExposure) { v -> edit { it.copy(camera = it.camera.copy(lockExposure = v)) } } }
             item { Cycle("Flicker", c.camera.antiFlicker, AntiFlicker.entries, { when (it) { AntiFlicker.AUTO -> "Auto"; AntiFlicker.HZ50 -> "50 Hz"; AntiFlicker.HZ60 -> "60 Hz"; AntiFlicker.OFF -> "Off" } }) { v -> edit { it.copy(camera = it.camera.copy(antiFlicker = v)) } } }
             item { Cycle("Lens", c.camera.facing, app.heat.core.model.Facing.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(camera = it.camera.copy(facing = v)) } } }
+            item { Cycle("White balance", c.camera.whiteBalance, WhiteBalance.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(camera = it.camera.copy(whiteBalance = v)) } } }
+            item { Cycle("Focus", c.camera.focus, listOf(-1, 0, 25, 50, 75, 100), { when (it) { -1 -> "Auto"; 0 -> "Far"; 100 -> "Near"; else -> "$it%" } }) { v -> edit { it.copy(camera = it.camera.copy(focus = v)) } } }
+            item { Cycle("ISO", c.camera.iso, CameraSteps.ISO, { if (it == 0) "Auto" else "$it" }) { v -> edit { it.copy(camera = it.camera.copy(iso = v)) } } }
+            item { Cycle("Shutter", c.camera.shutterDenom, CameraSteps.SHUTTER, { if (it == 0) "Auto" else "1/$it" }) { v -> edit { it.copy(camera = it.camera.copy(shutterDenom = v)) } } }
+            item { Toggle("Blend lenses", c.camera.blendLenses) { v -> edit { it.copy(camera = it.camera.copy(blendLenses = v)) } } }
 
             item { SectionLabel("Video") }
             item { Cycle("Quality", c.stream.quality, StreamQuality.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(stream = it.stream.copy(quality = v)) } } }
@@ -186,6 +193,8 @@ private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, hu
         client.link.lastFailure?.let { f -> item { Info("Last failure", f.name.lowercase()) } }
         item { Info("Pairing code", pairing?.key?.fingerprint() ?: "none") }
         item { Info("Camera", client.cameraId.short) }
+        item { Info("Wi-Fi", if (hub.onWifi) "Joined" else "Not joined") }
+        item { Info("Bezel", "${app.heat.wear.Rotary.events} clicks") }
         status?.stream?.let { s -> item { Info("Stream", "${s.width}x${s.height} · ${s.bitrate / 1000} kbps") } }
         item { Spacer(Modifier.height(28.dp)) }
     }

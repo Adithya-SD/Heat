@@ -36,7 +36,10 @@ object Heat {
     val Hairline = Color(0x26FFFFFF)
 }
 
-enum class HeatIcon { Bolt, Flip, Gear, Shield, Back, Close, Check, Eye, Plus, Minus, Camera, Alert, Wifi, Bluetooth, Aim, List, Chevron }
+enum class HeatIcon {
+    Bolt, Flip, Gear, Shield, Back, Close, Check, Eye, Plus, Minus, Camera, Alert, Wifi, Bluetooth, Aim, List, Chevron,
+    Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search
+}
 
 /**
  * Icons drawn from primitives on a 24-unit grid, so the apps carry no icon
@@ -115,6 +118,68 @@ private fun DrawScope.drawIcon(icon: HeatIcon, c: Color, u: Float) {
         HeatIcon.Aim -> {
             drawCircle(c, 6.5f * u, p(12f, 12f), style = stroke)
             poly(12f to 2f, 12f to 6f); poly(12f to 18f, 12f to 22f); poly(2f to 12f, 6f to 12f); poly(18f to 12f, 22f to 12f)
+        }
+        HeatIcon.Zoom -> {
+            drawCircle(c, 6.2f * u, p(10.5f, 10.5f), style = stroke)
+            poly(15.2f to 15.2f, 20.5f to 20.5f)
+            poly(7.8f to 10.5f, 13.2f to 10.5f)
+        }
+        HeatIcon.Search -> {
+            drawCircle(c, 6.2f * u, p(10.5f, 10.5f), style = stroke)
+            poly(15.2f to 15.2f, 20.5f to 20.5f)
+        }
+        HeatIcon.Waves -> {
+            poly(6f to 9f, 6f to 15f); poly(10f to 5f, 10f to 19f); poly(14f to 8f, 14f to 16f); poly(18f to 10f, 18f to 14f)
+        }
+        HeatIcon.Drop -> {
+            val path = Path().apply {
+                moveTo(12 * u, 3.5f * u)
+                cubicTo(14.5f * u, 7f * u, 18.5f * u, 10.5f * u, 18.5f * u, 14.5f * u)
+                cubicTo(18.5f * u, 18.2f * u, 15.6f * u, 20.8f * u, 12 * u, 20.8f * u)
+                cubicTo(8.4f * u, 20.8f * u, 5.5f * u, 18.2f * u, 5.5f * u, 14.5f * u)
+                cubicTo(5.5f * u, 10.5f * u, 9.5f * u, 7f * u, 12 * u, 3.5f * u)
+                close()
+            }
+            drawPath(path, c, style = stroke)
+        }
+        HeatIcon.Sun -> {
+            drawCircle(c, 4f * u, p(12f, 12f), style = stroke)
+            for (i in 0 until 8) {
+                val a = Math.toRadians(i * 45.0)
+                val (cx, sx) = Math.cos(a).toFloat() to Math.sin(a).toFloat()
+                drawLine(c, p(12f + 7f * cx, 12f + 7f * sx), p(12f + 9.4f * cx, 12f + 9.4f * sx), strokeWidth = 1.9f * u, cap = StrokeCap.Round)
+            }
+        }
+        HeatIcon.Focus -> {
+            poly(4f to 9f, 4f to 4f, 9f to 4f); poly(15f to 4f, 20f to 4f, 20f to 9f)
+            poly(20f to 15f, 20f to 20f, 15f to 20f); poly(9f to 20f, 4f to 20f, 4f to 15f)
+            drawCircle(c, 2.6f * u, p(12f, 12f), style = Fill)
+        }
+        HeatIcon.Thermo -> {
+            poly(12f to 4f, 12f to 14.5f)
+            drawCircle(c, 3.4f * u, p(12f, 17.2f), style = stroke)
+            poly(15f to 6f, 17.5f to 6f); poly(15f to 9.5f, 17.5f to 9.5f)
+        }
+        HeatIcon.Grain -> {
+            for (ix in 0 until 3) for (iy in 0 until 3) drawCircle(c, 1.3f * u, p(7f + ix * 5f, 7f + iy * 5f), style = Fill)
+        }
+        HeatIcon.Shutter -> {
+            drawCircle(c, 8.6f * u, p(12f, 12f), style = stroke)
+            for (i in 0 until 6) {
+                val a = Math.toRadians(15.0 + i * 60.0)
+                val (cx, sx) = Math.cos(a).toFloat() to Math.sin(a).toFloat()
+                drawLine(c, p(12f + 2.6f * cx, 12f + 2.6f * sx), p(12f + 8.4f * cx, 12f + 8.4f * sx), strokeWidth = 1.6f * u, cap = StrokeCap.Round)
+            }
+        }
+        HeatIcon.Moon -> {
+            val outer = Path().apply { addOval(androidx.compose.ui.geometry.Rect(p(3.5f, 3.5f), Size(17f * u, 17f * u))) }
+            val bite = Path().apply { addOval(androidx.compose.ui.geometry.Rect(p(8.5f, 0.8f), Size(14f * u, 14f * u))) }
+            val crescent = Path.combine(androidx.compose.ui.graphics.PathOperation.Difference, outer, bite)
+            drawPath(crescent, c, style = stroke)
+        }
+        HeatIcon.Lock -> {
+            drawRoundRect(c, p(6f, 11f), Size(12f * u, 9.5f * u), androidx.compose.ui.geometry.CornerRadius(2.4f * u), style = stroke)
+            drawArc(c, 180f, 180f, false, p(8.5f, 4.3f), Size(7f * u, 7f * u), style = stroke)
         }
         HeatIcon.List -> { poly(8f to 6f, 20f to 6f); poly(8f to 12f, 20f to 12f); poly(8f to 18f, 20f to 18f); drawCircle(c, 1.2f * u, p(4f, 6f)); drawCircle(c, 1.2f * u, p(4f, 12f)); drawCircle(c, 1.2f * u, p(4f, 18f)) }
     }

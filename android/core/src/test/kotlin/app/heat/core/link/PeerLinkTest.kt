@@ -347,6 +347,34 @@ class PeerLinkTest {
     }
 
     @Test
+    fun a_redial_on_the_same_carrier_retires_the_stale_session_at_once() = runTest {
+        // The watch's socket died without a FIN and it dialed again: the camera now has two LAN sessions
+        // for one viewer. Media must go to the new one immediately, not to the zombie for the next few seconds.
+        val cam = CameraSide(this)
+        val first = Events()
+        val l1 = link(first)
+        val d1 = FakeDialer(CarrierKind.LAN, cam)
+        l1.setDialer(CarrierKind.LAN, d1)
+        l1.start()
+        settle()
+        assertEquals(1, cam.toViewer.sessions.live().size)
+        d1.reachable = false   // the old process is gone; only the new dial exists
+
+        val second = Events()
+        val l2 = link(second)
+        l2.setDialer(CarrierKind.LAN, FakeDialer(CarrierKind.LAN, cam))
+        l2.start()
+        settle()
+
+        val live = cam.toViewer.sessions.live()
+        assertEquals(1, live.size)
+        cam.toViewer.sendMedia(Stream.VIDEO, MediaFlags.KEYFRAME, 7L, ByteArray(10), 0, 10)
+        settle()
+        assertEquals(listOf(7L), second.media.toList())
+        assertTrue(first.media.isEmpty())
+    }
+
+    @Test
     fun a_throwing_listener_does_not_break_the_conversation() = runTest {
         val cam = CameraSide(this)
         val ev = object : PeerListener {

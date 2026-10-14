@@ -35,6 +35,23 @@ class StreamPlanTest {
     }
 
     @Test
+    fun bluetooth_is_never_offered_more_than_it_can_carry_even_while_the_encoder_is_on_the_wide_profile() {
+        val bt = StreamPlan.ceiling(wifi, Tier.MAX, StreamQuality.AUTO, 0, 0, CarrierKind.BLUETOOTH)
+        assertEquals(StreamPlan.BLUETOOTH.maxBps, bt)
+        assertEquals(wifi.maxBps, StreamPlan.ceiling(wifi, Tier.MAX, StreamQuality.AUTO, 0, 0, CarrierKind.LAN))
+
+        // The governor must be able to sit at a Bluetooth rate: its range is wider than the encoder profile's floor.
+        val g = BitrateGovernor(StreamPlan.GOVERNOR_RANGE)
+        assertTrue(g.sample(0, 0, bt, 1_000) <= bt)
+        assertTrue(g.bps <= StreamPlan.BLUETOOTH.maxBps)
+    }
+
+    @Test
+    fun a_slow_link_gets_fewer_keyframes() {
+        assertTrue(StreamPlan.BLUETOOTH.gopSec > StreamPlan.WIFI.gopSec)
+    }
+
+    @Test
     fun the_governor_backs_off_fast_when_the_link_drops_frames() {
         val g = BitrateGovernor(wifi)
         g.reset(4_000_000)

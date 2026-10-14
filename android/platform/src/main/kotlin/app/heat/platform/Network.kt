@@ -8,11 +8,14 @@ import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import app.heat.core.link.DeviceId
 import app.heat.core.link.DiscoveredPeer
+import app.heat.core.link.SocketBinder
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.net.DatagramSocket
+import java.net.Socket
 
 /** Calls [onChange] whenever Wi-Fi comes or goes or its address changes: the moment a LAN connection becomes newly possible. */
 class NetworkWatcher(context: Context, private val onChange: () -> Unit) {
@@ -36,6 +39,51 @@ class NetworkWatcher(context: Context, private val onChange: () -> Unit) {
         runCatching { cm.unregisterNetworkCallback(callback) }
         registered = false
     }
+}
+
+/**
+ * Asks Android for a Wi-Fi network and keeps it for as long as the app wants LAN access, and binds sockets to it.
+ *
+ * On a watch this is not optional. Wear OS picks its default network to save battery, and while the watch is
+ * paired to a phone that is usually the phone's Bluetooth proxy, where a camera's `192.168.x.x` address leads
+ * nowhere (and where Wi-Fi may be switched off entirely). Requesting a Wi-Fi network wakes the radio and joins
+ * a saved network; binding the sockets to it makes the dial and the discovery broadcasts actually leave by it.
+ * Holding the request keeps Wi-Fi on, so the app holds it only while someone is looking at a camera.
+ *
+ * On a phone the default network already is Wi-Fi when there is one; there this is simply not used.
+ */
+class WifiLink(context: Context, private val onChange: () -> Unit) : SocketBinder {
+    private val cm = context.applicationContext.getSystemService(ConnectivityManager::class.java)
+    @Volatile private var network: Network? = null
+    private var callback: ConnectivityManager.NetworkCallback? = null
+
+    /** True once a Wi-Fi network has been handed to us and not yet lost. */
+    val connected: Boolean get() = network != null
+
+    @Synchronized
+    fun acquire() {
+        if (callback != null) return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(n: Network) { network = n; onChange() }
+            override fun onLost(n: Network) { if (network == n) network = null; onChange() }
+            override fun onLinkPropertiesChanged(n: Network, lp: android.net.LinkProperties) { if (network == n) onChange() }
+        }
+        val request = NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build()
+        callback = cb
+        if (runCatching { cm.requestNetwork(request, cb) }.isFailure) callback = null
+    }
+
+    @Synchronized
+    fun release() {
+        callback?.let { runCatching { cm.unregisterNetworkCallback(it) } }
+        callback = null
+        network = null
+    }
+
+    // A failed bind propagates: a dial that cannot reach the network it asked for should fail now and retry,
+    // not quietly leave by the wrong one and time out.
+    override fun bind(socket: Socket) { network?.bindSocket(socket) }
+    override fun bind(socket: DatagramSocket) { network?.bindSocket(socket) }
 }
 
 /**

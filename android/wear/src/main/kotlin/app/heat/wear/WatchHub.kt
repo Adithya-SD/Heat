@@ -3,11 +3,16 @@ package app.heat.wear
 import android.content.Context
 import android.util.Log
 import app.heat.core.host.CameraClient
+import app.heat.core.host.VideoSink
 import app.heat.core.link.Beacon
 import app.heat.core.link.CarrierKind
 import app.heat.core.link.DeviceId
+import app.heat.core.link.GroupKey
+import app.heat.core.link.MediaFlags
 import app.heat.core.link.RetryPolicy
 import app.heat.core.link.TcpDialer
+import app.heat.core.model.HapticProfile
+import app.heat.core.model.Msg
 import app.heat.core.util.Clock
 import app.heat.platform.DataLayerDialer
 import app.heat.platform.DataLayerHooks
@@ -15,12 +20,14 @@ import app.heat.platform.DataLayerNames
 import app.heat.platform.GroupSync
 import app.heat.platform.KnownCameras
 import app.heat.platform.MulticastLockHolder
-import app.heat.platform.NetworkWatcher
 import app.heat.platform.Pairing
 import app.heat.platform.Vault
+import app.heat.platform.WifiLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,13 +39,15 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * The watch's connection to every camera it knows.
  *
- * One [CameraClient] per camera, each bound to exactly that camera. Every
- * client dials over every carrier it can (Bluetooth if it is the paired phone,
- * Wi-Fi as soon as an address is known) and the link layer picks the best and
- * keeps the other warm. The watch never needs the phone's help to find a
- * camera: it listens for beacons itself and remembers what it has seen.
+ * One [CameraClient] per camera, each bound to exactly that camera. Every client dials over every carrier it
+ * can (Bluetooth if it is the paired phone, Wi-Fi as soon as an address is known) and the link layer picks the
+ * best and keeps the other warm. The watch never needs the phone's help to find a camera: it listens for
+ * beacons itself and remembers what it has seen.
+ *
+ * Built to have a picture before anyone asks for one: the hub starts with the process, each camera has its own
+ * decoder that collects video as soon as the link is up, and the screen merely attaches a surface to it.
  */
-class WatchHub(private val context: Context) {
+class WatchHub(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val appContext = context.applicationContext
     private val clock = Clock.SYSTEM
@@ -47,14 +56,24 @@ class WatchHub(private val context: Context) {
     val deviceId: DeviceId = vault.deviceId()
     private val known = KnownCameras(appContext)
     private val multicast = MulticastLockHolder(appContext)
-    private lateinit var beacon: Beacon
-    private lateinit var network: NetworkWatcher
     private val selectionFile = File(File(appContext.filesDir, "heat").apply { mkdirs() }, "selected.txt")
+
+    // Network events arrive in bursts (a link-properties update per route change); one pass per burst is plenty.
+    private val networkEvents = Channel<Unit>(Channel.CONFLATED)
+    private val wifi = WifiLink(appContext) { networkEvents.trySend(Unit) }
+
+    private val beaconLock = Any()
+    private var beacon: Beacon? = null
+    private var beaconJob: Job? = null
+    private var beaconOnWifi: Boolean? = null
+    private var wifiReleaseJob: Job? = null
 
     private val _pairing = MutableStateFlow<Pairing?>(vault.pairing())
     val pairing: StateFlow<Pairing?> = _pairing.asStateFlow()
 
     private val clients = ConcurrentHashMap<DeviceId, CameraClient>()
+    private val decoders = ConcurrentHashMap<DeviceId, PreviewDecoder>()
+    private val watching = ConcurrentHashMap<DeviceId, Boolean>()
     private val _all = MutableStateFlow<List<CameraClient>>(emptyList())
 
     /** Every camera we know, in the order first seen. */
@@ -68,36 +87,75 @@ class WatchHub(private val context: Context) {
     private val haptics = WatchHaptics(appContext)
 
     /** The most recent alert from any camera, for a banner. Alerts also buzz the wrist from here, screen on or off. */
-    data class AlertEvent(val camera: DeviceId, val alert: app.heat.core.model.Msg.Alert)
+    data class AlertEvent(val camera: DeviceId, val alert: Msg.Alert)
     private val _lastAlert = MutableStateFlow<AlertEvent?>(null)
     val lastAlert: StateFlow<AlertEvent?> = _lastAlert.asStateFlow()
 
     private val bluetoothPolicy = RetryPolicy(dialTimeoutMs = 8_000, maxMs = 8_000)
 
+    @Volatile private var foreground = false
+
+    /** Whether the Wi-Fi network we asked for is currently ours; for the diagnostics page. */
+    val onWifi: Boolean get() = wifi.connected
+
     fun start() {
         DataLayerHooks.onPairing = { key, hub, name -> adopt(key, hub, name) }
         multicast.acquire()
-        beacon = Beacon(deviceId, pairing.value?.key ?: app.heat.core.link.GroupKey.generate(), scope, clock)
-
-        // Wi-Fi coming or going is the moment a LAN connection becomes newly possible.
-        network = NetworkWatcher(appContext) { onNetworkChange() }
-        network.start()
-
+        scope.launch {
+            for (e in networkEvents) {
+                delay(250)                          // let a burst settle, then react once
+                onNetworkChange()
+            }
+        }
         pairing.value?.let { bringUp(it) }
         if (pairing.value == null) fetchPairingLoop()
     }
 
     fun stop() {
-        runCatching { network.stop() }
-        if (::beacon.isInitialized) runCatching { beacon.stop() }
+        wifi.release()
+        synchronized(beaconLock) { beacon?.stop(); beacon = null; beaconJob?.cancel() }
         multicast.release()
         clients.values.forEach { it.stop() }
+        decoders.values.forEach { it.release() }
+        decoders.clear()
         DataLayerHooks.onPairing = null
     }
 
     fun select(id: DeviceId) {
         _selected.value = id
         runCatching { selectionFile.writeText(id.hex) }
+        applyInterest()
+    }
+
+    /** The decoder collecting this camera's video. The screen attaches its surface to it. */
+    fun decoder(client: CameraClient): PreviewDecoder = decoders.getValue(client.cameraId)
+
+    /**
+     * Someone is (or is no longer) looking at the watch. In front: ask the selected camera for video, hold a
+     * Wi-Fi network so the picture can take the fast road, and find cameras now. Out of sight: stop the video
+     * (the camera stops encoding for us) and, after a grace period, let Wi-Fi go so the watch can sleep.
+     */
+    fun setForeground(visible: Boolean) {
+        if (foreground == visible) return
+        foreground = visible
+        if (visible) {
+            wifiReleaseJob?.cancel()
+            wifi.acquire()
+            onNetworkChange()
+        } else {
+            wifiReleaseJob?.cancel()
+            wifiReleaseJob = scope.launch {
+                delay(WIFI_GRACE_MS)
+                wifi.release()
+                networkEvents.trySend(Unit)
+            }
+        }
+        applyInterest()
+    }
+
+    /** The app came to the foreground: find cameras right now. */
+    fun refresh() {
+        onNetworkChange()
     }
 
     // ── pairing ──────────────────────────────────────────────────────
@@ -112,47 +170,92 @@ class WatchHub(private val context: Context) {
     }
 
     private fun adopt(keyText: String, hub: DeviceId?, name: String?) {
-        val key = app.heat.core.link.GroupKey.parse(keyText) ?: return
-        val current = _pairing.value
-        if (current != null && current.key == key && current.hub == hub) return
-        vault.setPairing(key, hub, name)
-        val p = Pairing(key, hub, name)
-        _pairing.value = p
-        clients.values.forEach { it.stop() }
-        clients.clear()
-        _all.value = emptyList()
+        val key = GroupKey.parse(keyText) ?: return
+        val p = synchronized(clientsLock) {
+            val current = _pairing.value
+            if (current != null && current.key == key && current.hub == hub) return
+            vault.setPairing(key, hub, name)
+            val next = Pairing(key, hub, name)
+            _pairing.value = next
+            clients.values.forEach { it.stop() }
+            clients.clear()
+            decoders.values.forEach { it.release() }
+            decoders.clear()
+            watching.clear()
+            lanEndpoints.clear()
+            _all.value = emptyList()
+            next
+        }
         bringUp(p)
     }
 
     private fun bringUp(p: Pairing) {
-        if (::beacon.isInitialized) beacon.stop()
-        beacon = Beacon(deviceId, p.key, scope, clock)
-        beacon.start()
-
         // The paired phone first: reachable over Bluetooth with no network at all.
         p.hub?.let { hubId -> ensureClient(hubId, p.hubName ?: "Phone", p).apply { addBluetooth(this) } }
         // Anything seen before, dialed immediately: a stale address costs one failed dial, a beacon corrects it.
         for (k in known.load()) ensureClient(k.id, k.name, p).also { setLan(it, k.host, k.tcpPort) }
-
-        scope.launch {
-            beacon.peers.collect { peers ->
-                for ((id, peer) in peers) {
-                    val c = ensureClient(id, peer.name, p)
-                    setLan(c, peer.host, peer.tcpPort)
-                    known.remember(peer)
-                }
-            }
-        }
-        beacon.probe()
+        restartBeacon(p)
     }
 
-    private fun ensureClient(id: DeviceId, name: String, p: Pairing): CameraClient =
-        clients.getOrPut(id) {
+    // ── discovery ────────────────────────────────────────────────────
+
+    /**
+     * (Re)starts discovery. A beacon's socket is bound to the network it was created on, so it must be rebuilt
+     * whenever Wi-Fi is gained or lost; one created before Wi-Fi was ours would shout into the wrong network.
+     */
+    private fun restartBeacon(pairingNow: Pairing? = null) {
+        val p = pairingNow ?: _pairing.value ?: return
+        synchronized(beaconLock) {
+            beaconJob?.cancel()
+            beacon?.stop()
+            val b = Beacon(deviceId, p.key, scope, clock, binder = wifi)
+            beacon = b
+            beaconOnWifi = wifi.connected
+            b.start()
+            beaconJob = scope.launch {
+                var last: Map<DeviceId, String> = emptyMap()
+                b.peers.collect { peers ->
+                    for ((id, peer) in peers) {
+                        val c = ensureClient(id, peer.name, p)
+                        setLan(c, peer.host, peer.tcpPort)
+                        // Only write to flash when something actually moved, not once per beacon.
+                        val ep = "${peer.host}:${peer.tcpPort}/${peer.name}"
+                        if (last[id] != ep) known.remember(peer)
+                    }
+                    last = peers.mapValues { (_, peer) -> "${peer.host}:${peer.tcpPort}/${peer.name}" }
+                }
+            }
+            b.probe()
+        }
+    }
+
+    private fun onNetworkChange() {
+        val p = _pairing.value
+        if (p != null && beaconOnWifi != wifi.connected) restartBeacon(p) else synchronized(beaconLock) { beacon?.probe() }
+        clients.values.forEach { it.link.nudge() }
+    }
+
+    // ── cameras ──────────────────────────────────────────────────────
+
+    private fun ensureClient(id: DeviceId, name: String, p: Pairing): CameraClient {
+        val c = synchronized(clientsLock) { clients[id] ?: createClient(id, name, p).also { clients[id] = it } }
+        applyInterest()
+        return c
+    }
+
+    private val clientsLock = Any()
+
+    private fun createClient(id: DeviceId, name: String, p: Pairing): CameraClient =
             CameraClient(id, "Watch", deviceId, p.key, scope, clock).also { c ->
+                val decoder = PreviewDecoder { c.needKeyframe() }
+                decoders[id] = decoder
+                c.videoSink = VideoSink { flags, pts, data, off, len ->
+                    decoder.submit(flags and MediaFlags.KEYFRAME != 0, pts, data, off, len)
+                }
                 c.start()
                 scope.launch {
                     c.alerts.collect { a ->
-                        val profile = c.config.value?.alerts?.watchHaptics ?: app.heat.core.model.HapticProfile.NORMAL
+                        val profile = c.config.value?.alerts?.watchHaptics ?: HapticProfile.NORMAL
                         haptics.alert(profile, a)
                         _lastAlert.value = AlertEvent(c.cameraId, a)
                     }
@@ -161,7 +264,15 @@ class WatchHub(private val context: Context) {
                 if (_selected.value == null) _selected.value = id
                 Log.i(TAG, "camera known: $name ${id.short}")
             }
+
+    /** Video only from the camera on screen, only while the screen is showing. Everything else costs nothing. */
+    private fun applyInterest() {
+        val sel = selected
+        for (c in clients.values) {
+            val want = foreground && c === sel
+            if (watching.put(c.cameraId, want) != want) c.watch(video = want)
         }
+    }
 
     private fun addBluetooth(c: CameraClient) {
         if (!c.link.hasDialer(CarrierKind.BLUETOOTH)) {
@@ -174,21 +285,12 @@ class WatchHub(private val context: Context) {
     private fun setLan(c: CameraClient, host: String, port: Int) {
         val ep = "$host:$port"
         if (lanEndpoints.put(c.cameraId, ep) == ep) return
-        c.link.setDialer(CarrierKind.LAN, TcpDialer(host, port))
+        c.link.setDialer(CarrierKind.LAN, TcpDialer(host, port, binder = wifi))
         c.link.nudge()
-    }
-
-    private fun onNetworkChange() {
-        if (::beacon.isInitialized) beacon.probe()
-        clients.values.forEach { it.link.nudge() }
-    }
-
-    /** The app came to the foreground: find cameras right now. */
-    fun refresh() {
-        onNetworkChange()
     }
 
     private companion object {
         const val TAG = "HeatWatchHub"
+        const val WIFI_GRACE_MS = 20_000L
     }
 }

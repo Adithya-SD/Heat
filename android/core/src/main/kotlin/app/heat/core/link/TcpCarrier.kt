@@ -53,13 +53,15 @@ class TcpDuplex(private val socket: Socket) : ByteDuplex {
 class TcpDialer(
     val host: String,
     val port: Int,
-    private val connectTimeoutMs: Int = 2_500
+    private val connectTimeoutMs: Int = 2_500,
+    private val binder: SocketBinder = SocketBinder.None
 ) : Dialer {
     override val kind = CarrierKind.LAN
 
     override suspend fun dial(): ByteDuplex = withContext(Dispatchers.IO) {
         val socket = Socket()
         try {
+            binder.bind(socket)
             socket.connect(InetSocketAddress(host, port), connectTimeoutMs)
         } catch (e: IOException) {
             runCatching { socket.close() }

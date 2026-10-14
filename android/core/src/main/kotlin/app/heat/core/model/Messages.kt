@@ -96,6 +96,10 @@ sealed interface Msg {
         /** True when the zoom is past the lens's own reach, i.e. a crop of the sensor. */
         val digitalZoom: Boolean = false,
         val hasTorch: Boolean = false,
+        /** The lens can be focused by hand. */
+        val manualFocus: Boolean = false,
+        /** ISO and shutter can be fixed by hand. */
+        val manualExposure: Boolean = false,
         val recording: Boolean = false,
         val storageUsedMb: Int = 0,
         val events: Long = 0,

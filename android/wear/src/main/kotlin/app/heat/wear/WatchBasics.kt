@@ -12,15 +12,37 @@ import app.heat.core.model.Msg
 class HeatWearApp : Application() {
     /** One hub for the life of the process, so alerts still buzz the wrist when the screen is off. */
     val hub: WatchHub by lazy { WatchHub(this).also { it.start() } }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Start dialing before the first screen exists. The activity's own first access just waits for this
+        // (the lazy is synchronized), so there is exactly one hub, and the connection is under way while the
+        // window is still being built.
+        Thread({ hub }, "heat-warmup").start()
+    }
 }
 
 /** Wrist feedback for the bezel (ticks) and for alerts (patterns by profile and escalation). */
 class WatchHaptics(context: Context) : Haptics {
     private val vibrator: Vibrator? = context.getSystemService(Vibrator::class.java)
 
+    private var lastStepMs = 0L
+
     override fun tick() = play(VibrationEffect.EFFECT_TICK)
-    override fun stepped() = play(VibrationEffect.EFFECT_TICK)
+
+    /**
+     * Throttled: a fast spin is dozens of detents a second, and a motor firing for each one is neither felt
+     * as separate nor kind to the battery. Only the buzz is spaced out; every detent still counts.
+     */
+    override fun stepped() {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastStepMs < 45) return
+        lastStepMs = now
+        play(VibrationEffect.EFFECT_TICK)
+    }
+
     override fun action() = play(VibrationEffect.EFFECT_CLICK)
+    override fun limit() = play(VibrationEffect.EFFECT_HEAVY_CLICK)
 
     private fun play(effect: Int) {
         runCatching { vibrator?.vibrate(VibrationEffect.createPredefined(effect)) }

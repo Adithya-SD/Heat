@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- A watch must ask for a Wi-Fi network by name; its default one is the phone's Bluetooth proxy. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <!-- Camera discovery needs a multicast lock: without it Wi-Fi power save drops inbound
          broadcasts as soon as the screen goes off, which works on the bench and never in the house. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

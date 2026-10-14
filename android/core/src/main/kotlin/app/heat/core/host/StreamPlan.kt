@@ -5,7 +5,11 @@ import app.heat.core.model.StreamQuality
 import app.heat.core.model.Tier
 
 /** One encoder configuration. Resolution changes need an encoder restart; bitrate changes do not. */
-data class StreamProfile(val width: Int, val height: Int, val fps: Int, val minBps: Int, val maxBps: Int)
+data class StreamProfile(
+    val width: Int, val height: Int, val fps: Int, val minBps: Int, val maxBps: Int,
+    /** Seconds between keyframes. A keyframe is the biggest thing on the link, so a slow link wants fewer of them. */
+    val gopSec: Int = 1
+)
 
 /**
  * How much video to send, from the link, what the viewer asked for, what the
@@ -18,8 +22,22 @@ data class StreamProfile(val width: Int, val height: Int, val fps: Int, val minB
  * big one starved of bits.
  */
 object StreamPlan {
-    val WIFI = StreamProfile(640, 480, 30, minBps = 400_000, maxBps = 6_000_000)
-    val BLUETOOTH = StreamProfile(320, 240, 15, minBps = 80_000, maxBps = 420_000)
+    val WIFI = StreamProfile(640, 480, 30, minBps = 400_000, maxBps = 6_000_000, gopSec = 1)
+    val BLUETOOTH = StreamProfile(320, 240, 15, minBps = 60_000, maxBps = 360_000, gopSec = 2)
+
+    /** The range the bitrate governor may roam, wide enough for either profile: carriers cap it from above. */
+    val GOVERNOR_RANGE = StreamProfile(640, 480, 30, minBps = 60_000, maxBps = 6_000_000)
+
+    /**
+     * The most a carrier can carry, whatever the encoder is currently set to. Needed because the encoder keeps
+     * running on the wide profile while a watch is still connecting over Bluetooth (a restart for a link that
+     * will probably be Wi-Fi a second later would make the picture flicker), and offering Bluetooth megabits
+     * only turns every frame into a drop.
+     */
+    fun carrierCap(link: CarrierKind?): Int = when (link) {
+        CarrierKind.BLUETOOTH -> BLUETOOTH.maxBps
+        else -> Int.MAX_VALUE
+    }
 
     fun profileFor(link: CarrierKind?): StreamProfile = when (link) {
         CarrierKind.BLUETOOTH -> BLUETOOTH
@@ -28,7 +46,8 @@ object StreamPlan {
 
     /** The most bits the current conditions justify. The governor adapts underneath this. */
     fun ceiling(
-        profile: StreamProfile, tier: Tier, quality: StreamQuality, muddiness: Int, thermal: Int
+        profile: StreamProfile, tier: Tier, quality: StreamQuality, muddiness: Int, thermal: Int,
+        carrier: CarrierKind? = null
     ): Int {
         val tierShare = when (tier) {
             Tier.LOW -> 0.10
@@ -50,7 +69,7 @@ object StreamPlan {
             else -> 0.4
         }
         val raw = profile.maxBps * minOf(tierShare, qualityShare) * soft * heat
-        return raw.toInt().coerceIn(profile.minBps, profile.maxBps)
+        return minOf(raw.toInt().coerceIn(profile.minBps, profile.maxBps), carrierCap(carrier))
     }
 }
 

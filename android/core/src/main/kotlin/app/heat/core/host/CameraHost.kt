@@ -110,6 +110,7 @@ class CameraHost(
     private var lastGlobalKeyMs = 0L
     private var configDirty = false
     private var flushJob: Job? = null
+    private var keyTrailing: Job? = null
 
     /** Errors thrown by application callbacks; never fatal. Collected for diagnostics. */
     @Volatile var lastError: Throwable? = null
@@ -141,7 +142,15 @@ class CameraHost(
 
     /** The platform pushes everything it knows (battery, thermal, stream info, lenses...). Armed state is the host's own. */
     fun updateStatus(transform: (Msg.Status) -> Msg.Status) {
-        synchronized(lock) { base = transform(base) }
+        synchronized(lock) {
+            val before = base
+            base = transform(base)
+            // The picture's geometry (or an error) changed: tell viewers now. Waiting for the next 1 Hz tick
+            // leaves a decoder configured for the old size, which looks exactly like a frozen picture.
+            if (!sameGeometry(before.stream, base.stream) || before.error != base.error || before.hasTorch != base.hasTorch) {
+                broadcastStatusLocked(reliable = true)
+            }
+        }
     }
 
     /** Local UI on the camera itself edits settings here, exactly like a viewer would. */
@@ -196,6 +205,7 @@ class CameraHost(
     fun close() {
         ticker.cancel()
         flushJob?.cancel()
+        keyTrailing?.cancel()
         armingJob?.cancel()
         registry.closeAll()
     }
@@ -345,10 +355,28 @@ class CameraHost(
     /** Rate-limited: a burst of drops from several viewers must produce one keyframe, not a keyframe storm. */
     private fun requestKey(force: Boolean) {
         val now = clock.nowMs()
-        if (!force && now - lastGlobalKeyMs < KEYFRAME_MIN_GAP_MS) return
+        val since = now - lastGlobalKeyMs
+        if (!force && since < KEYFRAME_MIN_GAP_MS) {
+            // Rate limited, not refused: a viewer that asked inside the quiet window still has no picture.
+            // Owe it one keyframe at the end of the window (any number of askers share that one).
+            if (keyTrailing?.isActive != true) {
+                keyTrailing = scope.launch {
+                    delay(KEYFRAME_MIN_GAP_MS - since)
+                    synchronized(lock) {
+                        lastGlobalKeyMs = clock.nowMs()
+                        backend.requestKeyframe()
+                    }
+                }
+            }
+            return
+        }
         lastGlobalKeyMs = now
         backend.requestKeyframe()
     }
+
+    private fun sameGeometry(a: app.heat.core.model.StreamInfo?, b: app.heat.core.model.StreamInfo?): Boolean =
+        a == b || (a != null && b != null && a.width == b.width && a.height == b.height && a.rotation == b.rotation &&
+            a.fps == b.fps && a.codec == b.codec)
 
     private fun onError(e: Throwable) {
         lastError = e
