@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -11,8 +10,8 @@ val sharedKeystore = file(System.getProperty("user.home") + "/.android/debug.key
 
 android {
     namespace = "app.heat.phone"
-    compileSdk = 36
-    compileSdkMinor = 1
+    compileSdk = 37
+    compileSdkMinor = 0
 
     defaultConfig {
         // Not the earlier app's id, so old and new can be installed side by side and compared on one phone.
@@ -53,9 +52,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 
     packaging {
         resources {
@@ -79,4 +75,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.service)
+}
+
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
