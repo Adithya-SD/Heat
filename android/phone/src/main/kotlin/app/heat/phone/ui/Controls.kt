@@ -105,7 +105,7 @@ fun GlassPillButton(
         state, modifier.height(height).tappable(onClick, src),
         shape = GlassShape.Capsule, tint = lift, refract = refract, bezel = (height.value * 0.32f).dp
     ) {
-        Column(Modifier.padding(horizontal = 26.dp).height(height), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 26.dp).height(height), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             HeatText(label, size = 17, weight = FontWeight.SemiBold, color = accent ?: Heat.Text, align = TextAlign.Center)
             if (subLabel != null) HeatText(subLabel, size = 12, color = Heat.TextDim, align = TextAlign.Center)
         }

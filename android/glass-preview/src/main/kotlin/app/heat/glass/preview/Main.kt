@@ -24,14 +24,14 @@ import kotlin.math.sin
 private const val MAX = 8
 
 /** One glass shape, in the same terms the Android side uses. */
-private class Lens(
+internal class Lens(
     val l: Float, val t: Float, val r: Float, val b: Float,
     val radius: Float = 0f,
     val ring: Boolean = false, val ringThickness: Float = 0f,
     val bezel: Float = 26f, val strength: Float = 1f, val tint: Float = 0.045f, val scrim: Float = 0.10f
 )
 
-private class Look(
+internal class Look(
     val ior: Float = 1.5f, val thick: Float = 34f, val dispersion: Float = 0.12f,
     val spec: Float = 1.0f, val blur: Float = 1.0f, val shadow: Float = 1f, val saturation: Float = 1.18f,
     val light: Pair<Float, Float> = (-0.55f to -0.83f)
@@ -73,10 +73,11 @@ fun main(args: Array<String>) {
     val close = render(effect, backdrop, w, h, lenses, Look(), quality = 2)
     zoom(close, 30, 30, 240, 160, 4).let { File(outDir, "zoom_corner.png").writeBytes(it) }
     zoom(close, 560, 330, 340, 270, 3).let { File(outDir, "zoom_ring.png").writeBytes(it) }
+    Mockups.render(effect, outDir)
     println("wrote PNGs to $outDir")
 }
 
-private fun render(
+internal fun render(
     effect: RuntimeEffect, backdrop: Image, w: Int, h: Int, lenses: List<Lens>, look: Look, quality: Int
 ): Image {
     val builder = RuntimeShaderBuilder(effect)
