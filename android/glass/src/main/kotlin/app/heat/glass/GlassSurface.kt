@@ -49,8 +49,8 @@ fun GlassSurface(
     shape: GlassShape = GlassShape.Rounded(24f),
     bezel: Dp = 14.dp,
     strength: Float = 1f,
-    tint: Float = 0.045f,
-    scrim: Float = 0.10f,
+    tint: Float = 0.025f,
+    scrim: Float = 0.07f,
     refract: Boolean = true,
     content: @Composable BoxScope.() -> Unit = {}
 ) {

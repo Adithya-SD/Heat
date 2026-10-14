@@ -43,6 +43,11 @@ import app.heat.core.model.HapticProfile
 import app.heat.core.model.NightMode
 import app.heat.core.model.ProtoJson
 import app.heat.core.model.StreamQuality
+import app.heat.core.settings.Capabilities
+import app.heat.core.settings.Section
+import app.heat.core.settings.SettingDef
+import app.heat.core.settings.SettingKind
+import app.heat.core.settings.SettingsCatalog
 import app.heat.glass.GlassState
 import app.heat.glass.Heat
 import app.heat.glass.HeatIcon
@@ -56,7 +61,9 @@ private enum class Screen { Camera, Cameras, Settings }
 
 @Composable
 fun WatchRoot(hub: WatchHub) {
-    val glass = remember { GlassState() }
+    // The watch caps the glass at refraction without colour fringing or frost: visually the same on a screen this small,
+    // and about a seventh of the per-pixel work, which is what lets it run for hours.
+    val glass = remember { GlassState(maxQuality = 1) }
     val pairing by hub.pairing.collectAsState()
     val cameras by hub.cameras.collectAsState()
     val selectedId by hub.selectedId.collectAsState()
@@ -142,36 +149,19 @@ private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, hu
         } else {
             fun edit(f: (CameraConfig) -> CameraConfig) = client.edit(f)
 
-            item { SectionLabel("Detection") }
-            item { Stepper("Sensitivity", c.detect.sensitivity, 1..100, 5, { "$it%" }) { v -> edit { it.copy(detect = it.detect.copy(sensitivity = v)) } } }
-            item { Stepper("Alert gap", c.detect.cooldownSec, 0..600, 5, { "${it}s" }) { v -> edit { it.copy(detect = it.detect.copy(cooldownSec = v)) } } }
-            item { Stepper("Confirm frames", c.detect.persistence, 1..10, 1, { "$it" }) { v -> edit { it.copy(detect = it.detect.copy(persistence = v)) } } }
-            item { Stepper("Arm delay", c.detect.armDelaySec, 0..60, 5, { "${it}s" }) { v -> edit { it.copy(detect = it.detect.copy(armDelaySec = v)) } } }
-            item { Toggle("Ignore light changes", c.detect.rejectLightChanges) { v -> edit { it.copy(detect = it.detect.copy(rejectLightChanges = v)) } } }
-            item { Toggle("Tamper alert", c.detect.tamper) { v -> edit { it.copy(detect = it.detect.copy(tamper = v)) } } }
-
-            item { SectionLabel("Camera") }
-            item { Cycle("Night", c.camera.night, NightMode.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(camera = it.camera.copy(night = v)) } } }
-            item { Toggle("Lock exposure", c.camera.lockExposure) { v -> edit { it.copy(camera = it.camera.copy(lockExposure = v)) } } }
-            item { Cycle("Flicker", c.camera.antiFlicker, AntiFlicker.entries, { when (it) { AntiFlicker.AUTO -> "Auto"; AntiFlicker.HZ50 -> "50 Hz"; AntiFlicker.HZ60 -> "60 Hz"; AntiFlicker.OFF -> "Off" } }) { v -> edit { it.copy(camera = it.camera.copy(antiFlicker = v)) } } }
-            item { Cycle("Lens", c.camera.facing, app.heat.core.model.Facing.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(camera = it.camera.copy(facing = v)) } } }
-            item { Cycle("White balance", c.camera.whiteBalance, WhiteBalance.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(camera = it.camera.copy(whiteBalance = v)) } } }
-            item { Cycle("Focus", c.camera.focus, listOf(-1, 0, 25, 50, 75, 100), { when (it) { -1 -> "Auto"; 0 -> "Far"; 100 -> "Near"; else -> "$it%" } }) { v -> edit { it.copy(camera = it.camera.copy(focus = v)) } } }
-            item { Cycle("ISO", c.camera.iso, CameraSteps.ISO, { if (it == 0) "Auto" else "$it" }) { v -> edit { it.copy(camera = it.camera.copy(iso = v)) } } }
-            item { Cycle("Shutter", c.camera.shutterDenom, CameraSteps.SHUTTER, { if (it == 0) "Auto" else "1/$it" }) { v -> edit { it.copy(camera = it.camera.copy(shutterDenom = v)) } } }
-            item { Toggle("Blend lenses", c.camera.blendLenses) { v -> edit { it.copy(camera = it.camera.copy(blendLenses = v)) } } }
-
-            item { SectionLabel("Video") }
-            item { Cycle("Quality", c.stream.quality, StreamQuality.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(stream = it.stream.copy(quality = v)) } } }
-            item { Toggle("Microphone", c.stream.allowAudio) { v -> edit { it.copy(stream = it.stream.copy(allowAudio = v)) } } }
-
-            item { SectionLabel("Alerts") }
-            item { Cycle("Wrist haptics", c.alerts.watchHaptics, HapticProfile.entries, { it.name.lowercase().replaceFirstChar(Char::uppercase) }) { v -> edit { it.copy(alerts = it.alerts.copy(watchHaptics = v)) } } }
-            item { Toggle("Phone sound", c.alerts.phoneSound) { v -> edit { it.copy(alerts = it.alerts.copy(phoneSound = v)) } } }
-
-            item { SectionLabel("Power") }
-            item { Toggle("Black screen when armed", c.power.blackoutWhileArmed) { v -> edit { it.copy(power = it.power.copy(blackoutWhileArmed = v)) } } }
-            item { Stepper("Stop below", c.power.lowBatteryStopPercent, 0..50, 5, { if (it == 0) "Never" else "$it%" }) { v -> edit { it.copy(power = it.power.copy(lowBatteryStopPercent = v)) } } }
+            // Drawn from the same catalog as the phone's settings page: one list, one set of words.
+            val caps = Capabilities(
+                hasTorch = status?.hasTorch ?: true,
+                manualFocus = status?.manualFocus ?: false,
+                manualExposure = status?.manualExposure ?: false
+            )
+            val grouped = SettingsCatalog.bySection(c, caps)
+            for (section in listOf(Section.CAMERA, Section.DETECTION, Section.VIDEO, Section.ALERTS, Section.POWER)) {
+                val defs = grouped[section].orEmpty()
+                if (defs.isEmpty()) continue
+                item(key = "section-${section.name}") { SectionLabel(section.title) }
+                for (d in defs) item(key = d.id) { CatalogRow(d, c, ::edit) }
+            }
 
             val others = cameras.filter { it !== client }
             if (others.isNotEmpty()) {
@@ -197,6 +187,18 @@ private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, hu
         item { Info("Bezel", "${app.heat.wear.Rotary.events} clicks") }
         status?.stream?.let { s -> item { Info("Stream", "${s.width}x${s.height} · ${s.bitrate / 1000} kbps") } }
         item { Spacer(Modifier.height(28.dp)) }
+    }
+}
+
+/** One catalog entry, with the control its kind calls for. Text and info entries are the phone's business. */
+@Composable
+private fun CatalogRow(d: SettingDef, c: CameraConfig, edit: ((CameraConfig) -> CameraConfig) -> Unit) {
+    when (val k = d.kind) {
+        is SettingKind.Toggle -> Toggle(d.title, k.read(c)) { on -> edit { k.write(it, on) } }
+        is SettingKind.Choice -> Cycle(d.title, k.read(c), k.labels.indices.toList(), { k.labels[it] }) { i -> edit { k.write(it, i) } }
+        is SettingKind.Slider -> Stepper(d.title, k.read(c), k.range, k.step, k.format) { v -> edit { k.write(it, v) } }
+        is SettingKind.Stepper -> Stepper(d.title, k.read(c), k.range, k.step, k.format) { v -> edit { k.write(it, v) } }
+        is SettingKind.Text, is SettingKind.Info -> Unit
     }
 }
 

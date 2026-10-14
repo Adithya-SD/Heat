@@ -1,6 +1,10 @@
 package app.heat.phone.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,41 +13,97 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import app.heat.core.model.AntiFlicker
-import app.heat.core.model.Facing
-import app.heat.core.model.HapticProfile
-import app.heat.core.model.NightMode
-import app.heat.core.model.StreamQuality
+import androidx.compose.ui.unit.sp
+import app.heat.core.model.CameraConfig
+import app.heat.core.settings.Capabilities
+import app.heat.core.settings.Section
+import app.heat.core.settings.SettingDef
+import app.heat.core.settings.SettingKind
+import app.heat.core.settings.SettingsCatalog
+import app.heat.core.settings.SettingsSearch
 import app.heat.glass.GlassHost
+import app.heat.glass.GlassShape
 import app.heat.glass.GlassState
+import app.heat.glass.GlassSurface
 import app.heat.glass.Heat
-import app.heat.glass.HeatText
 import app.heat.glass.HeatIcon
 import app.heat.glass.HeatIconView
+import app.heat.glass.HeatText
 import app.heat.phone.service.CameraHub
+import kotlinx.coroutines.launch
 
-/** Every setting the camera has, on one scrolling page. Edits go straight to the camera's own config, exactly as a viewer's would. */
+/**
+ * Every setting the camera has, in one place you can search.
+ *
+ * With nothing typed it is the settings in their sections, with chips along the top to jump to one. Type, and the
+ * list becomes the matching settings (whole, live, editable right there) with the matched part of each name picked
+ * out. It is drawn from [SettingsCatalog], the same list the watch uses, so a setting added there appears here and
+ * is findable without touching this file.
+ *
+ * Glass is used here because the page sits over a still backdrop: one refractive lens, the search bar, and flat
+ * glass for the rows.
+ */
 @Composable
 fun SettingsScreen(hub: CameraHub, glass: GlassState, onBack: () -> Unit) {
-    val c by hub.host.config.collectAsState()
+    val config by hub.host.config.collectAsState()
     val hubState by hub.state.collectAsState()
-    fun edit(f: (app.heat.core.model.CameraConfig) -> app.heat.core.model.CameraConfig) = hub.host.editLocally(f)
+    val caps = Capabilities(hubState.hasTorch, hubState.manualFocus, hubState.manualExposure, hubState.lensStrategy)
+    val edit: ((CameraConfig) -> CameraConfig) -> Unit = { hub.host.editLocally(it) }
+
+    var query by rememberSaveable { mutableStateOf("") }
+    val focus = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+    val list = rememberLazyListState()
+
+    // Back closes the search first, then the page.
+    BackHandler(enabled = query.isNotEmpty()) { query = ""; focus.clearFocus() }
+
+    val visible = remember(config, caps) { SettingsCatalog.visible(config, caps) }
+    val grouped = remember(visible) { visible.groupBy { it.section } }
+    val hits = remember(query, visible) { SettingsSearch.search(query, visible) }
+    val searching = query.isNotBlank()
+
+    val info = mapOf(
+        "pairing" to hubState.pairingFingerprint,
+        "wifi" to (hubState.lanAddress ?: "Not on Wi-Fi"),
+        "stream" to if (hubState.encoding) "${hubState.streamKbps} kbps · ${hubState.encoderLabel}" + (hubState.carrier?.let { " · ${it.label}" } ?: "") else "Off",
+        "camera" to hubState.cameraDiagnostics.ifBlank { "Camera not open yet" }
+    )
 
     GlassHost(
         glass, Modifier.fillMaxSize(),
@@ -51,106 +111,171 @@ fun SettingsScreen(hub: CameraHub, glass: GlassState, onBack: () -> Unit) {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF1B1018), Color(0xFF0A0A10), Color(0xFF14090A)))))
         }
     ) {
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                GlassIconButton(glass, HeatIcon.Back, onBack, size = 46.dp)
+                GlassIconButton(glass, HeatIcon.Back, { if (searching) { query = ""; focus.clearFocus() } else onBack() }, size = 46.dp, refract = false)
                 Spacer(Modifier.width(14.dp))
                 Column {
                     HeatText("Settings", size = 24, weight = FontWeight.Bold)
-                    HeatText(c.label, size = 13, color = Heat.TextFaint)
+                    HeatText(config.label, size = 13, color = Heat.TextFaint)
                 }
             }
 
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
-                SettingsGroup(glass, "Camera") {
-                    SegmentRow("Lens", listOf("Rear" to Facing.REAR, "Front" to Facing.FRONT), c.camera.facing, { v -> edit { it.copy(camera = it.camera.copy(facing = v)) } })
-                    RowDivider()
-                    SegmentRow(
-                        "Night handling", listOf("Auto" to NightMode.AUTO, "Day" to NightMode.DAY, "Night" to NightMode.NIGHT), c.camera.night,
-                        { v -> edit { it.copy(camera = it.camera.copy(night = v)) } },
-                        hint = "Auto switches by itself as the room darkens"
-                    )
-                    RowDivider()
-                    StepperRow("Exposure", c.camera.exposure, -10..10, { v -> edit { it.copy(camera = it.camera.copy(exposure = v)) } }, format = { if (it > 0) "+$it" else "$it" })
-                    RowDivider()
-                    ToggleRow("Flashlight", c.camera.torch, { v -> edit { it.copy(camera = it.camera.copy(torch = v)) } }, hint = if (hubState.hasTorch) null else "This camera has no flash")
-                    RowDivider()
-                    ToggleRow(
-                        "Lock exposure", c.camera.lockExposure, { v -> edit { it.copy(camera = it.camera.copy(lockExposure = v)) } },
-                        hint = "Stops auto-exposure steps being read as movement"
-                    )
-                    RowDivider()
-                    SegmentRow(
-                        "Anti-flicker", listOf("Auto" to AntiFlicker.AUTO, "50 Hz" to AntiFlicker.HZ50, "60 Hz" to AntiFlicker.HZ60, "Off" to AntiFlicker.OFF), c.camera.antiFlicker,
-                        { v -> edit { it.copy(camera = it.camera.copy(antiFlicker = v)) } }, hint = "Match your mains frequency if you see banding"
-                    )
-                }
+            SearchField(glass, query, { query = it }, onClear = { query = "" }, onSearch = { focus.clearFocus() })
+            Spacer(Modifier.height(10.dp))
 
-                SettingsGroup(glass, "Detection") {
-                    SliderRow("Sensitivity", c.detect.sensitivity, 1..100, { v -> edit { it.copy(detect = it.detect.copy(sensitivity = v)) } }, format = { "$it%" }, hint = "Higher notices smaller, fainter movement")
-                    RowDivider()
-                    StepperRow("Quiet time between alerts", c.detect.cooldownSec, 0..600, { v -> edit { it.copy(detect = it.detect.copy(cooldownSec = v)) } }, step = 5, format = { "${it}s" })
-                    RowDivider()
-                    StepperRow("Frames to confirm", c.detect.persistence, 1..10, { v -> edit { it.copy(detect = it.detect.copy(persistence = v)) } }, hint = "Higher means fewer false alarms, a little slower")
-                    RowDivider()
-                    ToggleRow("Ignore lighting changes", c.detect.rejectLightChanges, { v -> edit { it.copy(detect = it.detect.copy(rejectLightChanges = v)) } }, hint = "Headlights and light switches")
-                    RowDivider()
-                    StepperRow("Arm delay", c.detect.armDelaySec, 0..60, { v -> edit { it.copy(detect = it.detect.copy(armDelaySec = v)) } }, step = 5, format = { "${it}s" }, hint = "Time to leave the room")
-                }
-
-                SettingsGroup(glass, "Video to your watch") {
-                    SegmentRow(
-                        "Quality", listOf("Auto" to StreamQuality.AUTO, "Low" to StreamQuality.LOW, "Med" to StreamQuality.BALANCED, "High" to StreamQuality.HIGH, "Max" to StreamQuality.MAX),
-                        c.stream.quality, { v -> edit { it.copy(stream = it.stream.copy(quality = v)) } }, hint = "Auto follows the connection"
-                    )
-                    RowDivider()
-                    SliderRow("Muddiness", c.stream.muddiness, 0..100, { v -> edit { it.copy(stream = it.stream.copy(muddiness = v)) } }, step = 5, hint = "Softer picture, smoother motion on a weak link")
-                    RowDivider()
-                    ToggleRow("Allow microphone", c.stream.allowAudio, { v -> edit { it.copy(stream = it.stream.copy(allowAudio = v)) } })
-                }
-
-                SettingsGroup(glass, "Power") {
-                    ToggleRow("Black screen while armed", c.power.blackoutWhileArmed, { v -> edit { it.copy(power = it.power.copy(blackoutWhileArmed = v)) } }, hint = "Saves battery and heat")
-                    RowDivider()
-                    StepperRow("Stop below battery", c.power.lowBatteryStopPercent, 0..50, { v -> edit { it.copy(power = it.power.copy(lowBatteryStopPercent = v)) } }, step = 5, format = { if (it == 0) "Never" else "$it%" })
-                    RowDivider()
-                    StepperRow("Warn below battery", c.power.lowBatteryWarnPercent, 0..80, { v -> edit { it.copy(power = it.power.copy(lowBatteryWarnPercent = v)) } }, step = 5, format = { if (it == 0) "Never" else "$it%" })
-                }
-
-                SettingsGroup(glass, "Alerts") {
-                    ToggleRow("Sound on this phone", c.alerts.phoneSound, { v -> edit { it.copy(alerts = it.alerts.copy(phoneSound = v)) } })
-                    RowDivider()
-                    SegmentRow(
-                        "Watch haptics", listOf("Off" to HapticProfile.OFF, "Soft" to HapticProfile.SOFT, "Normal" to HapticProfile.NORMAL, "Strong" to HapticProfile.STRONG),
-                        c.alerts.watchHaptics, { v -> edit { it.copy(alerts = it.alerts.copy(watchHaptics = v)) } }
-                    )
-                    RowDivider()
-                    ToggleRow(
-                        "Quiet hours", c.alerts.quietFromMin != null,
-                        { on -> edit { it.copy(alerts = it.alerts.copy(quietFromMin = if (on) 22 * 60 else null, quietToMin = if (on) 7 * 60 else null)) } },
-                        hint = "Motion alerts are muted between the times below"
-                    )
-                    if (c.alerts.quietFromMin != null) {
-                        RowDivider()
-                        StepperRow("From", c.alerts.quietFromMin ?: 0, 0..1425, { v -> edit { it.copy(alerts = it.alerts.copy(quietFromMin = v)) } }, step = 30, format = ::clock)
-                        RowDivider()
-                        StepperRow("Until", c.alerts.quietToMin ?: 0, 0..1425, { v -> edit { it.copy(alerts = it.alerts.copy(quietToMin = v)) } }, step = 30, format = ::clock)
+            if (!searching) {
+                // Jump chips.
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val sections = Section.entries.filter { grouped[it]?.isNotEmpty() == true }
+                    sections.forEachIndexed { i, s ->
+                        Row(
+                            Modifier.height(36.dp).clip(CircleShape).background(Color(0x22FFFFFF)).tappable({ scope.launch { list.animateScrollToItem(i) } })
+                                .padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HeatIconView(sectionIcon(s), Heat.Ember1, 16.dp)
+                            Spacer(Modifier.width(7.dp))
+                            HeatText(s.title, size = 13, weight = FontWeight.Medium, color = Heat.TextDim, maxLines = 1)
+                        }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+            }
 
-                SettingsGroup(glass, "This camera") {
-                    InfoRow("Name", c.label)
-                    RowDivider()
-                    InfoRow("Pairing code", hubState.pairingFingerprint)
-                    RowDivider()
-                    InfoRow("Wi-Fi address", hubState.lanAddress ?: "Not on Wi-Fi")
-                    RowDivider()
-                    InfoRow("Stream", if (hubState.encoding) "${hubState.streamKbps} kbps" else "Off")
+            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 48.dp)) {
+                if (!searching) {
+                    val sections = Section.entries.filter { grouped[it]?.isNotEmpty() == true }
+                    sections.forEach { section ->
+                        item(key = section.name) {
+                            SectionCard(glass, section) {
+                                val defs = grouped[section].orEmpty()
+                                defs.forEachIndexed { i, d ->
+                                    if (i > 0) RowDivider()
+                                    SettingRow(d, config, info, edit, null)
+                                }
+                            }
+                        }
+                    }
+                } else if (hits.isEmpty()) {
+                    item {
+                        Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            HeatIconView(HeatIcon.Search, Heat.TextFaint, 34.dp)
+                            Spacer(Modifier.height(12.dp))
+                            HeatText("Nothing matches “${query.trim()}”", size = 17, weight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(6.dp))
+                            HeatText("Try a name or a word you would use for it: exposure, battery, sound, dark, wifi.", size = 14, color = Heat.TextDim, align = androidx.compose.ui.text.style.TextAlign.Center)
+                        }
+                    }
+                } else {
+                    item {
+                        HeatText(
+                            "${hits.size} ${if (hits.size == 1) "setting" else "settings"}", size = 12, weight = FontWeight.SemiBold,
+                            color = Heat.TextFaint, modifier = Modifier.padding(start = 24.dp, bottom = 6.dp)
+                        )
+                    }
+                    items(hits.size, key = { hits[it].def.id }) { i ->
+                        val hit = hits[i]
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp)) {
+                            Row(Modifier.padding(start = 10.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                HeatIconView(sectionIcon(hit.def.section), Heat.TextFaint, 12.dp)
+                                Spacer(Modifier.width(5.dp))
+                                HeatText(hit.def.section.title.uppercase(), size = 10, weight = FontWeight.SemiBold, color = Heat.TextFaint)
+                            }
+                            GlassSurface(glass, Modifier.fillMaxWidth(), shape = GlassShape.Rounded(22f), refract = false) {
+                                SettingRow(hit.def, config, info, edit, hit.titleMatch)
+                            }
+                        }
+                    }
                 }
-                Spacer(Modifier.height(24.dp))
             }
         }
     }
 }
 
-private fun clock(min: Int): String = "%02d:%02d".format(min / 60, min % 60)
+private fun sectionIcon(s: Section): HeatIcon = when (s) {
+    Section.CAMERA -> HeatIcon.Camera
+    Section.DETECTION -> HeatIcon.Aim
+    Section.VIDEO -> HeatIcon.Wifi
+    Section.ALERTS -> HeatIcon.Alert
+    Section.POWER -> HeatIcon.Bolt
+    Section.ABOUT -> HeatIcon.Gear
+}
+
+@Composable
+private fun SectionCard(glass: GlassState, section: Section, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(Modifier.padding(start = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            HeatIconView(sectionIcon(section), Heat.Ember1, 16.dp)
+            Spacer(Modifier.width(8.dp))
+            HeatText(section.title.uppercase(), size = 12, weight = FontWeight.SemiBold, color = Heat.TextFaint)
+            Spacer(Modifier.width(8.dp))
+            HeatText(section.blurb, size = 12, color = Color(0x55F5F5F7))
+        }
+        GlassSurface(glass, Modifier.fillMaxWidth(), shape = GlassShape.Rounded(22f), refract = false) { Column { content() } }
+    }
+}
+
+/** Draws one setting with the control its kind calls for. */
+@Composable
+private fun SettingRow(
+    d: SettingDef, c: CameraConfig, info: Map<String, String>,
+    edit: ((CameraConfig) -> CameraConfig) -> Unit, highlight: IntRange?
+) {
+    when (val k = d.kind) {
+        is SettingKind.Toggle -> ToggleRow(d.title, k.read(c), { on -> edit { k.write(it, on) } }, d.hint, highlight)
+        is SettingKind.Choice -> {
+            if (k.labels.size <= 4) {
+                SegmentRow(d.title, k.labels.mapIndexed { i, l -> l to i }, k.read(c), { i -> edit { k.write(it, i) } }, d.hint, highlight)
+            } else {
+                PillChoiceRow(d.title, k.labels, k.read(c), { i -> edit { k.write(it, i) } }, d.hint, highlight)
+            }
+        }
+        is SettingKind.Slider -> SliderRow(d.title, k.read(c), k.range, { v -> edit { k.write(it, v) } }, format = k.format, hint = d.hint, step = k.step, highlight = highlight)
+        is SettingKind.Stepper -> StepperRow(d.title, k.read(c), k.range, { v -> edit { k.write(it, v) } }, step = k.step, format = k.format, hint = d.hint, highlight = highlight)
+        is SettingKind.Text -> TextRow(d.title, k.read(c), { v -> edit { k.write(it, v) } }, d.hint, highlight)
+        is SettingKind.Info -> {
+            val value = info[k.key].orEmpty()
+            if (k.key == "camera") {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)) {
+                    SettingLabel(d.title, highlight)
+                    Spacer(Modifier.height(6.dp))
+                    HeatText(value, size = 12, color = Heat.TextDim)
+                }
+            } else InfoRow(d.title, value, highlight)
+        }
+    }
+}
+
+@Composable
+private fun SearchField(glass: GlassState, query: String, onQuery: (String) -> Unit, onClear: () -> Unit, onSearch: () -> Unit) {
+    GlassSurface(
+        glass, Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = GlassShape.Capsule, bezel = 14.dp
+    ) {
+        Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            HeatIconView(HeatIcon.Search, if (query.isEmpty()) Heat.TextFaint else Heat.Ember1, 20.dp)
+            Spacer(Modifier.width(12.dp))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (query.isEmpty()) HeatText("Search settings", size = 16, color = Heat.TextFaint)
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQuery,
+                    singleLine = true,
+                    textStyle = TextStyle(color = Heat.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium),
+                    cursorBrush = SolidColor(Heat.Ember1),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (query.isNotEmpty()) {
+                Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0x33FFFFFF)).tappable(onClear), contentAlignment = Alignment.Center) {
+                    HeatIconView(HeatIcon.Close, Heat.Text, 14.dp)
+                }
+            }
+        }
+    }
+}

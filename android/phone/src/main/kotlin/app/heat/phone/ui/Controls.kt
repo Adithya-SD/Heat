@@ -5,7 +5,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -124,15 +127,32 @@ fun SettingsGroup(state: GlassState, title: String, content: @Composable () -> U
     }
 }
 
+/** A setting's name, with the part a search matched picked out in ember. */
 @Composable
-private fun RowShell(label: String, hint: String?, trailing: @Composable () -> Unit) {
+fun SettingLabel(label: String, highlight: IntRange? = null, size: Int = 16) {
+    if (highlight == null || highlight.first < 0 || highlight.last >= label.length) {
+        HeatText(label, size = size)
+        return
+    }
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        append(label.substring(0, highlight.first))
+        pushStyle(androidx.compose.ui.text.SpanStyle(color = Heat.Ember1, fontWeight = FontWeight.Bold))
+        append(label.substring(highlight.first, highlight.last + 1))
+        pop()
+        append(label.substring(highlight.last + 1))
+    }
+    BasicText(text, style = TextStyle(color = Heat.Text, fontSize = size.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.1).sp))
+}
+
+@Composable
+private fun RowShell(label: String, hint: String?, highlight: IntRange? = null, trailing: @Composable () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            HeatText(label, size = 16)
+            SettingLabel(label, highlight)
             if (hint != null) HeatText(hint, size = 12, color = Heat.TextFaint)
         }
         trailing()
@@ -140,8 +160,8 @@ private fun RowShell(label: String, hint: String?, trailing: @Composable () -> U
 }
 
 @Composable
-fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, hint: String? = null) {
-    RowShell(label, hint) {
+fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, hint: String? = null, highlight: IntRange? = null) {
+    RowShell(label, hint, highlight) {
         val knob by animateFloatAsState(if (checked) 1f else 0f, tween(160), label = "knob")
         Box(
             Modifier.size(width = 52.dp, height = 32.dp).clip(CircleShape)
@@ -156,9 +176,9 @@ fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, hint
 }
 
 @Composable
-fun <T> SegmentRow(label: String, options: List<Pair<String, T>>, selected: T, onSelect: (T) -> Unit, hint: String? = null) {
+fun <T> SegmentRow(label: String, options: List<Pair<String, T>>, selected: T, onSelect: (T) -> Unit, hint: String? = null, highlight: IntRange? = null) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)) {
-        HeatText(label, size = 16)
+        SettingLabel(label, highlight)
         if (hint != null) HeatText(hint, size = 12, color = Heat.TextFaint)
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x22FFFFFF)).padding(3.dp)) {
@@ -180,11 +200,11 @@ fun <T> SegmentRow(label: String, options: List<Pair<String, T>>, selected: T, o
 @Composable
 fun SliderRow(
     label: String, value: Int, range: IntRange, onChange: (Int) -> Unit,
-    format: (Int) -> String = { it.toString() }, hint: String? = null, step: Int = 1
+    format: (Int) -> String = { it.toString() }, hint: String? = null, step: Int = 1, highlight: IntRange? = null
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            HeatText(label, size = 16)
+            SettingLabel(label, highlight)
             HeatText(format(value), size = 16, color = Heat.Orange, weight = FontWeight.SemiBold)
         }
         if (hint != null) HeatText(hint, size = 12, color = Heat.TextFaint)
@@ -230,9 +250,9 @@ fun GlassSlider(value: Int, range: IntRange, step: Int, onChange: (Int) -> Unit)
 @Composable
 fun StepperRow(
     label: String, value: Int, range: IntRange, onChange: (Int) -> Unit,
-    step: Int = 1, format: (Int) -> String = { it.toString() }, hint: String? = null
+    step: Int = 1, format: (Int) -> String = { it.toString() }, hint: String? = null, highlight: IntRange? = null
 ) {
-    RowShell(label, hint) {
+    RowShell(label, hint, highlight) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             StepButton(HeatIcon.Minus, enabled = value > range.first) { onChange((value - step).coerceAtLeast(range.first)) }
             HeatText(format(value), size = 16, weight = FontWeight.SemiBold, color = Heat.Orange, modifier = Modifier.width(72.dp), align = TextAlign.Center)
@@ -250,8 +270,53 @@ private fun StepButton(icon: HeatIcon, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun InfoRow(label: String, value: String) {
-    RowShell(label, null) { HeatText(value, size = 15, color = Heat.TextDim) }
+fun InfoRow(label: String, value: String, highlight: IntRange? = null) {
+    RowShell(label, null, highlight) { HeatText(value, size = 15, color = Heat.TextDim) }
+}
+
+/** A choice among more options than fit in a segmented control: a row of pills that scrolls. */
+@Composable
+fun PillChoiceRow(label: String, options: List<String>, selected: Int, onSelect: (Int) -> Unit, hint: String? = null, highlight: IntRange? = null) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Column(Modifier.padding(horizontal = 18.dp)) {
+            SettingLabel(label, highlight)
+            if (hint != null) HeatText(hint, size = 12, color = Heat.TextFaint)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEachIndexed { i, text ->
+                val on = i == selected
+                Box(
+                    Modifier.height(36.dp).clip(CircleShape)
+                        .background(if (on) Heat.Ember1.copy(alpha = 0.22f) else Color(0x22FFFFFF))
+                        .then(if (on) Modifier.border(1.5.dp, Heat.Ember1, CircleShape) else Modifier)
+                        .tappable({ onSelect(i) }).padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) { HeatText(text, size = 14, weight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = if (on) Heat.Ember1 else Heat.TextDim) }
+            }
+        }
+    }
+}
+
+/** An editable one-line text setting (the camera's name). */
+@Composable
+fun TextRow(label: String, value: String, onChange: (String) -> Unit, hint: String? = null, highlight: IntRange? = null, maxLength: Int = 24) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)) {
+        SettingLabel(label, highlight)
+        if (hint != null) HeatText(hint, size = 12, color = Heat.TextFaint)
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = { onChange(it.take(maxLength)) },
+            singleLine = true,
+            textStyle = TextStyle(color = Heat.Text, fontSize = 17.sp, fontWeight = FontWeight.Medium),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(Heat.Ember1),
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x22FFFFFF)).padding(horizontal = 14.dp, vertical = 11.dp)
+        )
+    }
 }
 
 @Composable
