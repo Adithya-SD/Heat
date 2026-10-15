@@ -23,8 +23,10 @@ data class StreamProfile(
  */
 object StreamPlan {
     // fps here is the most the profile may use; FrameRateGovernor chooses the rate actually asked of the camera.
-    val WIFI = StreamProfile(640, 480, 60, minBps = 200_000, maxBps = 6_000_000, gopSec = 1)
-    val BLUETOOTH = StreamProfile(320, 240, 30, minBps = 40_000, maxBps = 500_000, gopSec = 2)
+    // 30 fps is the ceiling until 60 is measured to be better on a real wrist: more frames only help if the link keeps up,
+    // and on a link that does not, every extra frame is queue, which is latency. Bluetooth is back at its measured-safe numbers.
+    val WIFI = StreamProfile(640, 480, 30, minBps = 200_000, maxBps = 6_000_000, gopSec = 1)
+    val BLUETOOTH = StreamProfile(320, 240, 15, minBps = 40_000, maxBps = 360_000, gopSec = 2)
 
     /** The range the bitrate governor may roam, wide enough for either profile: carriers cap it from above. */
     val GOVERNOR_RANGE = StreamProfile(640, 480, 60, minBps = 40_000, maxBps = 6_000_000)

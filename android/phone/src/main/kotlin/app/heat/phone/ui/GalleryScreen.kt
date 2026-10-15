@@ -160,7 +160,7 @@ private fun leftOf(hub: CameraHub, i: Gallery.Item): String {
     if (days <= 0) return "kept"
     val ms = i.atMs + days * 86_400_000L - System.currentTimeMillis()
     val h = (ms / 3_600_000L).coerceAtLeast(0)
-    return if (h >= 24) "${h / 24}d left" else "${h}h left"
+    return if (h > 24) "${(h + 23) / 24}d left" else "${h}h left"
 }
 
 /** One picture or clip, full screen: pinch to zoom, drag to look around, double-tap to jump in and out; clips play on a loop. */

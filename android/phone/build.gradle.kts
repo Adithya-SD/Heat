@@ -31,8 +31,8 @@ android {
         versionCode = 2
         versionName = "0.2.0"
 
-        // libwebrtc is big and per-architecture. Every phone that can run this camera app is 64-bit ARM or older 32-bit ARM.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // libwebrtc is big and per-architecture (12 MB for arm64, 7 MB more for 32-bit ARM). Every phone made in the last several years is 64-bit, so only arm64 ships: the APK is about 15 MB instead of 22.
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     signingConfigs {
