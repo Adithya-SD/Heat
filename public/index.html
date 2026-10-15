@@ -2055,7 +2055,7 @@ const LK = (() => {
     let code = HL.norm(ls('hl.host') || ''); if (code.length !== 12) { code = HL.newCode(); ls('hl.host', code); }
     const R = cur = {
       role: 'cam', code, invite: inviteOf(code), stopped: false, net: null, stream: null, enc: null, viewers: new Map(), timers: [], state: 'Starting camera…',
-      armed: false, armingIn: 0, armAt: 0, rev: 1, sens: 50, facing: 'environment', label: (myName() || 'Web camera').slice(0, 24), zone: { x: 0.34, y: 0.34, width: 0.32, height: 0.32 },
+      cool: 0, armed: false, armingIn: 0, armAt: 0, rev: 1, sens: 50, facing: 'environment', label: (myName() || 'Web camera').slice(0, 24), zone: { x: 0.34, y: 0.34, width: 0.32, height: 0.32 },
       zoom: 1, torch: false, frame: 0, lastKey: 0, wantKey: true, desc: null, annexb: true, sent: 0, hits: 0, prev: null, lastAlert: 0, alertId: Date.now(), flush: 0, battery: -1, charging: false
     };
     go('lkcam'); $e('lkcmt').firstElementChild.style.transform = 'scaleX(0)';
@@ -2159,7 +2159,7 @@ const LK = (() => {
     const m = Math.min(1, ratio / Math.max(need, 0.001) / 2);
     $e('lkcmt').firstElementChild.style.transform = 'scaleX(' + m + ')';
     if (ratio >= need) R.hits++; else R.hits = Math.max(0, R.hits - 1);
-    if (R.hits >= 2 && R.armed && R.armingIn <= 0 && Date.now() - R.lastAlert > 5000) { R.hits = 0; R.lastAlert = Date.now(); raise(R, ratio * 100); }
+    if (R.hits >= 2 && R.armed && R.armingIn <= 0 && Date.now() - R.lastAlert >= R.cool * 1000) { R.hits = 0; R.lastAlert = Date.now(); raise(R, ratio * 100); }
   }
 
   function raise(R, pct) {
@@ -2176,7 +2176,7 @@ const LK = (() => {
   }
 
   function cfgOf(R) {
-    return { label: R.label, camera: { facing: R.facing === 'user' ? 'FRONT' : 'REAR', zoom: R.zoom, torch: R.torch }, detect: { sensitivity: R.sens, cooldownSec: 5, persistence: 2, zone: R.zone } };
+    return { label: R.label, camera: { facing: R.facing === 'user' ? 'FRONT' : 'REAR', zoom: R.zoom, torch: R.torch }, detect: { sensitivity: R.sens, cooldownSec: R.cool, persistence: 2, zone: R.zone } };
   }
   function statusOf(R) {
     const s = { t: 'status', armed: R.armed, armingIn: Math.max(0, R.armingIn), battery: R.battery, charging: R.charging, streaming: true, hasTorch: !!R.hasTorch,
@@ -2218,6 +2218,7 @@ const LK = (() => {
       v.ack = m.seq | 0;
       const c = mergePatch(cfgOf(R), m.patch), det = c.detect || {}, cm = c.camera || {};
       R.sens = clamp(Math.round(+det.sensitivity || R.sens), 1, 100);
+      if (det.cooldownSec !== undefined) R.cool = clamp(Math.round(+det.cooldownSec) || 0, 0, 600);
       if (det.zone && typeof det.zone === 'object') {
         const w = clamp(+det.zone.width || R.zone.width, 0.06, 1), h = clamp(+det.zone.height || R.zone.height, 0.06, 1);
         R.zone = { x: clamp(+det.zone.x || 0, 0, 1 - w), y: clamp(+det.zone.y || 0, 0, 1 - h), width: w, height: h };

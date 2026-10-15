@@ -162,7 +162,7 @@ data class DetectSettings(
     /** 1..100. Higher notices smaller or fainter movement. */
     val sensitivity: Int = 50,
     /** Quiet time after an alert before the next one may fire. */
-    val cooldownSec: Int = 5,
+    val cooldownSec: Int = 0,
     /** Consecutive frames that must agree before it counts as motion. Higher = fewer false alarms, slower. */
     val persistence: Int = 2,
     val zone: Zone = Zone(),

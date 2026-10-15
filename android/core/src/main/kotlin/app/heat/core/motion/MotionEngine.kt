@@ -66,7 +66,7 @@ class MotionEngine {
 
     private var zone: Zone = Zone()
     private var sensitivity: Int = 50
-    private var cooldownMs: Long = 2_000L
+    private var cooldownMs: Long = 0L
     private var nightMode: NightMode = NightMode.AUTO
     private var persistenceFrames = 2
     private var rejectLightChanges = true

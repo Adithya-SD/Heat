@@ -119,7 +119,17 @@ class WatchHub(context: Context) {
         prefs.edit().putBoolean("followMotion", on).apply()
     }
 
-    private val follow = FollowMotion(FOLLOW_DWELL_MS)
+    private val follow = FollowMotion(prefs.getInt("followHoldSec", 0) * 1000L)
+    private val _hold = MutableStateFlow(prefs.getInt("followHoldSec", 0))
+
+    /** Seconds a camera stays on screen before another one's movement may replace it. 0 (the default): never wait. */
+    val followHoldSec: StateFlow<Int> = _hold.asStateFlow()
+
+    fun setFollowHoldSec(sec: Int) {
+        _hold.value = sec
+        follow.dwellMs = sec * 1000L
+        prefs.edit().putInt("followHoldSec", sec).apply()
+    }
 
     /**
      * A camera has seen movement. If the one on screen is a different one, it becomes the one on screen. Its video is
@@ -454,7 +464,6 @@ class WatchHub(context: Context) {
         const val TAG = "HeatWatchHub"
         const val WIFI_GRACE_MS = 20_000L
         const val HOLD_MS = 3_500L
-        const val FOLLOW_DWELL_MS = 2_500L
         const val ACTIVITY_MAX = 12
     }
 }

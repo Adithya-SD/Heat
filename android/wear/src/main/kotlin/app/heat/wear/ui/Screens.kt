@@ -141,6 +141,7 @@ private fun CamerasScreen(hub: WatchHub, cameras: List<CameraClient>, current: C
     ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item { HeatText("Cameras", size = 15, weight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp)) }
         item { Toggle("Follow motion", follow) { hub.setFollowMotion(it) } }
+        item { val hold by hub.followHoldSec.collectAsState(); Stepper("Hold a camera", hold, 0..30, 1, { if (it == 0) "off" else "${it}s" }) { hub.setFollowHoldSec(it) } }
         for (c in cameras) item(key = c.cameraId.hex) { CameraRow(c, selected = c === current) { hub.select(c.cameraId); back() } }
         item { Spacer(Modifier.height(24.dp)) }
     }

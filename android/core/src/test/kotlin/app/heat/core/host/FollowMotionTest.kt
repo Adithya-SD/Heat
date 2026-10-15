@@ -12,6 +12,13 @@ class FollowMotionTest {
     private val c = DeviceId.random()
 
     @Test
+    fun by_default_there_is_no_waiting_at_all() {
+        val f = FollowMotion()
+        assertTrue(f.shouldSwitch(true, a, b, AlertKind.MOTION, 10_000))
+        assertTrue(f.shouldSwitch(true, b, c, AlertKind.MOTION, 10_001))
+    }
+
+    @Test
     fun motion_on_another_camera_puts_it_on_screen() {
         assertTrue(FollowMotion().shouldSwitch(true, a, b, AlertKind.MOTION, 10_000))
     }

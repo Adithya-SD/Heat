@@ -10,7 +10,7 @@ import app.heat.core.model.AlertKind
  * the last [dwellMs]: two cameras alerting together, or one flickering at the edge of its threshold, must not make the
  * picture dance between them. A camera that is already on screen never "switches to itself".
  */
-class FollowMotion(private val dwellMs: Long = 2_500) {
+class FollowMotion(@Volatile var dwellMs: Long = 0) {
     private var lastSwitchMs = Long.MIN_VALUE / 2
 
     /** True if [camera]'s [kind] alert at [nowMs] should put it on screen; records the switch when it says yes. */
