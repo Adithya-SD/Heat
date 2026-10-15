@@ -359,8 +359,8 @@ html.tiny #lkV .sheet{top:var(--gut);bottom:var(--gut);left:var(--gut);right:var
 #lkre{margin-top:-4px}
 #lkapp{text-decoration:none;color:#fff}
 .lkj{flex-wrap:wrap}
-#lki,#lkhi{flex:1 0 100%;order:3;height:44px;min-width:0;border-radius:14px;background:rgba(255,255,255,.14);text-align:center;font:600 19px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;cursor:text}
-#lki::placeholder,#lkhi::placeholder{color:rgba(255,255,255,.34)}
+#lki{flex:1 0 100%;order:3;height:44px;min-width:0;border-radius:14px;background:rgba(255,255,255,.14);text-align:center;font:600 19px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;cursor:text}
+#lki::placeholder{color:rgba(255,255,255,.34)}
 
 /* ============ responsive ============
    watch  <= 260px wide (or <= 260px tall) · small phone <= 380 · phone · landscape phone · tablet · desktop · TV */
@@ -471,13 +471,10 @@ html.tiny #lkV .sheet{top:var(--gut);bottom:var(--gut);left:var(--gut);right:var
 <h1>Heat</h1>
 <p class="sub">Private video calls and motion cameras,<br>device to device. No accounts.</p>
 <div class="glass seg" id="seg" role="group" aria-label="What to start"><button data-m="call" aria-pressed="true">Video call</button><button data-m="link" aria-pressed="false">Motion camera</button></div>
-<p class="sub" id="lkask" hidden>Is this device the camera, or are you watching one?</p>
-<div class="glass seg" id="lkrole" role="group" aria-label="This device is" hidden><button data-r="host" aria-pressed="false">Host a camera</button><button data-r="recv" aria-pressed="false">Receive</button></div>
 <button class="glass card" id="bh"><span class="ico" data-i="video" aria-hidden="true"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
 <label class="glass card lockrow" id="lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
 <div class="glass card" id="jc"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
-<div class="glass card lkj" id="lkhcard" hidden><span class="ico v" data-i="share" aria-hidden="true"></span><span class="tx"><b>Host in a room</b><small>Enter a room’s code to add this camera to it, or leave empty for your own room</small></span><input id="lkhi" aria-label="Room code to host in" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH"></div>
-<div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a Heat room</b><small>Enter the code from the app</small></span><input id="lki" aria-label="Heat room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH"></div>
+<div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter a code, then choose: host or receive</small></span><input id="lki" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH"></div>
 <a class="glass card" id="lkapp" href="https://github.com/Adithya-SD/Heat/releases/latest/download/Heat-phone.apk" hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Android</b><small id="lkapps">The phone app: camera, hub and receiver. Allow “install unknown apps” for your browser once.</small></span></a>
 <a class="glass card" id="lkwapp" href="https://github.com/Adithya-SD/Heat/releases/latest/download/Heat-watch.apk" hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Wear OS</b><small>The watch app. Install it on your watch, then open Heat on the phone once.</small></span></a>
 <button class="glass chip" id="rc" hidden></button><button class="glass chip" id="lkre" hidden></button>
@@ -524,7 +521,7 @@ html.tiny #lkV .sheet{top:var(--gut);bottom:var(--gut);left:var(--gut);right:var
 <nav class="glass rail l" aria-label="Picture"><button class="b" id="lkhb" data-i="monitor" title="Hosts in this room" hidden></button><button class="b" id="lkzone" data-i="grid" title="Detection area: where movement counts"></button><button class="b" id="lkgal" data-i="gallery" title="Gallery"><span class="bd" id="lkgbd"></span></button><button class="b" id="lkblk" data-i="eyeoff" title="Black screen: let this screen rest"></button><button class="b" id="lkrst" data-i="reset" title="Reset the stream"></button></nav>
 <nav class="glass rail r" aria-label="Panels"><button class="b" id="lkact" data-i="list" title="Activity"><span class="bd" id="lkbd"></span></button><button class="b" id="lkset" data-i="gear" title="Settings"></button><button class="b" id="lkfs" data-i="max" title="Full screen"></button></nav>
 <aside class="glass sheet" id="lksheet" aria-label="Activity"><button class="sx" data-i="x" title="Close"></button><h3>Activity</h3><div id="lkev"></div></aside>
-<aside class="glass sheet" id="lkhs" aria-label="Hosts"><button class="sx" data-i="x" title="Close"></button><h3>Hosts</h3><label class="sr"><span><b>Lock view</b><small>Movement on another host still alerts you, but the picture stays here</small></span><input type="checkbox" class="sw" role="switch" id="lklock"></label><div id="lkhl"></div><h4 class="sh">People here</h4><div id="lkpl"></div></aside>
+<aside class="glass sheet" id="lkhs" aria-label="Hosts"><button class="sx" data-i="x" title="Close"></button><h3>Hosts</h3><label class="sr"><span><b>Lock view</b><small>Movement on another host still alerts you, but the picture stays here</small></span><input type="checkbox" class="sw" role="switch" id="lklock"></label><div id="lkhl"></div><button class="ghost" id="lkvsw" type="button" style="margin-top:8px;width:100%">Also host from this device</button><h4 class="sh">People here</h4><div id="lkpl"></div></aside>
 <aside class="glass sheet lkset" id="lkcs" aria-label="Settings"><button class="sx" data-i="x" title="Close"></button><h3>Settings</h3><input class="lksq" id="lkq" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off"><div id="lksl"></div></aside>
 <div class="glass dock lkdock" id="lkdock">
 <div class="lkg l"><button class="b" id="lkarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkarmt"></span></button><button class="lkchip" id="lksensb" title="Sensitivity" aria-haspopup="true"><svg class="i"><use href="#i-sens"/></svg><span><small>Sensitivity</small><b id="lksensv">–</b></span></button></div>
@@ -543,7 +540,7 @@ html.tiny #lkV .sheet{top:var(--gut);bottom:var(--gut);left:var(--gut);right:var
 <!-- Heat Link: this page is the camera, and the Heat app or other browsers watch it -->
 <section class="scr" id="lkC" aria-label="Heat Link camera">
 <div class="stage"><video id="lkv" muted playsinline autoplay></video></div>
-<div class="top"><div class="glass pill" role="status"><i class="dot" id="lkcd"></i><span id="lkcst">Starting…</span><small id="lkcn"></small></div><div class="tb"><button class="glass b" id="lkcinv" data-i="share" title="Invite"></button><button class="glass b" id="lkcflip" data-i="flip" title="Switch camera"></button><button class="glass b red" id="lkcx" data-i="x" title="Stop"></button></div></div>
+<div class="top"><div class="glass pill" role="status"><i class="dot" id="lkcd"></i><span id="lkcst">Starting…</span><small id="lkcn"></small></div><div class="tb"><button class="glass b" id="lkcsw" data-i="eye" title="Receive instead: watch this room"></button><button class="glass b" id="lkcinv" data-i="share" title="Invite"></button><button class="glass b" id="lkcflip" data-i="flip" title="Switch camera"></button><button class="glass b red" id="lkcx" data-i="x" title="Stop"></button></div></div>
 <div class="glass dock lkdock"><button class="b" id="lkcarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkcarmt"></span></button><div class="sl"><input id="lkcsens" type="range" min="1" max="100" step="1" title="Sensitivity" aria-label="Sensitivity"></div><div class="mt" id="lkcmt" title="Movement"><i></i></div></div>
 </section>
 
@@ -564,6 +561,7 @@ html.tiny #lkV .sheet{top:var(--gut);bottom:var(--gut);left:var(--gut);right:var
 
 <!-- invite sheet (QR, code, link) -->
 <div class="pop" id="pop" role="dialog" aria-modal="true" aria-labelledby="pt"><div class="glass c2"><b id="pt">Invite someone</b><img id="qr" alt="QR code for the invite link" hidden><div class="big" id="pc" title="Copy code"></div><div class="keyrow" id="pkr" hidden><small>Room key</small><div class="keyv" id="pk"></div></div><small class="hint" id="ph"></small><div class="row"><button class="ghost" id="pl">Copy invite link</button><button class="ghost" id="ps" hidden>Share…</button></div><button class="lk" id="lknew" hidden>New code…</button></div></div>
+<div class="pop" id="rolep" role="dialog" aria-modal="true" aria-labelledby="rolet"><div class="glass c2 form"><b id="rolet">Join this room as</b><small class="hint" id="rolec"></small><button class="ghost pri" id="role-recv" type="button">Receiver</button><small class="hint">Watch the cameras in the room and get their alerts.</small><button class="ghost" id="role-host" type="button">Host</button><small class="hint">Add this device&rsquo;s camera to the room.</small><button class="lk" id="role-x" type="button">Cancel</button></div></div>
 <div class="pop" id="dg" role="dialog" aria-modal="true" aria-label="Connection check"><div class="glass c2 dg"><b>Connection check</b><small class="hint" id="dgs"></small><div id="dgr"></div><div class="row"><button class="ghost" id="dga">Run again</button><button class="ghost" id="dgc">Copy report</button></div></div></div>
 <div class="pop" id="keyp" role="dialog" aria-modal="true" aria-labelledby="keyt"><form class="glass c2 form" id="keyf" autocomplete="off"><svg class="i big-i"><use href="#i-lock"/></svg><b id="keyt">This room is locked</b><small class="hint" id="keyh">Enter the room key from the host (12 characters).</small><input id="keyi" aria-label="Room key" autocapitalize="characters" spellcheck="false" maxlength="14" placeholder="XXXX-XXXX-XXXX"><div class="row"><button class="ghost" type="button" id="keyx">Cancel</button><button class="ghost pri" type="submit">Join</button></div></form></div>
 <div class="pop" id="setp" role="dialog" aria-modal="true" aria-labelledby="setT"><form class="glass c2 form" id="setf" autocomplete="off"><b id="setT">Settings</b>
@@ -801,7 +799,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-16.6'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-16.7'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -822,16 +820,23 @@ document.addEventListener('pointermove',e=>{const g=e.target.closest?.('.glass')
 
 function toast(t,img,ms=3500){const e=$('#tt'),i=$('img',e);$('span',e).textContent=t;if(img){i.src=img;i.style.display='block'}else{i.removeAttribute('src');i.style.display='none'}e.classList.add('s');clearTimeout(tto);tto=setTimeout(()=>e.classList.remove('s'),ms)}
 
+/* a code was entered or opened: ask whether this device receives from the room or hosts in it */
+let roleCode='';
+function askRole(code){
+ const c=HL.norm(code);if(!(c.length===8||c.length===12))return toast('That code is not complete');
+ roleCode=c;$('#rolec').textContent='Room '+HL.fmt(c);$('#rolep').classList.add('s');setTimeout(()=>$('#role-recv').focus(),60)}
+$('#role-recv').onclick=()=>{$('#rolep').classList.remove('s');LK.view(roleCode)};
+$('#role-host').onclick=()=>{$('#rolep').classList.remove('s');LK.host(roleCode)};
+$('#role-x').onclick=()=>$('#rolep').classList.remove('s');
+$('#rolep').addEventListener('click',e=>{if(e.target===$('#rolep'))$('#rolep').classList.remove('s')});
+
 /* home: choose what to start (video call is the default) */
 const KINDS={call:['Start a video call','Create a room, then share the code'],watch:['Start a motion camera','This device watches for movement'],link:['Start a motion camera','This device watches for movement; the Heat app, the watch and other browsers can view it']};
 let pick=['watch','link'].includes(ls('km'))?'link':'call';   /* the old PeerJS motion camera became a Heat room, so 'watch' now means 'link' */
 function applyPick(){$$('#seg button').forEach(b=>{b.classList.toggle('on',b.dataset.m===pick);b.setAttribute('aria-pressed',String(b.dataset.m===pick))});$('#bht').textContent=KINDS[pick][0];$('#bhs').textContent=KINDS[pick][1];
- const lk=pick==='link',role=lk?(ls('hl.role')||''):'';
- $('#jc').hidden=lk;$('#lockrow').hidden=lk;$('#lkrole').hidden=!lk;$('#lkask').hidden=!(lk&&!role);
- $('#bh').hidden=lk&&role!=='host';$('#lkhcard').hidden=!(lk&&role==='host');$('#lkjoin').hidden=!(lk&&role==='recv');$('#lkre').style.display=lk&&role==='host'?'none':'';
- $$('#lkrole button').forEach(b=>{b.classList.toggle('on',b.dataset.r===role);b.setAttribute('aria-pressed',String(b.dataset.r===role))});
+ const lk=pick==='link';
+ $('#jc').hidden=lk;$('#lockrow').hidden=lk;$('#bh').hidden=false;$('#lkjoin').hidden=!lk;$('#lkre').style.display=lk?'':'none';
  $('#lkapp').hidden=!lk;$('#lkwapp').hidden=!lk;$('#rc').style.display=lk?'none':''}
-$('#lkrole').onclick=e=>{const b=e.target.closest('button');if(b){ls('hl.role',b.dataset.r);applyPick()}};
 $$('#seg button').forEach(b=>b.onclick=()=>{pick=b.dataset.m;ls('km',pick);applyPick()});
 
 /* stage fitting + ROI */
@@ -1090,7 +1095,7 @@ function hostPeer(){
   else if(p.disconnected&&!p.destroyed)setTimeout(()=>{if(p.disconnected&&!p.destroyed)p.reconnect()},2000)});
  p.on('close',()=>{if(mode==='host'&&!p.dead)setTimeout(hostPeer,1500)})}
 async function hostStart(){
- if(pick==='link')return LK.host($('#lkhi').value);
+ if(pick==='link')return LK.host();
  if(!window.Peer)return toast('Connection library didn’t load — check your internet');
  const id=++sid,isCall=pick==='call';
  if(lockPick&&!E.media)return toast('The end-to-end lock needs a newer browser (Chrome, Edge, Safari 15.4+ or Firefox 117+). Turn the lock off to continue.',undefined,7000);
@@ -1191,7 +1196,7 @@ function viewPeer(){
   if(e.type==='peer-unavailable'){
    lastErr='unavail';const old=conn;conn=null;try{old&&old.close()}catch{}
    /* typed into the video-call box but no call room has that code: it is a Heat room (same 8 symbols), so open it as one */
-   if(!liveOn&&heatFb&&heatFb===code){const hc=heatFb;heatFb='';stop();LK.view(hc);return}
+   if(!liveOn&&heatFb&&heatFb===code){const hc=heatFb;heatFb='';stop();askRole(hc);return}
    if(!liveOn)stat('Host not found — waiting for it…',0);sched(2000)}
   else{
    lastErr='net';stat(['network','server-error','socket-error','socket-closed'].includes(e.type)?'Can’t reach the server — retrying…':'Reconnecting…',0);
@@ -1317,9 +1322,8 @@ on('#dgo',openDiag);$$('.dgb').forEach(b=>b.onclick=openDiag);on('#dga',runDiag)
 $('#dg').onclick=e=>{if(e.target.id==='dg'){$('#dg').classList.remove('s');dgRun++}};
 $('#bid').textContent='build '+BUILD;
 $('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();heatFb=v;viewStart(v)}};
-$('#lkhi').oninput=e=>{e.target.value=HL.fmt(HL.norm(e.target.value))};
-$('#lki').oninput=e=>{const v=HL.norm(e.target.value);e.target.value=HL.fmt(v);if(v.length===8){e.target.blur();e.target.value='';LK.view(v)}};
-$('#lki').addEventListener('paste',e=>{const c=linkCodeIn((e.clipboardData||window.clipboardData).getData('text')||'');if(c){e.preventDefault();$('#lki').value='';LK.view(c)}});
+$('#lki').oninput=e=>{const v=HL.norm(e.target.value);e.target.value=HL.fmt(v);if(v.length===8){e.target.blur();e.target.value='';askRole(v)}};
+$('#lki').addEventListener('paste',e=>{const c=linkCodeIn((e.clipboardData||window.clipboardData).getData('text')||'');if(c){e.preventDefault();$('#lki').value='';askRole(c)}});
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
 roiInit($('#hroi'),$('#hostS .stage'));drawRoi();ui();ui2();applyPick();refreshChip();list();
 
@@ -1392,7 +1396,7 @@ addEventListener('keydown',e=>{
 /* a Heat Link invite: https://…/#link=CODE, heat://link/CODE, or the bare code (8 symbols; older codes 12) */
 const linkCodeIn=t=>{t=String(t||'').trim();const m=/(?:link=|heat:\/\/link\/)([A-Za-z2-9-]{8,16})/i.exec(t),c=HL.norm(m?m[1]:/^[A-Za-z2-9 -]{12,16}$/.test(t)?t:'');return c.length===8||c.length===12?c:''};
 $('#ci').addEventListener('paste',e=>{
- const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
+ const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)?linkCodeIn(lt):'';if(lc){e.preventDefault();askRole(lc);return}
  const t=lt.trim(),m=/join=([A-Z2-9]{8})/i.exec(t),km=/[#&]k=([A-Z2-9]{12})/i.exec(t);
  const c=m?m[1].toUpperCase():/^[A-Za-z0-9 -]{8,12}$/.test(t)?norm(t):'';
  if(c.length===8){e.preventDefault();$('#ci').value=fmt(c);$('#ci').blur();heatFb=c;viewStart(c,km?km[1].toUpperCase():'')}});
@@ -2853,6 +2857,8 @@ const LK = (() => {
     btn.dataset.armed = '1'; btn.classList.add('arm'); btn.textContent = 'Remove?';
     btn._t = setTimeout(() => { btn.dataset.armed = ''; btn.classList.remove('arm'); btn.textContent = '\u2715'; }, 3000);
   }
+  sel('lkvsw').onclick = () => { if (ROOM) host(ROOM.code); };                 /* receiver -> host, same room */
+  sel('lkcsw').onclick = () => { const R = cur; if (R && R.role === 'cam') view(R.code); };   /* host -> receiver, same room */
   sel('lkhl').onclick = e => {
     const rm = e.target.closest('[data-rm]');
     if (rm) { const R = ROOM && ROOM.members.get(+rm.dataset.rm); if (R) twoTap(rm, () => { if (R.sess) R.sess.sendControl(enc({ t: 'kick', id: '' })); toast('Removed ' + nameOf(R)); }); return; }
@@ -3229,7 +3235,7 @@ loadIce();
 {const sm=/[?&]start=(call|watch)/.exec(location.search);if(sm){pick=sm[1];applyPick();try{history.replaceState(null,'',location.pathname+location.hash)}catch{}}}   /* manifest shortcuts: preselect, never auto-start the camera */
 {const h=location.hash,hm=/(?:^|[#&])join=([A-Z2-9]{8})/.exec(h),hk=/[#&]k=([A-Z2-9]{12})/.exec(h),lm=/(?:^|[#&])link=([A-Za-z2-9-]{8,16})/.exec(h);
  LK.refreshRejoin();
- if(lm&&(HL.norm(lm[1]).length===8||HL.norm(lm[1]).length===12)){try{history.replaceState(null,'',location.pathname+location.search)}catch{}LK.view(lm[1])}
+ if(lm&&(HL.norm(lm[1]).length===8||HL.norm(lm[1]).length===12)){try{history.replaceState(null,'',location.pathname+location.search)}catch{}askRole(lm[1])}
  else if(hm){try{history.replaceState(null,'',location.pathname+location.search)}catch{}viewStart(hm[1],hk?hk[1]:'')}}
 </script>
 </body></html>

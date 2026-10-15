@@ -1,6 +1,6 @@
 /* Heat service worker: makes the app installable and lets the page itself load offline (calls still need a network).
    Network first, so a new deploy is picked up on the next load; the cache is only the fallback. Bump V with BUILD. */
-const V = 'heat-2026-10-16.6';
+const V = 'heat-2026-10-16.7';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'vendor/peerjs.min.js', 'vendor/qrcode.js', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));

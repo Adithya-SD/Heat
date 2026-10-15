@@ -292,6 +292,10 @@ private fun PeoplePanel(viewer: RoomViewer, hub: app.heat.phone.service.CameraHu
                     TwoTapRemove { hub.relay.removeHost(v); if (here) onLeave() }
                 }
             }
+            Box(
+                Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), Heat.MatteHi).tappable({ hub.rooms.hostIn(viewer.code); onLeave() }).padding(vertical = 13.dp),
+                contentAlignment = Alignment.Center
+            ) { HeatText("Also host from this phone", size = 14, weight = FontWeight.SemiBold) }
             Spacer(Modifier.height(6.dp))
             HeatText("PEOPLE HERE", size = 11, weight = FontWeight.SemiBold, color = Heat.TextFaint)
             for (m in roster) {

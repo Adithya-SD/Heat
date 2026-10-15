@@ -120,13 +120,21 @@ private fun PhoneRoot(invite: androidx.compose.runtime.MutableState<String?>) {
     // Removed from the room being watched: this app closes, with its task.
     val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
     LaunchedEffect(viewer) { viewer?.client?.kicked?.collect { activity?.finishAndRemoveTask() } }
+    var asking by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(invite.value, hub) {
         val code = invite.value
         if (code != null && hub != null) {
             invite.value = null
-            hub?.rooms?.remember(code)
-            join(code)
+            asking = code
         }
+    }
+    asking?.let { code ->
+        app.heat.phone.ui.RolePrompt(
+            code,
+            onReceive = { asking = null; hub?.rooms?.remember(code); join(code) },
+            onHost = { asking = null; hub?.rooms?.hostIn(code); screen = "rooms" },
+            onCancel = { asking = null }
+        )
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {

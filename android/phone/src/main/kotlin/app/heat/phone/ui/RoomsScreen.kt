@@ -117,6 +117,8 @@ fun RoomsScreen(hub: CameraHub, onBack: () -> Unit, onJoin: (String) -> Unit) {
                     var confirm by remember { mutableStateOf(false) }
                     LaunchedEffect(confirm) { if (confirm) { delay(4_000); confirm = false } }
                     HeatText("This code stays the same, even after the app restarts, until you change it. Hand it out once.", size = 12, color = Heat.TextFaint, modifier = Modifier.padding(bottom = 10.dp))
+                    ActionChip(HeatIcon.Eye, "Watch this room instead", Modifier.fillMaxWidth()) { rooms.close(); rooms.remember(hosting.code); onJoin(hosting.code) }
+                    Spacer(Modifier.height(10.dp))
                     ActionChip(
                         HeatIcon.Flip,
                         if (confirm) "Tap again: the old code stops working" else "New code…",
@@ -129,7 +131,11 @@ fun RoomsScreen(hub: CameraHub, onBack: () -> Unit, onJoin: (String) -> Unit) {
             }
 
             // ── join a room ──
-            JoinCard(recent, onJoin = { rooms.remember(it); onJoin(it) }, onHost = { rooms.hostIn(it) }, onForget = { rooms.forget(it) })
+            var asking by remember { mutableStateOf<String?>(null) }
+            JoinCard(recent, onJoin = { asking = it }, onForget = { rooms.forget(it) })
+            asking?.let { code ->
+                RolePrompt(code, onReceive = { asking = null; rooms.remember(code); onJoin(code) }, onHost = { asking = null; rooms.hostIn(code) }, onCancel = { asking = null })
+            }
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -207,7 +213,7 @@ private fun ActionChip(icon: HeatIcon, label: String, modifier: Modifier = Modif
 }
 
 @Composable
-private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onHost: (String) -> Unit, onForget: (String) -> Unit) {
+private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onForget: (String) -> Unit) {
     val ctx = LocalContext.current
     var field by remember { mutableStateOf(TextFieldValue("")) }
     val complete = RoomCode.isComplete(field.text)
@@ -221,7 +227,7 @@ private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onHost: (St
             Spacer(Modifier.width(10.dp))
             Column {
                 HeatText("Join a room", size = 18, weight = FontWeight.SemiBold)
-                HeatText("Enter a room code, then choose: receive its cameras, or add this phone's camera to it.", size = 13, color = Heat.TextDim)
+                HeatText("Enter a room code. You will be asked whether to host or receive.", size = 13, color = Heat.TextDim)
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -243,21 +249,14 @@ private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onHost: (St
             RoomCode.parseInvite(clip)?.let { set(it) }
         }
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(
-                Modifier.weight(1f).matte(RoundedCornerShape(16.dp), if (complete) Heat.Ember0 else Heat.MatteHi)
-                    .tappable({ if (complete) onJoin(RoomCode.normalize(field.text)) }).padding(vertical = 13.dp),
-                contentAlignment = Alignment.Center
-            ) { HeatText("Receive", size = 15, weight = FontWeight.SemiBold, color = if (complete) Color.White else Heat.TextFaint) }
-            Box(
-                Modifier.weight(1f).matte(RoundedCornerShape(16.dp), Heat.MatteHi)
-                    .tappable({ if (complete) onHost(RoomCode.normalize(field.text)) }).padding(vertical = 13.dp),
-                contentAlignment = Alignment.Center
-            ) { HeatText("Host here", size = 15, weight = FontWeight.SemiBold, color = if (complete) Heat.Text else Heat.TextFaint) }
-        }
+        Box(
+            Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), if (complete) Heat.Ember0 else Heat.MatteHi)
+                .tappable({ if (complete) onJoin(RoomCode.normalize(field.text)) }).padding(vertical = 13.dp),
+            contentAlignment = Alignment.Center
+        ) { HeatText("Join", size = 15, weight = FontWeight.SemiBold, color = if (complete) Color.White else Heat.TextFaint) }
         if (recent.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            HeatText("RECEIVING FROM", size = 11, weight = FontWeight.SemiBold, color = Heat.TextFaint)
+            HeatText("RECENT ROOMS", size = 11, weight = FontWeight.SemiBold, color = Heat.TextFaint)
             Spacer(Modifier.height(6.dp))
             for (code in recent) {
                 Row(
@@ -285,4 +284,30 @@ private fun share(ctx: Context, code: String) {
         putExtra(Intent.EXTRA_TEXT, "Watch my Heat camera: $link\nOr enter the code ${RoomCode.format(code)} in the Heat app.")
     }
     ctx.startActivity(Intent.createChooser(send, "Share this camera").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
+
+/** A room code was entered or opened: is this phone going to receive from the room, or host in it? Asked every time; either can be changed later. */
+@Composable
+fun RolePrompt(code: String, onReceive: () -> Unit, onHost: () -> Unit, onCancel: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onCancel) {
+        Column(Modifier.fillMaxWidth().matte(RoundedCornerShape(26.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            HeatText("Join as", size = 20, weight = FontWeight.Bold)
+            HeatText("Room ${RoomCode.format(code)}", size = 14, color = Heat.TextDim)
+            Spacer(Modifier.height(4.dp))
+            Box(Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), Heat.Ember0).tappable(onReceive).padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    HeatText("Receiver", size = 16, weight = FontWeight.SemiBold, color = Color.White)
+                    HeatText("Watch its cameras, get their alerts", size = 12, color = Color(0xCCFFFFFF))
+                }
+            }
+            Box(Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), Heat.MatteHi).tappable(onHost).padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    HeatText("Host", size = 16, weight = FontWeight.SemiBold)
+                    HeatText("Add this phone\'s camera to the room", size = 12, color = Heat.TextDim)
+                }
+            }
+            Box(Modifier.fillMaxWidth().tappable(onCancel).padding(vertical = 10.dp), contentAlignment = Alignment.Center) { HeatText("Cancel", size = 14, color = Heat.TextDim) }
+        }
+    }
 }
