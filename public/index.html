@@ -328,6 +328,13 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 .gc .kd{position:absolute;left:8px;top:8px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;background:rgba(0,0,0,.55)}
 .gc .ft2{position:absolute;left:0;right:0;bottom:0;padding:20px 10px 8px;background:linear-gradient(transparent,rgba(0,0,0,.72));font-size:12px;display:flex;justify-content:space-between;gap:6px;color:#fff;text-align:left}
 .glv{display:flex;flex-direction:column;gap:12px;min-height:0;align-items:center}.glv[hidden]{display:none}.gm{max-height:60vh;max-width:100%;border-radius:18px;background:#000}.gm[hidden]{display:none}.glv .row{justify-content:center}
+.lkzb{position:absolute;border:2px dashed rgba(255,159,10,.95);border-radius:6px;pointer-events:none;z-index:2;touch-action:none}
+.lkzb em{position:absolute;left:6px;top:4px;font-style:normal;font-size:11px;font-weight:700;color:#ffb347;text-shadow:0 1px 3px #000;display:none;white-space:nowrap}
+.lkzb i{position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid #ff9f0a;display:none;touch-action:none;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.lkzb i[data-h=nw]{left:0;top:0;transform:translate(-50%,-50%);cursor:nwse-resize}.lkzb i[data-h=ne]{right:0;top:0;transform:translate(50%,-50%);cursor:nesw-resize}
+.lkzb i[data-h=sw]{left:0;bottom:0;transform:translate(-50%,50%);cursor:nesw-resize}.lkzb i[data-h=se]{right:0;bottom:0;transform:translate(50%,50%);cursor:nwse-resize}
+.lkzb.edit{border-style:solid;pointer-events:auto;cursor:move;background:rgba(255,159,10,.14);box-shadow:0 0 0 9999px rgba(0,0,0,.38)}.lkzb.edit em,.lkzb.edit i{display:block}
+.lkzb[hidden]{display:none}
 #lkre{margin-top:-4px}
 #lkapp{text-decoration:none;color:#fff}
 .lkj{flex-wrap:wrap}
@@ -488,7 +495,8 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <section class="scr" id="lkV" aria-label="Heat Link viewer">
 <div class="stage"><canvas id="lkc" aria-label="Live picture"></canvas></div>
 <div class="top"><div class="glass pill" role="status"><i class="dot" id="lkd"></i><span id="lkst">Connecting…</span><small id="lkms"></small><small id="lkbat"></small></div><div class="tb"><button class="glass b" id="lkinv" data-i="share" title="Invite"></button><button class="glass b red" id="lkx" data-i="x" title="Leave"></button></div></div>
-<nav class="glass rail l" aria-label="Picture"><button class="b" id="lkgal" data-i="gallery" title="Gallery"><span class="bd" id="lkgbd"></span></button><button class="b" id="lkblk" data-i="eyeoff" title="Black screen: let this screen rest"></button><button class="b" id="lkrst" data-i="reset" title="Reset the stream"></button></nav>
+<div class="lkzb" id="lkzb" hidden><em>Detection area</em><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+<nav class="glass rail l" aria-label="Picture"><button class="b" id="lkzone" data-i="grid" title="Detection area: where movement counts"></button><button class="b" id="lkgal" data-i="gallery" title="Gallery"><span class="bd" id="lkgbd"></span></button><button class="b" id="lkblk" data-i="eyeoff" title="Black screen: let this screen rest"></button><button class="b" id="lkrst" data-i="reset" title="Reset the stream"></button></nav>
 <nav class="glass rail r" aria-label="Panels"><button class="b" id="lkact" data-i="list" title="Activity"><span class="bd" id="lkbd"></span></button><button class="b" id="lkset" data-i="gear" title="Settings"></button><button class="b" id="lkfs" data-i="max" title="Full screen"></button></nav>
 <aside class="glass sheet" id="lksheet" aria-label="Activity"><button class="sx" data-i="x" title="Close"></button><h3>Activity</h3><div id="lkev"></div></aside>
 <aside class="glass sheet lkset" id="lkcs" aria-label="Settings"><button class="sx" data-i="x" title="Close"></button><h3>Settings</h3><input class="lksq" id="lkq" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off"><div id="lksl"></div></aside>
@@ -765,7 +773,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-15.6'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-15.7'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -2104,14 +2112,15 @@ const LK = (() => {
     const zs = $e('lkzoom'); if (!R.drag) { zs.value = Math.round(Math.log(clamp(z, 0.5, 10) / 0.5) / Math.log(20) * 100); rangeFill(zs); }
     $e('lkzt').textContent = (Math.round(z * 10) / 10) + '×' + (s.digitalZoom ? ' digital' : '');
     paintPanels(R, det, z, s);
+    paintZone(R);
   }
 
   function addAlert(R, m) {
-    const e = { id: m.id, kind: m.kind, ts: m.atMs || Date.now(), pct: m.changedPct || 0, img: null };
+    const e = { id: m.id, kind: m.kind, ts: m.atMs || Date.now(), pct: m.changedPct || 0, img: null, host: String(m.hostName || '').slice(0, 24) };
     R.evs.unshift(e); R.evs.length = Math.min(R.evs.length, 50);
     R.lastAlert = { e, at: performance.now() };
     if (!$e('lksheet').classList.contains('open')) { R.unread++; badge(R); }
-    toast((kindName[m.kind] || 'Alert') + ' · ' + tm(e.ts));
+    toast((e.host ? e.host + ' · ' : '') + (kindName[m.kind] || 'Alert') + ' · ' + tm(e.ts));
     if ((m.kind === 'MOTION' || m.kind === 'TAMPER') && R.blk) setBlackout(R, false);
     if (m.kind === 'MOTION' || m.kind === 'TAMPER') { chime(); !muted && navigator.vibrate && navigator.vibrate([120, 60, 120]); }
     if (document.hidden && window.Notification && Notification.permission === 'granted') { try { new Notification(kindName[m.kind] || 'Alert', { body: tm(e.ts) }); } catch {} }
@@ -2126,7 +2135,7 @@ const LK = (() => {
   }
   function drawEvents(R) {
     if (R !== cur) return;
-    $e('lkev').innerHTML = R.evs.length ? R.evs.map((e, i) => `<div class="ev" data-i="${i}" title="Tap to save this picture">${e.img ? `<img src="${e.img}" alt="">` : '<img alt="">'}<div><b>${kindName[e.kind] || 'Alert'}</b><small>${tm(e.ts)}${e.pct ? ' · ' + Math.round(e.pct) + '% changed' : ''}</small></div></div>`).join('') : '<p class="none">Nothing yet. Alerts appear here with a picture.</p>';
+    $e('lkev').innerHTML = R.evs.length ? R.evs.map((e, i) => `<div class="ev" data-i="${i}" title="Tap to save this picture">${e.img ? `<img src="${e.img}" alt="">` : '<img alt="">'}<div><b>${e.host ? esc(e.host) + ' · ' : ''}${kindName[e.kind] || 'Alert'}</b><small>${tm(e.ts)}${e.pct ? ' · ' + Math.round(e.pct) + '% changed' : ''}</small></div></div>`).join('') : '<p class="none">Nothing yet. Alerts appear here with a picture.</p>';
   }
   function badge(R) { const b = $e('lkbd'); b.textContent = R && R.unread ? R.unread : ''; b.style.display = R && R.unread ? 'grid' : 'none'; }
 
@@ -2612,6 +2621,56 @@ const LK = (() => {
     else if (b.dataset.z) sendSet(R, { camera: { zoom: +b.dataset.z } });
   });
 
+
+  /* ---------- the detection area: where movement counts, drawn on the picture and dragged into place ---------- */
+  const rotZ = (z, deg) => {
+    const d = ((deg % 360) + 360) % 360;
+    if (d === 90) return { x: 1 - (z.y + z.height), y: z.x, width: z.height, height: z.width };
+    if (d === 180) return { x: 1 - (z.x + z.width), y: 1 - (z.y + z.height), width: z.width, height: z.height };
+    if (d === 270) return { x: z.y, y: 1 - (z.x + z.width), width: z.height, height: z.width };
+    return z;
+  };
+  const unrotZ = (z, deg) => rotZ(z, 360 - (((deg % 360) + 360) % 360));
+  let zEdit = false;
+  function imgRect() {
+    const st = sel('lkV').getBoundingClientRect(), cv = sel('lkc'), cw = cv.width || 16, ch = cv.height || 9, k = Math.min(st.width / cw, st.height / ch);
+    return { x: (st.width - cw * k) / 2, y: (st.height - ch * k) / 2, w: cw * k, h: ch * k };
+  }
+  function paintZone(R) {
+    const box = sel('lkzb');
+    const z = R && R.role === 'view' ? getp(effective(R), 'detect.zone') : null;
+    if (!z || !R.live) { box.hidden = true; return; }
+    const d = R.zloc || rotZ(z, R.dec ? R.dec.rot : 0), r = imgRect();
+    box.hidden = false; box.classList.toggle('edit', zEdit);
+    box.style.left = (r.x + d.x * r.w) + 'px'; box.style.top = (r.y + d.y * r.h) + 'px';
+    box.style.width = (d.width * r.w) + 'px'; box.style.height = (d.height * r.h) + 'px';
+  }
+  sel('lkzone').onclick = () => { const R = cur; if (!R || R.role !== 'view') return; zEdit = !zEdit; sel('lkzone').classList.toggle('on', zEdit); closePopovers(); paintZone(R); };
+  addEventListener('resize', () => { if (cur && cur.role === 'view') paintZone(cur); });
+  sel('lkzb').addEventListener('pointerdown', e => {
+    const R = cur; if (!R || R.role !== 'view' || !zEdit) return;
+    const h = e.target.closest('i'), r = imgRect(), start = { ...(R.zloc || rotZ(getp(effective(R), 'detect.zone'), R.dec ? R.dec.rot : 0)) };
+    const x0 = e.clientX, y0 = e.clientY, MIN = 0.06;
+    e.preventDefault(); sel('lkzb').setPointerCapture(e.pointerId);
+    const move = ev => {
+      const dx = (ev.clientX - x0) / r.w, dy = (ev.clientY - y0) / r.h; let { x, y, width, height } = start;
+      if (!h) { x = clamp(x + dx, 0, 1 - width); y = clamp(y + dy, 0, 1 - height); }
+      else {
+        const k = h.dataset.h;
+        if (k.includes('w')) { const nx = clamp(x + dx, 0, x + width - MIN); width = x + width - nx; x = nx; } else width = clamp(width + dx, MIN, 1 - x);
+        if (k.includes('n')) { const ny = clamp(y + dy, 0, y + height - MIN); height = y + height - ny; y = ny; } else height = clamp(height + dy, MIN, 1 - y);
+      }
+      R.zloc = { x, y, width, height }; paintZone(R);
+    };
+    const up = () => {
+      sel('lkzb').removeEventListener('pointermove', move); sel('lkzb').removeEventListener('pointerup', up); sel('lkzb').removeEventListener('pointercancel', up);
+      const d = R.zloc; R.zloc = null;
+      if (d && cur === R) { const z = unrotZ(d, R.dec ? R.dec.rot : 0), q = v => Math.round(v * 1000) / 1000; sendSet(R, { detect: { zone: { x: q(z.x), y: q(z.y), width: q(z.width), height: q(z.height) } } }); }
+      paintZone(R);
+    };
+    sel('lkzb').addEventListener('pointermove', move); sel('lkzb').addEventListener('pointerup', up); sel('lkzb').addEventListener('pointercancel', up);
+  });
+
   /* ---------- keeping the panels in step with the camera ---------- */
   function paintPanels(R, det, z, s) {
     if (!R || R.role !== 'view') return;
@@ -2628,6 +2687,7 @@ const LK = (() => {
     const rec = sel('lkrec'); rec.classList.toggle('dim', !PREF.clipping && !R.rec); rec.classList.toggle('on', !!R.rec);
     rec.title = R.rec ? 'Stop recording' : PREF.clipping ? 'Record a clip' : 'Record a clip (turns clipping on first)';
     sel('lkblk').classList.toggle('on', !!R.blk);
+    if (!sel('lkV').classList.contains('so') || true) paintZone(R);
     if (sel('lkcs').classList.contains('open')) buildSettings(R);
   }
   /* the slider inside the drop-up shows its fill like the others */
