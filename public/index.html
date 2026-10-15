@@ -259,6 +259,27 @@ kbd{font:600 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:3
 .dr.ok i{background:var(--ok)}.dr.bad i{background:var(--rd)}.dr.wait i{background:var(--wn)}
 .dr span{flex:1;min-width:0;overflow-wrap:anywhere}.dr em{color:var(--t2);font-style:normal;font-size:12px;text-align:right}
 
+/* ============ heat link (rooms shared with the Heat app) ============ */
+body[data-s=lkview] #lkV,body[data-s=lkcam] #lkC{display:block}
+body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
+#lkV .stage{inset:0}
+#lkc{display:block;width:100%;height:100%;object-fit:contain;background:#000}
+#lkc.mir{transform:scaleX(-1)}
+#lkv.hit{outline:3px solid var(--wn);outline-offset:-3px}
+.lkdock{max-width:calc(100vw - 2 * var(--gut));row-gap:2px}
+.lkdock .sl{width:clamp(60px,17vw,100px)}
+.lkbt{position:absolute;font-size:11px;font-weight:800;bottom:2px;right:5px;color:var(--wn)}
+.lklens{display:flex;gap:2px}
+.b.lkz{font-size:12px;font-weight:700;width:calc(var(--bs) * .82);height:calc(var(--bs) * .82);min-width:32px;min-height:32px}
+.lkzt{font-size:12px;font-weight:700;min-width:30px;text-align:center;font-variant-numeric:tabular-nums;color:var(--t2)}
+#lkarm.on,#lkcarm.on{background:rgba(48,209,88,.55);box-shadow:inset 0 1px 1px rgba(255,255,255,.6)}
+#lktorch.on{background:rgba(255,214,10,.5)}#lkflip.on{background:rgba(255,255,255,.26)}
+#lkC .stage video{object-fit:contain}
+#lkre{margin-top:-4px}
+.lkj{flex-wrap:wrap}
+#lki{flex:1 0 100%;order:3;height:44px;min-width:0;border-radius:14px;background:rgba(255,255,255,.14);text-align:center;font:600 19px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;cursor:text}
+#lki::placeholder{color:rgba(255,255,255,.34)}
+
 /* ============ responsive ============
    watch  <= 260px wide (or <= 260px tall) · small phone <= 380 · phone · landscape phone · tablet · desktop · TV */
 @media(max-width:380px){
@@ -360,11 +381,12 @@ kbd{font:600 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:3
 <section class="scr" id="home" aria-label="Start or join"><main class="col">
 <h1>Heat</h1>
 <p class="sub">Private video calls and motion cameras,<br>device to device. No accounts.</p>
-<div class="glass seg" id="seg" role="group" aria-label="What to start"><button data-m="call" aria-pressed="true">Video call</button><button data-m="watch" aria-pressed="false">Motion camera</button></div>
+<div class="glass seg" id="seg" role="group" aria-label="What to start"><button data-m="call" aria-pressed="true">Video call</button><button data-m="watch" aria-pressed="false">Motion camera</button><button data-m="link" aria-pressed="false">Heat app</button></div>
 <button class="glass card" id="bh"><span class="ico" data-i="video" aria-hidden="true"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
-<label class="glass card lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
-<div class="glass card"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
-<button class="glass chip" id="rc" hidden></button>
+<label class="glass card lockrow" id="lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
+<div class="glass card" id="jc"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
+<div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a Heat room</b><small>Enter the code from the app</small></span><input id="lki" aria-label="Heat room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH-JKMN"></div>
+<button class="glass chip" id="rc" hidden></button><button class="glass chip" id="lkre" hidden></button>
 <p class="ft">Video and audio go straight between devices.<br><button class="lk" id="dgo">Check connection</button> · <button class="lk" id="hset">Settings</button> · <span id="bid"></span><span id="fxw"> · <button class="lk" id="fxb"></button></span></p>
 <p class="ft legal"><a href="privacy">Privacy</a> · <a href="terms">Terms</a> · <button class="lk" id="inst" hidden>Install app</button><button class="lk" id="kbo">Shortcuts</button></p>
 <details class="faq"><summary>How does it work?</summary>
@@ -398,6 +420,22 @@ kbd{font:600 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:3
 <aside class="glass sheet" id="chat" aria-label="Chat"><button class="sx" data-i="x" title="Close"></button><h3>Chat</h3><div id="cl" aria-live="polite"></div><form id="cform" autocomplete="off"><input id="cin" aria-label="Message" placeholder="Message" maxlength="500"><button class="b" id="csend" type="submit" data-i="send" title="Send"></button></form></aside>
 <div class="glass dock"><button class="b" id="cm" data-i="mic" title="Mute"></button><button class="b" id="cc" data-i="video" title="Camera on/off"></button><button class="b" id="cf" data-i="flip" title="Switch camera"></button><button class="b" id="cs" data-i="monitor" title="Share screen" hidden></button><button class="b" id="ct" data-i="chat" title="Chat"><em class="bd" id="cbd"></em></button><button class="b" id="cv" data-i="share" title="Invite"></button><button class="b" id="cmore" data-i="dots" title="More"></button><button class="b red" id="cx" data-i="hangup" title="Leave"></button></div>
 <div class="ov s" id="cov"><div class="glass c2" role="status"><div class="sp"></div><b id="covt">Starting…</b><small class="hint" id="covh"></small><button class="ghost dgb" hidden>Check connection</button><button class="ghost" id="coc">Cancel</button></div></div>
+</section>
+
+<!-- Heat Link: watch a room made by the Heat app (or by another browser) -->
+<section class="scr" id="lkV" aria-label="Heat Link viewer">
+<div class="stage"><canvas id="lkc" aria-label="Live picture"></canvas></div>
+<div class="top"><div class="glass pill" role="status"><i class="dot" id="lkd"></i><span id="lkst">Connecting…</span><small id="lkms"></small><small id="lkbat"></small></div><div class="tb"><button class="glass b" id="lkinv" data-i="share" title="Invite"></button><button class="glass b" id="lkfs" data-i="max" title="Full screen"></button><button class="glass b" id="lkact" data-i="list" title="Activity"><span class="bd" id="lkbd"></span></button><button class="glass b red" id="lkx" data-i="x" title="Leave"></button></div></div>
+<aside class="glass sheet" id="lksheet" aria-label="Activity"><button class="sx" data-i="x" title="Close"></button><h3>Activity</h3><div id="lkev"></div></aside>
+<div class="glass dock lkdock" id="lkdock"><button class="b" id="lkarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkarmt"></span></button><div class="sl"><input id="lksens" type="range" min="1" max="100" step="1" title="Sensitivity" aria-label="Sensitivity"></div><div class="lklens" id="lklens" hidden></div><div class="sl"><input id="lkzoom" type="range" min="0" max="100" step="1" title="Zoom" aria-label="Zoom"></div><small class="lkzt" id="lkzt"></small><button class="b" id="lktorch" data-i="bolt" title="Torch" hidden></button><button class="b" id="lkflip" data-i="flip" title="Switch camera"></button><button class="b" id="lksnap" data-i="cam" title="Save a picture"></button></div>
+<div class="ov s" id="lkov"><div class="glass c2" role="status"><div class="sp"></div><b id="lkovt">Connecting…</b><small class="hint" id="lkovh"></small><button class="ghost" id="lkovx">Leave</button></div></div>
+</section>
+
+<!-- Heat Link: this page is the camera, and the Heat app or other browsers watch it -->
+<section class="scr" id="lkC" aria-label="Heat Link camera">
+<div class="stage"><video id="lkv" muted playsinline autoplay></video></div>
+<div class="top"><div class="glass pill" role="status"><i class="dot" id="lkcd"></i><span id="lkcst">Starting…</span><small id="lkcn"></small></div><div class="tb"><button class="glass b" id="lkcinv" data-i="share" title="Invite"></button><button class="glass b" id="lkcflip" data-i="flip" title="Switch camera"></button><button class="glass b red" id="lkcx" data-i="x" title="Stop"></button></div></div>
+<div class="glass dock lkdock"><button class="b" id="lkcarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkcarmt"></span></button><div class="sl"><input id="lkcsens" type="range" min="1" max="100" step="1" title="Sensitivity" aria-label="Sensitivity"></div><div class="mt" id="lkcmt" title="Movement"><i></i></div></div>
 </section>
 
 <!-- someone is asking to join (video calls) -->
@@ -675,9 +713,10 @@ document.addEventListener('pointermove',e=>{const g=e.target.closest?.('.glass')
 function toast(t,img,ms=3500){const e=$('#tt'),i=$('img',e);$('span',e).textContent=t;if(img){i.src=img;i.style.display='block'}else{i.removeAttribute('src');i.style.display='none'}e.classList.add('s');clearTimeout(tto);tto=setTimeout(()=>e.classList.remove('s'),ms)}
 
 /* home: choose what to start (video call is the default) */
-const KINDS={call:['Start a video call','Create a room, then share the code'],watch:['Start a motion camera','This device watches for movement']};
-let pick=ls('km')==='watch'?'watch':'call';
-function applyPick(){$$('#seg button').forEach(b=>{b.classList.toggle('on',b.dataset.m===pick);b.setAttribute('aria-pressed',String(b.dataset.m===pick))});$('#bht').textContent=KINDS[pick][0];$('#bhs').textContent=KINDS[pick][1]}
+const KINDS={call:['Start a video call','Create a room, then share the code'],watch:['Start a motion camera','This device watches for movement'],link:['Share this camera','The Heat app and other browsers can watch it']};
+let pick=['watch','link'].includes(ls('km'))?ls('km'):'call';
+function applyPick(){$$('#seg button').forEach(b=>{b.classList.toggle('on',b.dataset.m===pick);b.setAttribute('aria-pressed',String(b.dataset.m===pick))});$('#bht').textContent=KINDS[pick][0];$('#bhs').textContent=KINDS[pick][1];
+ const lk=pick==='link';$('#jc').hidden=lk;$('#lkjoin').hidden=!lk;$('#lockrow').hidden=lk}
 $$('#seg button').forEach(b=>b.onclick=()=>{pick=b.dataset.m;ls('km',pick);applyPick()});
 
 /* stage fitting + ROI */
@@ -826,7 +865,7 @@ function onChat(m){
 $('#cform').onsubmit=e=>{e.preventDefault();const i=$('#cin'),text=i.value.trim().slice(0,500);if(!text)return;i.value='';const ts=Date.now();send({t:'chat',text,ts});addChat(true,text,ts,'')};
 function toggleChat(){const s=$('#chat');s.classList.toggle('open');if(s.classList.contains('open')){cUnread=0;bdg($('#cbd'),0);$('#cin').focus()}}
 /* invite */
-const inviteUrl=()=>location.protocol.startsWith('http')?location.href.split('#')[0]+'#join='+code+(E.on?'&k='+E.secret:''):'';
+const inviteUrl=()=>LK.info()?LK.info().url:location.protocol.startsWith('http')?location.href.split('#')[0]+'#join='+code+(E.on?'&k='+E.secret:''):'';
 function showInvite(auto){
  const u=inviteUrl(),q=$('#qr');$('#pc').textContent=fmt(code);q.hidden=true;
  if(u&&window.qrcode){try{const z=qrcode(0,'M');z.addData(u);z.make();q.src=z.createDataURL(6,0);q.hidden=false}catch{}}
@@ -936,6 +975,7 @@ function hostPeer(){
   else if(p.disconnected&&!p.destroyed)setTimeout(()=>{if(p.disconnected&&!p.destroyed)p.reconnect()},2000)});
  p.on('close',()=>{if(mode==='host'&&!p.dead)setTimeout(hostPeer,1500)})}
 async function hostStart(){
+ if(pick==='link')return LK.host();
  if(!window.Peer)return toast('Connection library didn’t load — check your internet');
  const id=++sid,isCall=pick==='call';
  if(lockPick&&!E.media)return toast('The end-to-end lock needs a newer browser (Chrome, Edge, Safari 15.4+ or Firefox 117+). Turn the lock off to continue.',undefined,7000);
@@ -1151,15 +1191,17 @@ on('#cm',toggleMic);on('#cc',toggleCam);on('#cs',share);on('#ct',toggleChat);on(
 on('#vm',()=>{muted=!muted;$('#vm').classList.toggle('on',muted);$('#vm use').setAttribute('href',muted?'#i-volx':'#i-vol')});
 on('#ve',()=>{const s=$('#sheet');s.classList.toggle('open');if(s.classList.contains('open')){unread=0;badge()}});
 const copyText=(t,ok)=>{const p=navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject();p.then(()=>toast(ok)).catch(()=>toast(t))};
-on('#hcode',()=>copyText(code,'Code copied'));on('#pc',()=>copyText(code,'Code copied'));
+on('#hcode',()=>copyText(code,'Code copied'));on('#pc',()=>copyText(LK.info()?LK.info().code:code,'Code copied'));
 on('#pl',()=>copyText(inviteUrl(),'Invite link copied'));
-on('#ps',()=>{try{navigator.share({title:'Join me on Heat',text:'Room code '+fmt(code),url:inviteUrl()}).catch(()=>{})}catch{}});
+on('#ps',()=>{try{navigator.share({title:'Join me on Heat',text:'Room code '+(LK.info()?HL.fmt(LK.info().code):fmt(code)),url:inviteUrl()}).catch(()=>{})}catch{}});
 $('#pop').onclick=e=>{if(e.target.id==='pop')$('#pop').classList.remove('s')};
 const openDiag=()=>{$('#dg').classList.add('s');runDiag()};
 on('#dgo',openDiag);$$('.dgb').forEach(b=>b.onclick=openDiag);on('#dga',runDiag);on('#dgc',()=>dgReport?copyText(dgReport,'Report copied'):toast('Wait for the check to finish'));
 $('#dg').onclick=e=>{if(e.target.id==='dg'){$('#dg').classList.remove('s');dgRun++}};
 $('#bid').textContent='build '+BUILD;
 $('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();viewStart(v)}};
+$('#lki').oninput=e=>{const v=HL.norm(e.target.value);e.target.value=HL.fmt(v);if(v.length===12){e.target.blur();e.target.value='';LK.view(v)}};
+$('#lki').addEventListener('paste',e=>{const c=linkCodeIn((e.clipboardData||window.clipboardData).getData('text')||'');if(c){e.preventDefault();$('#lki').value='';LK.view(c)}});
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
 roiInit($('#hroi'),$('#hostS .stage'));drawRoi();ui();ui2();applyPick();refreshChip();list();
 
@@ -1229,8 +1271,11 @@ addEventListener('keydown',e=>{
  else if(k==='f'&&sc!=='home')fs();else h=0;
  if(h)e.preventDefault()});
 /* paste an invite link (or "ABCD-1234") straight into the code box */
+/* a Heat Link invite: https://…/#link=CODE, heat://link/CODE, or the bare 12-symbol code */
+const linkCodeIn=t=>{t=String(t||'').trim();const m=/(?:link=|heat:\/\/link\/)([A-Za-z2-9-]{12,16})/i.exec(t),c=HL.norm(m?m[1]:/^[A-Za-z2-9 -]{12,16}$/.test(t)?t:'');return c.length===12?c:''};
 $('#ci').addEventListener('paste',e=>{
- const t=((e.clipboardData||window.clipboardData).getData('text')||'').trim(),m=/join=([A-Z2-9]{8})/i.exec(t),km=/[#&]k=([A-Z2-9]{12})/i.exec(t);
+ const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)||HL.norm(lt).length===12?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
+ const t=lt.trim(),m=/join=([A-Z2-9]{8})/i.exec(t),km=/[#&]k=([A-Z2-9]{12})/i.exec(t);
  const c=m?m[1].toUpperCase():/^[A-Za-z0-9 -]{8,12}$/.test(t)?norm(t):'';
  if(c.length===8){e.preventDefault();$('#ci').value=fmt(c);$('#ci').blur();viewStart(c,km?km[1].toUpperCase():'')}});
 /* don't lose a running camera or call to a stray tab close */
@@ -1352,7 +1397,7 @@ $('#fxw').hidden=!fxCap;fxLabel();on('#fxb',()=>setFx(FXN[(FXN.indexOf(fxMode)+1
    One protocol, any carrier: LAN, Bluetooth and the Wear Data Layer carry it in the app; here it rides a WebRTC data
    channel (a "link" is a PeerJS data connection in raw mode, so the same public signaling server finds it).
    Everything below mirrors android/core/.../link/{Identity,Records,Handshake,Session,ReliableChannel}.kt byte for byte
-   and is pinned to the Kotlin side by shared test vectors (tests/hl-vectors.js) and a live interop test.
+   and is pinned to the Kotlin side by shared test vectors (RoomCodeTest, hl-test.js) and a live interop test (JsInteropTest).
 
    Layers, bottom up:
     1. derive(secret): the 12-character room code -> room id (what signaling sees) and group key (what authenticates).
@@ -1374,6 +1419,8 @@ const HL = (() => {
 
   const norm = s => String(s || '').toUpperCase().split('').filter(c => KA.includes(c)).join('').slice(0, 12);
   const fmt = s => (norm(s).match(/.{1,4}/g) || []).join('-');
+  /* a fresh 12-symbol code, uniformly (248 = 8 * 31, so rejecting the top 8 byte values removes modulo bias) */
+  const newCode = () => { let c = ''; while (c.length < 12) for (const x of rnd(24)) if (x < 248 && c.length < 12) c += KA[x % 31]; return c; };
   const hex = u => Array.from(u, b => b.toString(16).padStart(2, '0')).join('');
   const unhex = h => Uint8Array.from(h.match(/../g) || [], x => parseInt(x, 16));
   const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let p = 0; for (const x of a) { o.set(x, p); p += x.length; } return o; };
@@ -1603,7 +1650,10 @@ const HL = (() => {
             default: throw new Error('unknown record type');
           }
         }
-      } catch (e) { this.close(e && e.auth ? 'REJECTED' : this.closed ? 'LOCAL' : 'IO', e); }
+      } catch (e) {
+        /* never got READY: the other end hung up on our proof, which is a wrong key and not a bad link */
+        this.close(this.closed ? 'LOCAL' : (e && e.auth) || this.awaitReady ? 'REJECTED' : 'IO', e);
+      }
     }
     close(reason = 'LOCAL', err) {
       if (this.closed) return; this.closed = true; clearInterval(this.timer);
@@ -1615,9 +1665,670 @@ const HL = (() => {
   }
 
   const json = { enc: o => te.encode(JSON.stringify(o)), dec: u => { try { return JSON.parse(td.decode(u)); } catch { return null; } } };
-  return { KA, norm, fmt, hex, unhex, cat, rnd, derive, Group, Aead, Inbox, dial, accept, Reliable, Session, json, ST, MF_KEY, VERSION, RT };
+  return { KA, norm, fmt, newCode, hex, unhex, cat, rnd, derive, Group, Aead, Inbox, dial, accept, Reliable, Session, json, ST, MF_KEY, VERSION, RT };
 })();
 /* ===== link:protocol:end ===== */
+
+/* ===== link:media:begin ===== */
+/* H.264 plumbing between the phone's Annex-B stream (SPS/PPS in front of every keyframe) and WebCodecs, which wants
+   length-prefixed NAL units plus an avcC description. Pure functions, so they are tested in Node. */
+const AVC = (() => {
+  const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let p = 0; for (const x of a) { o.set(x, p); p += x.length; } return o; };
+  const type = n => n[0] & 31;                                     /* 1 slice, 5 IDR slice, 6 SEI, 7 SPS, 8 PPS, 9 AUD */
+  /* Annex-B -> NAL units (views, start codes removed; 3- or 4-byte start codes) */
+  const nals = b => {
+    const out = [], n = b.length; let s = -1;
+    for (let i = 0; i + 2 < n;) {
+      if (b[i + 2] > 1) { i += 3; continue; }                       /* no start code can begin at i, i+1 or i+2 */
+      if (b[i] === 0 && b[i + 1] === 0 && b[i + 2] === 1) {
+        if (s >= 0) { let e = i; while (e > s && b[e - 1] === 0) e--; out.push(b.subarray(s, e)); }
+        s = i + 3; i += 3;
+      } else i++;
+    }
+    if (s >= 0 && s < n) { let e = n; while (e > s && b[e - 1] === 0) e--; if (e > s) out.push(b.subarray(s, e)); }
+    return out;
+  };
+  const hex2 = v => v.toString(16).padStart(2, '0');
+  const codec = sps => 'avc1.' + hex2(sps[1]) + hex2(sps[2]) + hex2(sps[3]);
+  const avcC = (sps, pps) => {
+    const o = new Uint8Array(11 + sps.length + pps.length);
+    o.set([1, sps[1], sps[2], sps[3], 0xff, 0xe1, sps.length >> 8, sps.length & 255]); o.set(sps, 8);
+    let p = 8 + sps.length; o[p++] = 1; o[p++] = pps.length >> 8; o[p++] = pps.length & 255; o.set(pps, p);
+    return o;
+  };
+  /* the picture's slices as 4-byte length-prefixed units (parameter sets live in the description, not the data) */
+  const toAvcc = list => {
+    const keep = list.filter(n => { const t = type(n); return t === 1 || t === 5; });
+    const o = new Uint8Array(keep.reduce((s, n) => s + 4 + n.length, 0)); let p = 0;
+    for (const n of keep) { o[p] = n.length >>> 24; o[p + 1] = n.length >>> 16; o[p + 2] = n.length >>> 8; o[p + 3] = n.length; o.set(n, p + 4); p += 4 + n.length; }
+    return o;
+  };
+  const parseAvcC = d => {
+    const sps = [], pps = []; let p = 5; const ns = d[p++] & 31;
+    for (let i = 0; i < ns; i++) { const l = (d[p] << 8) | d[p + 1]; sps.push(d.subarray(p + 2, p + 2 + l)); p += 2 + l; }
+    const np = d[p++];
+    for (let i = 0; i < np; i++) { const l = (d[p] << 8) | d[p + 1]; pps.push(d.subarray(p + 2, p + 2 + l)); p += 2 + l; }
+    return { sps, pps, len: (d[4] & 3) + 1 };
+  };
+  const SC = Uint8Array.of(0, 0, 0, 1);
+  /* length-prefixed (what an encoder without Annex-B output gives) -> Annex-B, parameter sets first on a keyframe */
+  const fromAvcc = (data, desc, key) => {
+    const c = desc ? parseAvcC(desc) : { sps: [], pps: [], len: 4 }, parts = [];
+    if (key) for (const n of [...c.sps, ...c.pps]) parts.push(SC, n);
+    for (let p = 0; p + c.len <= data.length;) {
+      let l = 0; for (let i = 0; i < c.len; i++) l = l * 256 + data[p + i];
+      p += c.len; if (l <= 0 || p + l > data.length) break;
+      parts.push(SC, data.subarray(p, p + l)); p += l;
+    }
+    return cat(...parts);
+  };
+  const isKey = list => list.some(n => type(n) === 5);
+  return { nals, type, codec, avcC, toAvcc, fromAvcc, parseAvcC, isKey };
+})();
+/* ===== link:media:end ===== */
+
+/* ===== link:rooms:begin ===== */
+/* Heat Link rooms in the page. A room is one camera and any number of viewers, found with a 12-symbol code. The camera
+   can be the Heat phone app or this page; so can a viewer, so apps and browsers watch each other. Signaling is the same
+   public PeerJS server the rest of the page uses; the link is a raw data channel that carries HL (the session protocol)
+   end to end, so that server only ever sees a hashed room id. */
+const LK = (() => {
+  'use strict';
+  const ST = HL.ST, enc = HL.json.enc, dec = HL.json.dec, $e = id => document.getElementById(id);
+  const SELF = (() => { let h = ls('hl.id'); if (!/^[0-9a-f]{32}$/.test(h || '')) { h = HL.hex(HL.rnd(16)); ls('hl.id', h); } return HL.unhex(h); })();
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const mergePatch = (t, p) => {
+    if (p === null || typeof p !== 'object' || Array.isArray(p)) return p;
+    const o = t && typeof t === 'object' && !Array.isArray(t) ? { ...t } : {};
+    for (const k of Object.keys(p)) { if (p[k] === null) delete o[k]; else o[k] = mergePatch(o[k], p[k]); }
+    return o;
+  };
+  const inviteOf = code => location.href.split('#')[0] + '#link=' + code;
+  let cur = null;                                                  /* the room this tab is in */
+
+  /* ---------- the link: a PeerJS data channel in raw mode, as a byte stream for HL ---------- */
+  function dcio(conn, inbox) {
+    const dc = conn.dataChannel;
+    dc.binaryType = 'arraybuffer'; dc.bufferedAmountLowThreshold = 256 * 1024;
+    conn.on('data', d => { if (typeof d === 'string') return; inbox.push(d instanceof Uint8Array ? d : ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : new Uint8Array(d)); });
+    conn.on('close', () => inbox.fail(new Error('closed')));
+    conn.on('error', e => inbox.fail(e));
+    const drain = () => new Promise(r => { const t = setTimeout(r, 250); dc.onbufferedamountlow = () => { clearTimeout(t); dc.onbufferedamountlow = null; r(); }; });
+    return {
+      async send(u8) {                                              /* 16 KB pieces: every browser's data channel takes those */
+        for (let o = 0; o < u8.length; o += 16384) {
+          if (dc.readyState !== 'open') throw new Error('closed');
+          if (dc.bufferedAmount > 1048576) await drain();
+          dc.send(u8.slice(o, Math.min(o + 16384, u8.length)));
+        }
+      },
+      close() { try { conn.close(); } catch {} }
+    };
+  }
+
+  /* The camera: claim the room id and accept whoever dials it. cb.state(text), cb.conn(io, inbox). */
+  function listen(rid, cb) {
+    let p = null, dead = false, tries = 0;
+    const open = () => {
+      if (dead) return;
+      const q = p = new Peer(rid, { config: ICE, ...PEER_OPTS() });
+      /* the public signaling socket can hang without ever erroring */
+      const guard = setTimeout(() => { if (!q.open && !dead && !q.dead) { q.dead = true; try { q.destroy(); } catch {} cb.state('Can’t reach the server — retrying…'); setTimeout(open, 1000); } }, 10000);
+      q.on('open', () => { clearTimeout(guard); tries = 0; cb.state('up'); });
+      q.on('connection', conn => conn.on('open', () => { const inbox = new HL.Inbox(); cb.conn(dcio(conn, inbox), inbox); }));
+      q.on('disconnected', () => { if (!dead && !q.dead) setTimeout(() => { if (!q.destroyed && q.disconnected) q.reconnect(); }, 1000); });
+      q.on('error', e => {
+        if (dead || q.dead) return;
+        if (e.type === 'unavailable-id') {                          /* our own earlier registration can linger for a few seconds */
+          q.dead = true; try { q.destroy(); } catch {}
+          if (++tries > 8) return cb.state('taken');
+          cb.state('Claiming the room…'); setTimeout(open, 2000);
+        } else if (q.disconnected && !q.destroyed) setTimeout(() => { if (q.disconnected && !q.destroyed) q.reconnect(); }, 2000);
+      });
+      q.on('close', () => { if (!dead && !q.dead) setTimeout(open, 1500); });
+    };
+    open();
+    return { stop() { dead = true; if (p) { p.dead = true; try { p.destroy(); } catch {} } } };
+  }
+
+  /* A viewer: find the camera and keep trying. cb.state(text), cb.conn(io, inbox). redial() after a session ends. */
+  function connect(rid, cb) {
+    let p = null, c = null, dead = false, timer = 0, fails = 0;
+    const later = ms => { clearTimeout(timer); timer = setTimeout(go, ms); };
+    const backoff = () => Math.min(1200 * 1.6 ** fails++, 6000);
+    function mk() {
+      const q = p = new Peer({ config: ICE, ...PEER_OPTS() });
+      const guard = setTimeout(() => { if (!q.open && !dead && !q.dead) { q.dead = true; try { q.destroy(); } catch {} cb.state('Can’t reach the server — retrying…'); p = null; later(1000); } }, 10000);
+      q.on('open', () => { clearTimeout(guard); go(); });
+      q.on('disconnected', () => { if (!dead && !q.dead) setTimeout(() => { if (!q.destroyed && q.disconnected) q.reconnect(); }, 800); });
+      q.on('error', e => {
+        if (dead || q.dead) return;
+        if (e.type === 'peer-unavailable') { cb.state('Waiting for the camera…'); const o = c; c = null; try { o && o.close(); } catch {} later(backoff()); }
+        else { cb.state(['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type) ? 'Can’t reach the server — retrying…' : 'Reconnecting…'); if (q.disconnected && !q.destroyed) try { q.reconnect(); } catch {} later(2500); }
+      });
+      q.on('close', () => { if (!dead && !q.dead) { p = null; later(1500); } });
+    }
+    function go() {
+      if (dead) return;
+      if (!p || p.destroyed || p.dead) return mk();
+      if (p.disconnected) { try { p.reconnect(); } catch {} return later(1500); }
+      if (!p.open) return later(500);
+      if (c) { try { c.close(); } catch {} c = null; }
+      cb.state('Contacting the camera…');
+      const conn = c = p.connect(rid, { serialization: 'raw', reliable: true });
+      conn.on('open', () => { if (c !== conn) return; clearTimeout(timer); fails = 0; const inbox = new HL.Inbox(); cb.conn(dcio(conn, inbox), inbox); });
+      conn.on('close', () => { if (c === conn) { c = null; later(backoff()); } });
+      later(15000);                                                 /* a negotiation that never finishes: start over */
+    }
+    go();
+    return {
+      redial(ms) { if (c) { try { c.close(); } catch {} c = null; } later(ms == null ? backoff() : ms); },
+      stop() { dead = true; clearTimeout(timer); if (p) { p.dead = true; try { p.destroy(); } catch {} } }
+    };
+  }
+
+  /* ---------- picture: H.264 in, canvas out ---------- */
+  class VDec {
+    static supported() { return typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined'; }
+    constructor(canvas, hooks) {
+      this.cv = canvas; this.cx = canvas.getContext('2d', { alpha: false }); this.h = hooks;
+      this.dec = null; this.sig = ''; this.ready = false; this.pending = null; this.raf = 0; this.rot = 0; this.shown = 0;
+    }
+    setRotation(deg) { this.rot = ((deg % 360) + 360) % 360; }
+    reset() { this.ready = false; this.sig = ''; try { this.dec && this.dec.close(); } catch {} this.dec = null; }
+    close() { this.reset(); if (this.pending) { this.pending.close(); this.pending = null; } cancelAnimationFrame(this.raf); clearTimeout(this.tmo); this.raf = this.tmo = 0; }
+    feed(key, pts, data) {
+      const list = AVC.nals(data);
+      if (key) {
+        const sps = list.find(n => AVC.type(n) === 7), pps = list.find(n => AVC.type(n) === 8);
+        if (sps && pps) {
+          const sig = AVC.codec(sps) + HL.hex(sps) + HL.hex(pps);
+          if (sig !== this.sig || !this.dec || this.dec.state !== 'configured') this.config(sps, pps, sig);
+        }
+        if (this.dec && this.dec.state === 'configured') this.ready = true;
+      }
+      if (!this.ready || !this.dec || this.dec.state !== 'configured') { if (!key) this.h.needKey(); return; }
+      if (!key && this.dec.decodeQueueSize > 12) { this.ready = false; this.h.needKey(); return; }   /* fell behind: wait for a keyframe, never smear */
+      const body = AVC.toAvcc(list);
+      if (!body.length) return;
+      try { this.dec.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: pts, data: body })); }
+      catch { this.ready = false; this.h.needKey(); }
+    }
+    config(sps, pps, sig) {
+      try { this.dec && this.dec.close(); } catch {}
+      const dec = this.dec = new VideoDecoder({
+        output: f => this.out(f),
+        error: () => { if (this.dec === dec) { this.ready = false; this.sig = ''; this.h.needKey(); } }
+      });
+      try { dec.configure({ codec: AVC.codec(sps), description: AVC.avcC(sps, pps), optimizeForLatency: true }); this.sig = sig; }
+      catch (e) { this.dec = null; this.h.fail('This browser can’t play the camera’s video (H.264). Try Chrome, Edge or Safari.'); }
+    }
+    out(f) {
+      if (this.pending) this.pending.close();                       /* only the newest picture is ever drawn */
+      this.pending = f;
+      if (!this.raf) {
+        this.raf = requestAnimationFrame(() => this.draw());
+        this.tmo = setTimeout(() => this.draw(), 100);               /* where frames are not being painted (a hidden or embedded view) the picture still advances */
+      }
+    }
+    draw() {
+      cancelAnimationFrame(this.raf); clearTimeout(this.tmo); this.raf = this.tmo = 0;
+      const f = this.pending; this.pending = null;
+      if (!f) return;
+      const w = f.displayWidth, h = f.displayHeight, r = this.rot, sw = r % 180 ? h : w, sh = r % 180 ? w : h, cv = this.cv, cx = this.cx;
+      if (cv.width !== sw || cv.height !== sh) { cv.width = sw; cv.height = sh; }
+      cx.setTransform(1, 0, 0, 1, 0, 0);
+      if (r) { cx.translate(sw / 2, sh / 2); cx.rotate(r * Math.PI / 180); cx.drawImage(f, -w / 2, -h / 2); }
+      else cx.drawImage(f, 0, 0);
+      f.close(); this.shown++; this.h.frame();
+    }
+  }
+
+  /* ---------- small UI helpers shared by both screens ---------- */
+  const rangeFill = el => el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
+  const dot = (id, ok) => { $e(id).className = 'dot' + (ok ? ' ok' : ''); };
+  const kindName = { MOTION: 'Motion', TAMPER: 'Camera moved', LOW_BATTERY: 'Low battery', OVERHEAT: 'Overheating', CAMERA_ERROR: 'Camera problem' };
+
+  /* ======================================================================================================
+     VIEWER
+     ====================================================================================================== */
+  function view(raw) {
+    leave(true);
+    const code = HL.norm(raw);
+    if (code.length !== 12) return toast('That code is not complete');
+    if (!window.Peer) return toast('The connection library didn’t load — check your internet');
+    const R = cur = {
+      role: 'view', code, invite: inviteOf(code), stopped: false, sess: null, net: null, dec: null, cfg: null, st: null, hello: null,
+      pend: [], seq: 0, evs: [], unread: 0, live: false, drag: false, state: 'Connecting…', since: performance.now(), keyAt: 0, timers: [], thumbs: []
+    };
+    go('lkview');
+    $e('lkev').innerHTML = ''; $e('lksheet').classList.remove('open'); badge(R);
+    $e('lkdock').dataset.on = ''; paint(R); ov(R, true);
+    if (!VDec.supported()) { ov(R, true, 'This browser can’t play Heat video', 'Open this room in Chrome, Edge or Safari 16.4 or newer, or in the Heat app.'); return; }
+    R.dec = new VDec($e('lkc'), {
+      needKey: () => needKey(R),
+      frame: () => { if (!R.live) { R.live = true; ov(R, false); paint(R); } },
+      fail: msg => ov(R, true, msg)
+    });
+    R.timers.push(setInterval(() => ui(R), 1000));
+    HL.derive(code).then(d => {
+      if (R.stopped) return;
+      ls('hl.code', code); refreshRejoin();
+      R.net = connect(d.rid, { state: s => { if (R.sess) return; R.state = s; ui(R); }, conn: (io, inbox) => onConn(R, d, io, inbox) });
+    }, () => { toast('That code is not valid'); leave(); });
+  }
+
+  async function onConn(R, d, io, inbox) {
+    if (R.stopped) return io.close();
+    R.state = 'Securing the link…'; ui(R);
+    let hs;
+    try { hs = await HL.dial(io, inbox, SELF, d.group, null); }
+    catch (e) { io.close(); return R.net && R.net.redial(e && e.auth ? 5000 : 1500); }
+    if (R.stopped) return io.close();
+    const s = R.sess = new HL.Session(io, inbox, hs, {
+      control: u => onControl(R, u),
+      media: (stream, flags, pts, data) => {
+        if (stream === ST.VIDEO) { R.rxv = (R.rxv | 0) + 1; R.dec && R.dec.feed((flags & HL.MF_KEY) !== 0, pts, data); }
+        else if (stream === ST.THUMB) addThumb(R, data);
+      },
+      closed: (reason, err) => {
+        R.last = { reason, err: err && err.message, at: Date.now() };
+        if (R.sess !== s) return;
+        R.sess = null; R.live = false; R.dec && R.dec.reset();
+        R.state = reason === 'REJECTED' ? 'That room didn’t accept this code' : reason === 'PEER_BYE' ? 'The camera went offline' : 'Reconnecting…';
+        ov(R, true); ui(R);
+        R.net && R.net.redial(reason === 'REJECTED' ? 5000 : 1000);
+      }
+    });
+    s.start();
+    s.sendControl(enc({ t: 'hello', name: (myName() || 'Browser').slice(0, 24), role: 'VIEWER', app: 'web-' + BUILD, features: ['h264'] }));
+    s.sendControl(enc({ t: 'watch', video: true, audio: false, tier: 'MAX' }));
+    for (const p of R.pend) s.sendControl(enc({ t: 'set', seq: p.seq, patch: p.patch }));   /* edits the camera never acknowledged go again */
+    R.state = 'Waiting for the picture…'; ui(R);
+  }
+
+  function needKey(R) {
+    const now = performance.now();
+    if (!R.sess || now - R.keyAt < 400) return;
+    R.keyAt = now; R.sess.sendControl(enc({ t: 'key' }), true);
+  }
+
+  function onControl(R, u) {
+    const m = dec(u); if (!m || R.stopped) return;
+    if (m.t === 'hello') R.hello = m;
+    else if (m.t === 'cfg' && m.config) { R.cfg = m.config; R.pend = R.pend.filter(p => p.seq > (m.ackSeq | 0)); }
+    else if (m.t === 'status') { R.st = m; if (m.stream) R.dec.setRotation(m.stream.rotation | 0); }
+    else if (m.t === 'alert') addAlert(R, m);
+    paint(R);
+  }
+
+  const effective = R => R.pend.reduce((c, p) => mergePatch(c, p.patch), R.cfg || {});
+
+  function sendSet(R, patch) {
+    const seq = ++R.seq;
+    R.pend.push({ seq, patch }); if (R.pend.length > 64) R.pend.shift();
+    R.sess && R.sess.sendControl(enc({ t: 'set', seq, patch }));
+    paint(R);
+  }
+
+  function ov(R, show, title, hint) {
+    if (R !== cur) return;
+    $e('lkov').classList.toggle('s', !!show);
+    if (show) {
+      $e('lkovt').textContent = title || R.state;
+      $e('lkovh').textContent = hint || (performance.now() - R.since > 25000 && !R.sess ? 'Still not there. Check the code, and that the camera is running Heat.' : '');
+    }
+  }
+
+  function ui(R) {
+    if (R !== cur || R.role !== 'view') return;
+    const up = !!R.sess, name = (R.cfg && R.cfg.label) || (R.hello && R.hello.name) || 'Camera';
+    dot('lkd', up && R.live);
+    $e('lkst').textContent = up ? (R.live ? name + (R.st && R.st.lensLabel ? ' · ' + R.st.lensLabel : '') : R.state) : R.state;
+    $e('lkms').textContent = up && R.sess.rtt >= 0 ? R.sess.rtt + ' ms' : '';
+    const bat = R.st && R.st.battery >= 0 ? R.st.battery + '%' + (R.st.charging ? ' ⚡' : '') : '';
+    $e('lkbat').textContent = bat;
+    if (!R.live) ov(R, true);
+  }
+
+  function paint(R) {
+    if (R !== cur || R.role !== 'view') return;
+    ui(R);
+    const eff = effective(R), s = R.st || {}, det = eff.detect || {}, camc = eff.camera || {};
+    $e('lkarm').classList.toggle('on', !!s.armed || s.armingIn > 0);
+    $e('lkarm').title = s.armingIn > 0 ? 'Arming in ' + s.armingIn + ' s' : s.armed ? 'Motion alerts on' : 'Motion alerts off';
+    $e('lkarmt').textContent = s.armingIn > 0 ? s.armingIn : '';
+    const sens = $e('lksens'); if (!R.drag && det.sensitivity != null) { sens.value = det.sensitivity; rangeFill(sens); }
+    $e('lktorch').hidden = !s.hasTorch; $e('lktorch').classList.toggle('on', !!camc.torch);
+    $e('lkflip').classList.toggle('on', camc.facing === 'FRONT');
+    $e('lkc').classList.toggle('mir', camc.facing === 'FRONT');
+    const lens = $e('lklens');
+    const lenses = (s.lenses || []).filter(l => l && l.ratio > 0).sort((a, b) => a.ratio - b.ratio);
+    const key = lenses.map(l => l.label + l.ratio).join('|');
+    if (lens.dataset.key !== key) {
+      lens.dataset.key = key; lens.textContent = '';
+      for (const l of lenses) { const b = document.createElement('button'); b.className = 'b lkz'; b.textContent = l.label || (l.ratio + '×'); b.dataset.z = l.ratio; b.title = 'Zoom ' + l.label; lens.appendChild(b); }
+    }
+    lens.hidden = !lenses.length;
+    const z = camc.zoom || 1;
+    for (const b of lens.children) b.classList.toggle('on', Math.abs(+b.dataset.z - z) < 0.12);
+    const zs = $e('lkzoom'); if (!R.drag) { zs.value = Math.round(Math.log(clamp(z, 0.5, 10) / 0.5) / Math.log(20) * 100); rangeFill(zs); }
+    $e('lkzt').textContent = (Math.round(z * 10) / 10) + '×' + (s.digitalZoom ? ' digital' : '');
+  }
+
+  function addAlert(R, m) {
+    const e = { id: m.id, kind: m.kind, ts: m.atMs || Date.now(), pct: m.changedPct || 0, img: null };
+    R.evs.unshift(e); R.evs.length = Math.min(R.evs.length, 50);
+    R.lastAlert = { e, at: performance.now() };
+    if (!$e('lksheet').classList.contains('open')) { R.unread++; badge(R); }
+    toast((kindName[m.kind] || 'Alert') + ' · ' + tm(e.ts));
+    if (m.kind === 'MOTION' || m.kind === 'TAMPER') { chime(); !muted && navigator.vibrate && navigator.vibrate([120, 60, 120]); }
+    if (document.hidden && window.Notification && Notification.permission === 'granted') { try { new Notification(kindName[m.kind] || 'Alert', { body: tm(e.ts) }); } catch {} }
+    drawEvents(R);
+  }
+  function addThumb(R, data) {                                     /* the picture that goes with the newest alert */
+    const url = URL.createObjectURL(new Blob([data], { type: 'image/jpeg' }));
+    const a = R.lastAlert && performance.now() - R.lastAlert.at < 6000 && !R.lastAlert.e.img ? R.lastAlert.e : null;
+    if (a) { a.img = url; R.thumbs.push(url); drawEvents(R); toast((kindName[a.kind] || 'Alert') + ' · ' + tm(a.ts), url); }
+    else { R.evs.unshift({ id: 0, kind: 'MOTION', ts: Date.now(), pct: 0, img: url }); R.thumbs.push(url); drawEvents(R); }
+  }
+  function drawEvents(R) {
+    if (R !== cur) return;
+    $e('lkev').innerHTML = R.evs.length ? R.evs.map((e, i) => `<div class="ev" data-i="${i}" title="Tap to save this picture">${e.img ? `<img src="${e.img}" alt="">` : '<img alt="">'}<div><b>${kindName[e.kind] || 'Alert'}</b><small>${tm(e.ts)}${e.pct ? ' · ' + Math.round(e.pct) + '% changed' : ''}</small></div></div>`).join('') : '<p class="none">Nothing yet. Alerts appear here with a picture.</p>';
+  }
+  function badge(R) { const b = $e('lkbd'); b.textContent = R && R.unread ? R.unread : ''; b.style.display = R && R.unread ? 'grid' : 'none'; }
+
+  /* ======================================================================================================
+     CAMERA (this page is the camera)
+     ====================================================================================================== */
+  const CAM = { w: 640, h: 480, fps: 15, bps: 1200000 };
+
+  async function host() {
+    leave(true);
+    if (!window.Peer) return toast('The connection library didn’t load — check your internet');
+    if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return toast('This browser can’t send video to the Heat app. Use Chrome, Edge or Safari 16.4 or newer.', undefined, 7000);
+    let code = HL.norm(ls('hl.host') || ''); if (code.length !== 12) { code = HL.newCode(); ls('hl.host', code); }
+    const R = cur = {
+      role: 'cam', code, invite: inviteOf(code), stopped: false, net: null, stream: null, enc: null, viewers: new Map(), timers: [], state: 'Starting camera…',
+      armed: false, armingIn: 0, armAt: 0, rev: 1, sens: 50, facing: 'environment', label: (myName() || 'Web camera').slice(0, 24), zone: { x: 0.34, y: 0.34, width: 0.32, height: 0.32 },
+      zoom: 1, torch: false, frame: 0, lastKey: 0, wantKey: true, desc: null, annexb: true, sent: 0, hits: 0, prev: null, lastAlert: 0, alertId: Date.now(), flush: 0, battery: -1, charging: false
+    };
+    go('lkcam'); $e('lkcmt').firstElementChild.style.transform = 'scaleX(0)';
+    paintCam(R);
+    let d;
+    try { d = await HL.derive(code); } catch { toast('Couldn’t set up the room'); return leave(); }
+    if (R.stopped) return;
+    try { await startCapture(R); } catch { if (!R.stopped) { toast('Camera unavailable — allow access (https needed on phones)'); leave(); } return; }
+    if (R.stopped) return;
+    const ok = await startEncoder(R);
+    if (!ok || R.stopped) return;
+    R.net = listen(d.rid, {
+      state: s => { R.state = s === 'up' ? 'Ready — waiting for viewers' : s === 'taken' ? 'This room is open in another tab' : s; paintCam(R); },
+      conn: (io, inbox) => onViewer(R, d, io, inbox)
+    });
+    if (navigator.getBattery) navigator.getBattery().then(b => { const f = () => { R.battery = Math.round(b.level * 100); R.charging = b.charging; }; f(); b.addEventListener('levelchange', f); b.addEventListener('chargingchange', f); }).catch(() => {});
+    R.timers.push(setInterval(() => tickCam(R), 1000));
+    paintCam(R);
+    if (!R.shownInvite) { R.shownInvite = true; invite(); }
+  }
+
+  async function startCapture(R) {
+    if (R.stream) R.stream.getTracks().forEach(t => t.stop());
+    const s = R.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: R.facing, width: { ideal: CAM.w }, height: { ideal: CAM.h }, frameRate: { ideal: CAM.fps } }, audio: false });
+    if (R.stopped) { s.getTracks().forEach(t => t.stop()); return; }
+    const v = $e('lkv'); v.srcObject = s; v.play().catch(() => {});
+    await new Promise(r => { if (v.videoWidth) r(); else v.onloadedmetadata = () => r(); });
+    const t = s.getVideoTracks()[0], caps = t.getCapabilities ? t.getCapabilities() : {};
+    R.hasTorch = !!caps.torch; R.zoomRange = caps.zoom || null;
+    R.w = v.videoWidth; R.h = v.videoHeight;
+    R.mc = document.createElement('canvas'); R.mc.width = 64; R.mc.height = 48;
+    R.mx = R.mc.getContext('2d', { willReadFrequently: true });
+    R.tc = document.createElement('canvas'); R.tc.width = 320; R.tc.height = Math.round(320 * R.h / R.w);
+    R.tx = R.tc.getContext('2d');
+    R.prev = null;
+    if (R.enc) { await startEncoder(R); }
+  }
+
+  async function startEncoder(R) {
+    try { R.enc && R.enc.close(); } catch {}
+    const base = { codec: 'avc1.42001f', width: R.w, height: R.h, bitrate: CAM.bps, framerate: CAM.fps, latencyMode: 'realtime' };
+    let cfg = { ...base, avc: { format: 'annexb' } };
+    let sup = null;
+    try { sup = await VideoEncoder.isConfigSupported(cfg); } catch {}
+    R.annexb = !!(sup && sup.supported);
+    if (!R.annexb) {
+      cfg = { ...base };
+      try { sup = await VideoEncoder.isConfigSupported(cfg); } catch { sup = null; }
+      if (!sup || !sup.supported) { toast('This browser can’t encode H.264, which the Heat app needs. Use Chrome, Edge or Safari.', undefined, 8000); leave(); return false; }
+    }
+    if (R.stopped) return false;
+    const e = R.enc = new VideoEncoder({ output: (chunk, meta) => onChunk(R, chunk, meta), error: err => { if (R.enc === e) { R.wantKey = true; toast('Video encoder problem — restarting'); setTimeout(() => !R.stopped && startEncoder(R), 500); } } });
+    e.configure(cfg);
+    R.wantKey = true;
+    clearInterval(R.pump);
+    R.pump = setInterval(() => pump(R), 1000 / CAM.fps);
+    R.timers.push(R.pump);
+    return true;
+  }
+
+  function pump(R) {
+    const v = $e('lkv');
+    if (R.stopped || !R.enc || R.enc.state !== 'configured' || !v.videoWidth) return;
+    if (v.videoWidth !== R.w || v.videoHeight !== R.h) { R.w = v.videoWidth; R.h = v.videoHeight; startEncoder(R); return; }
+    if (R.enc.encodeQueueSize > 3) return;                          /* behind: skip a picture instead of lagging */
+    const n = R.frame++;
+    if (n % 2 === 0) motion(R, v);
+    const watching = [...R.viewers.values()].some(x => x.watch);
+    if (!watching) { R.wantKey = true; return; }
+    const now = performance.now(), key = R.wantKey || now - R.lastKey > 2000;
+    if (key) { R.lastKey = now; R.wantKey = false; }
+    const f = new VideoFrame(v, { timestamp: Math.round(now * 1000) });
+    try { R.enc.encode(f, { keyFrame: key }); } catch { R.wantKey = true; }
+    f.close();
+  }
+
+  function onChunk(R, chunk, meta) {
+    if (R.stopped) return;
+    let data = new Uint8Array(chunk.byteLength); chunk.copyTo(data);
+    const key = chunk.type === 'key';
+    if (meta && meta.decoderConfig && meta.decoderConfig.description) R.desc = new Uint8Array(meta.decoderConfig.description);
+    if (!R.annexb) data = AVC.fromAvcc(data, R.desc, key);
+    for (const v of R.viewers.values()) if (v.watch && v.sess) { if (v.sess.sendMedia(ST.VIDEO, key ? HL.MF_KEY : 0, Math.round(chunk.timestamp), data)) R.sent++; }
+  }
+
+  /* Frame differencing on a 64x48 grayscale copy, inside the tracker box. Plain and cheap; tuned by sensitivity. */
+  function motion(R, v) {
+    R.mx.drawImage(v, 0, 0, 64, 48);
+    const px = R.mx.getImageData(0, 0, 64, 48).data, g = new Float32Array(64 * 48);
+    for (let i = 0, j = 0; i < px.length; i += 4, j++) g[j] = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+    const p = R.prev; R.prev = g;
+    if (!p) return;
+    const z = R.zone, x0 = Math.floor(z.x * 64), x1 = Math.ceil((z.x + z.width) * 64), y0 = Math.floor(z.y * 48), y1 = Math.ceil((z.y + z.height) * 48);
+    let mean = 0, n = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { mean += g[y * 64 + x] - p[y * 64 + x]; n++; }
+    mean = n ? mean / n : 0;                                        /* a light switch moves every pixel the same way: take that out */
+    const thr = 44 - R.sens * 0.34;                                 /* 44 .. 10 levels */
+    let hit = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (Math.abs(g[y * 64 + x] - p[y * 64 + x] - mean) > thr) hit++;
+    const ratio = n ? hit / n : 0, need = 0.12 - R.sens * 0.00105;   /* 12% .. 1.5% of the box */
+    const m = Math.min(1, ratio / Math.max(need, 0.001) / 2);
+    $e('lkcmt').firstElementChild.style.transform = 'scaleX(' + m + ')';
+    if (ratio >= need) R.hits++; else R.hits = Math.max(0, R.hits - 1);
+    if (R.hits >= 2 && R.armed && R.armingIn <= 0 && Date.now() - R.lastAlert > 5000) { R.hits = 0; R.lastAlert = Date.now(); raise(R, ratio * 100); }
+  }
+
+  function raise(R, pct) {
+    const msg = enc({ t: 'alert', id: ++R.alertId, kind: 'MOTION', atMs: Date.now(), changedPct: Math.round(pct * 10) / 10, escalation: 0 });
+    R.tx.drawImage($e('lkv'), 0, 0, R.tc.width, R.tc.height);
+    for (const v of R.viewers.values()) v.sess && v.sess.sendControl(msg);
+    R.tc.toBlob(async b => {
+      if (!b || R.stopped) return;
+      const u = new Uint8Array(await b.arrayBuffer());
+      for (const v of R.viewers.values()) v.sess && v.sess.sendMedia(ST.THUMB, 0, 0, u);
+    }, 'image/jpeg', 0.6);
+    $e('lkv').classList.add('hit'); setTimeout(() => $e('lkv').classList.remove('hit'), 900);
+    chime();
+  }
+
+  function cfgOf(R) {
+    return { label: R.label, camera: { facing: R.facing === 'user' ? 'FRONT' : 'REAR', zoom: R.zoom, torch: R.torch }, detect: { sensitivity: R.sens, cooldownSec: 5, persistence: 2, zone: R.zone } };
+  }
+  function statusOf(R) {
+    const s = { t: 'status', armed: R.armed, armingIn: Math.max(0, R.armingIn), battery: R.battery, charging: R.charging, streaming: true, hasTorch: !!R.hasTorch,
+      stream: { width: R.w, height: R.h, fps: CAM.fps, bitrate: CAM.bps, codec: 'avc', rotation: 0 }, lensLabel: R.zoom !== 1 ? (Math.round(R.zoom * 10) / 10) + '×' : '', lenses: [] };
+    return s;
+  }
+  function pushCfg(R, v) { v.sess && v.sess.sendControl(enc({ t: 'cfg', rev: R.rev, ackSeq: v.ack | 0, config: cfgOf(R) })); }
+  function pushAll(R) { clearTimeout(R.flush); R.flush = setTimeout(() => { for (const v of R.viewers.values()) pushCfg(R, v); }, 70); }
+  function pushStatus(R, reliable) { const m = enc(statusOf(R)); for (const v of R.viewers.values()) v.sess && v.sess.sendControl(m, reliable); }
+
+  async function onViewer(R, d, io, inbox) {
+    if (R.stopped) return io.close();
+    if (R.viewers.size >= 8) return io.close();
+    let hs;
+    try { hs = await HL.accept(io, inbox, SELF, d.group); } catch { io.close(); return; }
+    if (R.stopped) return io.close();
+    const id = HL.hex(hs.peer), old = R.viewers.get(id);
+    if (old && old.sess) old.sess.close('LOCAL');                   /* the same device came back: the new link replaces the old */
+    const v = { id, sess: null, watch: false, ack: 0, name: 'Viewer' };
+    R.viewers.set(id, v);
+    v.sess = new HL.Session(io, inbox, hs, {
+      control: u => onViewerMsg(R, v, u),
+      needKey: () => { R.wantKey = true; },
+      closed: (reason, err) => { R.last = { reason, err: err && err.message, at: Date.now(), who: v.name }; if (R.viewers.get(id) === v) R.viewers.delete(id); paintCam(R); }
+    });
+    v.sess.start(); paintCam(R);
+  }
+
+  function onViewerMsg(R, v, u) {
+    const m = dec(u); if (!m || R.stopped) return;
+    if (m.t === 'hello') {
+      v.name = String(m.name || 'Viewer').slice(0, 24); paintCam(R);
+      v.sess.sendControl(enc({ t: 'hello', name: R.label, role: 'CAMERA', app: 'web-' + BUILD, features: ['h264', 'cfg-patch', 'alerts'] }));
+      pushCfg(R, v); v.sess.sendControl(enc(statusOf(R)));
+    } else if (m.t === 'watch') { v.watch = !!m.video; if (v.watch) R.wantKey = true; }
+    else if (m.t === 'key') R.wantKey = true;
+    else if (m.t === 'arm') setArmed(R, !!m.armed, m.delaySec | 0);
+    else if (m.t === 'set' && m.patch && typeof m.patch === 'object') {
+      v.ack = m.seq | 0;
+      const c = mergePatch(cfgOf(R), m.patch), det = c.detect || {}, cm = c.camera || {};
+      R.sens = clamp(Math.round(+det.sensitivity || R.sens), 1, 100);
+      if (det.zone && typeof det.zone === 'object') {
+        const w = clamp(+det.zone.width || R.zone.width, 0.06, 1), h = clamp(+det.zone.height || R.zone.height, 0.06, 1);
+        R.zone = { x: clamp(+det.zone.x || 0, 0, 1 - w), y: clamp(+det.zone.y || 0, 0, 1 - h), width: w, height: h };
+      }
+      if (typeof c.label === 'string') R.label = c.label.trim().slice(0, 24) || R.label;
+      if (cm.torch !== undefined && !!cm.torch !== R.torch) setTrack(R, { torch: !!cm.torch }, () => { R.torch = !!cm.torch; });
+      if (cm.zoom !== undefined && +cm.zoom !== R.zoom) { const z = clamp(+cm.zoom || 1, R.zoomRange ? R.zoomRange.min : 1, R.zoomRange ? R.zoomRange.max : 1); setTrack(R, { zoom: z }, () => { R.zoom = z; }); }
+      if (cm.facing && (cm.facing === 'FRONT') !== (R.facing === 'user')) { R.facing = cm.facing === 'FRONT' ? 'user' : 'environment'; startCapture(R).then(() => { R.rev++; pushAll(R); pushStatus(R, true); }).catch(() => {}); }
+      R.rev++; pushAll(R); paintCam(R);
+    }
+  }
+  function setTrack(R, adv, ok) {
+    const t = R.stream && R.stream.getVideoTracks()[0]; if (!t) return;
+    t.applyConstraints({ advanced: [adv] }).then(() => { ok(); R.rev++; pushAll(R); }).catch(() => {});
+  }
+  function setArmed(R, on, delay) {
+    R.armed = on; R.armingIn = on && delay > 0 ? delay : 0; R.armAt = Date.now() + R.armingIn * 1000; R.hits = 0;
+    paintCam(R); pushStatus(R, true);
+  }
+  function tickCam(R) {
+    if (R.armingIn > 0) { R.armingIn = Math.max(0, Math.ceil((R.armAt - Date.now()) / 1000)); }
+    pushStatus(R, false); paintCam(R);
+  }
+  function paintCam(R) {
+    if (R !== cur || R.role !== 'cam') return;
+    const n = [...R.viewers.values()].filter(v => v.sess).length;
+    dot('lkcd', R.state.startsWith('Ready'));
+    $e('lkcst').textContent = n ? R.label + ' · ' + n + (n === 1 ? ' viewer' : ' viewers') : R.state;
+    $e('lkcn').textContent = n ? '' : fmtCode(R.code);
+    $e('lkcarm').classList.toggle('on', R.armed); $e('lkcarmt').textContent = R.armingIn > 0 ? R.armingIn : '';
+    const s = $e('lkcsens'); s.value = R.sens; rangeFill(s);
+  }
+  const fmtCode = c => HL.fmt(c);
+
+  /* ---------- leaving, inviting ---------- */
+  function leave(quiet) {
+    const R = cur; cur = null;
+    if (R) {
+      R.stopped = true; R.timers.forEach(clearInterval); clearTimeout(R.flush); clearTimeout(R.sensT);
+      try { R.net && R.net.stop(); } catch {}
+      if (R.sess) { try { R.sess.bye(); } catch {} }
+      for (const v of (R.viewers ? R.viewers.values() : [])) { try { v.sess && v.sess.bye(); } catch {} }
+      try { R.dec && R.dec.close(); } catch {}
+      try { R.enc && R.enc.close(); } catch {}
+      if (R.stream) R.stream.getTracks().forEach(t => t.stop());
+      (R.thumbs || []).forEach(u => URL.revokeObjectURL(u));
+      $e('lkv').srcObject = null; $e('lkov').classList.remove('s'); $e('lksheet').classList.remove('open');
+    }
+    if (!quiet) { go('home'); refreshChip(); refreshRejoin(); }
+  }
+  function invite() {
+    const R = cur; if (!R) return;
+    const q = $('#qr'); $('#pc').textContent = HL.fmt(R.code); q.hidden = true;
+    if (window.qrcode) { try { const z = qrcode(0, 'M'); z.addData(R.invite); z.make(); q.src = z.createDataURL(6, 0); q.hidden = false; } catch {} }
+    $('#pt').textContent = R.role === 'cam' ? 'Share this camera' : 'Invite someone to watch';
+    $('#pkr').hidden = true;
+    $('#ph').textContent = 'Anyone with the Heat app or this page can watch with this code. It is also the key: nobody without it can join, and the server only sees a hash.';
+    $('#pl').hidden = false; $('#ps').hidden = !navigator.share; $('#pop').classList.add('s');
+  }
+  function refreshRejoin() {
+    const c = HL.norm(ls('hl.code') || ''), b = $('#lkre');
+    b.hidden = c.length !== 12;
+    if (!b.hidden) { b.textContent = 'Rejoin ' + HL.fmt(c); b.onclick = () => view(c); }
+  }
+
+  /* ---------- wiring ---------- */
+  const sel = id => $e(id);
+  sel('lkx').onclick = () => leave(); sel('lkcx').onclick = () => leave();
+  sel('lkinv').onclick = invite; sel('lkcinv').onclick = invite;
+  sel('lkfs').onclick = () => fs();
+  sel('lkact').onclick = () => { const R = cur; if (!R) return; const s = sel('lksheet'); s.classList.toggle('open'); if (s.classList.contains('open')) { R.unread = 0; badge(R); } };
+  $('#lksheet .sx').onclick = () => sel('lksheet').classList.remove('open');
+  sel('lkarm').onclick = () => { const R = cur; if (!R || R.role !== 'view' || !R.sess) return; R.sess.sendControl(enc({ t: 'arm', armed: !(R.st && (R.st.armed || R.st.armingIn > 0)), delaySec: null })); };
+  sel('lkcarm').onclick = () => { const R = cur; if (R && R.role === 'cam') setArmed(R, !R.armed, 0); };
+  sel('lksens').oninput = e => {
+    const R = cur; if (!R || R.role !== 'view') return;
+    rangeFill(e.target); R.drag = true; clearTimeout(R.sensT);
+    R.sensT = setTimeout(() => sendSet(R, { detect: { sensitivity: +e.target.value } }), 60);
+  };
+  sel('lksens').onchange = () => { const R = cur; if (R) R.drag = false; };
+  sel('lkcsens').oninput = e => { const R = cur; if (!R || R.role !== 'cam') return; R.sens = +e.target.value; rangeFill(e.target); R.rev++; pushAll(R); };
+  sel('lkzoom').oninput = e => {
+    const R = cur; if (!R || R.role !== 'view') return;
+    const z = Math.round(0.5 * Math.pow(20, +e.target.value / 100) * 10) / 10;
+    rangeFill(e.target); R.drag = true; clearTimeout(R.zoomT);
+    R.zoomT = setTimeout(() => sendSet(R, { camera: { zoom: z } }), 60);
+  };
+  sel('lkzoom').onchange = () => { const R = cur; if (R) R.drag = false; };
+  sel('lklens').onclick = e => { const R = cur, b = e.target.closest('button'); if (R && b) sendSet(R, { camera: { zoom: +b.dataset.z } }); };
+  sel('lktorch').onclick = () => { const R = cur; if (R && R.role === 'view') sendSet(R, { camera: { torch: !((effective(R).camera || {}).torch) } }); };
+  sel('lkflip').onclick = () => {
+    const R = cur; if (!R) return;
+    if (R.role === 'view') sendSet(R, { camera: { facing: (effective(R).camera || {}).facing === 'FRONT' ? 'REAR' : 'FRONT' } });
+    else { R.facing = R.facing === 'user' ? 'environment' : 'user'; startCapture(R).then(() => { R.rev++; pushAll(R); }).catch(() => toast('Couldn’t switch cameras')); }
+  };
+  sel('lkcflip').onclick = sel('lkflip').onclick;
+  sel('lksnap').onclick = () => {
+    const c = sel('lkc'); if (!c.width) return;
+    c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'heat-' + Date.now() + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Picture saved'); }, 'image/png');
+  };
+  sel('lkev').onclick = e => {
+    const R = cur, r = e.target.closest('.ev'), x = R && r && R.evs[+r.dataset.i];
+    if (x && x.img) { const a = document.createElement('a'); a.href = x.img; a.download = 'heat-alert-' + x.ts + '.jpg'; a.click(); }
+  };
+  sel('lkovx').onclick = () => leave();
+  addEventListener('beforeunload', e => { if (cur && cur.role === 'cam' && cur.viewers.size) { e.preventDefault(); e.returnValue = ''; } });
+  document.addEventListener('visibilitychange', () => { const R = cur; if (R && R.role === 'view' && !document.hidden) needKey(R); });
+
+  return {
+    view, host, leave, invite, refreshRejoin,
+    get active() { return !!cur; },
+    info() { return cur ? { url: cur.invite, code: cur.code } : null; },
+    debug() { return cur ? { role: cur.role, last: cur.last, state: cur.state, live: cur.live, rtt: cur.sess && cur.sess.rtt, viewers: cur.viewers ? cur.viewers.size : undefined, sent: cur.sent, decoded: cur.dec && cur.dec.shown, rxv: cur.rxv, dec: cur.dec && { ready: cur.dec.ready, state: cur.dec.dec && cur.dec.dec.state, q: cur.dec.dec && cur.dec.dec.decodeQueueSize } } : null; }
+  };
+})();
+/* ===== link:rooms:end ===== */
 
 /* ===== extras ===== */
 /* ===== extras: menus, settings, security panel, recording, reactions, install, offline, boot ===== */
@@ -1661,7 +2372,7 @@ if(!E.media)lockPick=false;
 
 /* ---------- more menu ---------- */
 const moreEl=$('#more');
-const inRoom=()=>document.body.dataset.s!=='home';
+const inRoom=()=>!['home','lkview','lkcam'].includes(document.body.dataset.s);
 const hasLive=()=>kind==='call'?!!remoteOn:!!liveOn;
 function paintMore(){
  $('#mi-inv').hidden=mode!=='host';
@@ -1821,7 +2532,9 @@ $('#evl').addEventListener('click',e=>{const r=e.target.closest('.ev'),x=r&&evs[
 /* ---------- boot ---------- */
 loadIce();
 {const sm=/[?&]start=(call|watch)/.exec(location.search);if(sm){pick=sm[1];applyPick();try{history.replaceState(null,'',location.pathname+location.hash)}catch{}}}   /* manifest shortcuts: preselect, never auto-start the camera */
-{const h=location.hash,hm=/(?:^|[#&])join=([A-Z2-9]{8})/.exec(h),hk=/[#&]k=([A-Z2-9]{12})/.exec(h);
- if(hm){try{history.replaceState(null,'',location.pathname+location.search)}catch{}viewStart(hm[1],hk?hk[1]:'')}}
+{const h=location.hash,hm=/(?:^|[#&])join=([A-Z2-9]{8})/.exec(h),hk=/[#&]k=([A-Z2-9]{12})/.exec(h),lm=/(?:^|[#&])link=([A-Za-z2-9-]{12,16})/.exec(h);
+ LK.refreshRejoin();
+ if(lm&&HL.norm(lm[1]).length===12){try{history.replaceState(null,'',location.pathname+location.search)}catch{}LK.view(lm[1])}
+ else if(hm){try{history.replaceState(null,'',location.pathname+location.search)}catch{}viewStart(hm[1],hk?hk[1]:'')}}
 </script>
 </body></html>

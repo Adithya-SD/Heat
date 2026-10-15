@@ -2,8 +2,8 @@
    Run: node tests/hl-test.js
    The cross-language half (this code against the real Kotlin implementation) is the JUnit test JsInteropTest. */
 const assert = require('assert');
-const { loadHL } = require('./lib-hl');
-const HL = loadHL();
+const { loadAll } = require('./lib-hl');
+const { HL, AVC } = loadAll();
 
 let pass = 0, fail = 0;
 async function test(name, fn) {
@@ -111,6 +111,57 @@ async function connect(code = 'ABCDEFGHJKMN', codeB = code, hs = {}) {
     await until(() => x.cs.rtt >= 0, 4000);
     assert.ok(x.cs.rtt >= 0 && x.cs.rtt < 500);
     x.cs.close(); x.ss.close();
+  });
+
+  await test('generated codes are 12 valid symbols, all different, all derivable', async () => {
+    const seen = new Set();
+    for (let i = 0; i < 300; i++) { const c = HL.newCode(); assert.strictEqual(c.length, 12); assert.strictEqual(HL.norm(c), c); seen.add(c); }
+    assert.ok(seen.size > 295);
+    await HL.derive(HL.newCode());
+  });
+
+  await test('a peer that hangs up before READY is a refusal (wrong key), not a bad link', async () => {
+    const [c, s] = pair();
+    const hs = { peer: id(2), awaitReady: true, tx: new HL.Aead(new Uint8Array(32), new Uint8Array(4)), rx: new HL.Aead(new Uint8Array(32), new Uint8Array(4)) };
+    const closed = [];
+    const sess = new HL.Session(c.io, c.inbox, hs, { closed: r => closed.push(r) });
+    sess.start();
+    s.io.close();                                  // the other end just disappears
+    await until(() => closed.length === 1);
+    assert.strictEqual(closed[0], 'REJECTED');
+  });
+
+  const annexb = (...parts) => HL.cat(...parts.map(p => HL.cat(p.long ? Uint8Array.of(0, 0, 0, 1) : Uint8Array.of(0, 0, 1), Uint8Array.from(p.b))));
+  const SPS = [0x67, 0x42, 0xc0, 0x1f, 0x8c, 0x68], PPS = [0x68, 0xce, 0x3c, 0x80], IDR = [0x65, 0x88, 0x84, 0x00, 0x33], P = [0x41, 0x9a, 0x02, 0x11];
+
+  await test('h264: Annex-B is split into NAL units whatever the start code length', () => {
+    const list = AVC.nals(annexb({ b: SPS, long: 1 }, { b: PPS }, { b: IDR, long: 1 }));
+    assert.deepStrictEqual(Array.from(list, n => AVC.type(n)), [7, 8, 5]);
+    assert.deepStrictEqual(Array.from(list[0]), SPS);
+    assert.deepStrictEqual(Array.from(list[2]), IDR);
+    assert.ok(AVC.isKey(list));
+    assert.ok(!AVC.isKey(AVC.nals(annexb({ b: P, long: 1 }))));
+    assert.strictEqual(AVC.nals(new Uint8Array(0)).length, 0);
+  });
+
+  await test('h264: codec string, avcC and length-prefixed slices are what WebCodecs expects', () => {
+    assert.strictEqual(AVC.codec(Uint8Array.from(SPS)), 'avc1.42c01f');
+    const c = AVC.avcC(Uint8Array.from(SPS), Uint8Array.from(PPS));
+    assert.strictEqual(c.length, 11 + SPS.length + PPS.length);
+    const back = AVC.parseAvcC(c);
+    assert.deepStrictEqual(Array.from(back.sps[0]), SPS);
+    assert.deepStrictEqual(Array.from(back.pps[0]), PPS);
+    assert.strictEqual(back.len, 4);
+    const data = AVC.toAvcc(AVC.nals(annexb({ b: SPS, long: 1 }, { b: PPS, long: 1 }, { b: IDR, long: 1 })));
+    assert.deepStrictEqual(Array.from(data), [0, 0, 0, IDR.length, ...IDR]);       // only the slice: parameter sets are in the description
+  });
+
+  await test('h264: an encoder that gives length-prefixed output converts back to Annex-B, parameter sets first on a keyframe', () => {
+    const c = AVC.avcC(Uint8Array.from(SPS), Uint8Array.from(PPS));
+    const key = AVC.nals(AVC.fromAvcc(Uint8Array.from([0, 0, 0, IDR.length, ...IDR]), c, true));
+    assert.deepStrictEqual(Array.from(key, n => AVC.type(n)), [7, 8, 5]);
+    const delta = AVC.nals(AVC.fromAvcc(Uint8Array.from([0, 0, 0, P.length, ...P]), c, false));
+    assert.deepStrictEqual(Array.from(delta, n => AVC.type(n)), [1]);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
