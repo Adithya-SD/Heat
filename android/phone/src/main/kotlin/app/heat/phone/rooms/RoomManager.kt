@@ -60,7 +60,12 @@ class RoomManager(
     private val file = File(File(appContext.filesDir, "heat").apply { mkdirs() }, "rooms.json")
     private val net by lazy { RoomNet(appContext, scope) }
 
-    private var stored: StoredRooms = runCatching { ProtoJson.decodeFromString(StoredRooms.serializer(), file.readText()) }.getOrNull() ?: StoredRooms()
+    private var stored: StoredRooms = (runCatching { ProtoJson.decodeFromString(StoredRooms.serializer(), file.readText()) }.getOrNull() ?: StoredRooms())
+        .let { s ->
+            // Every code is 8 symbols now. A phone that saved the old 12-symbol code gets a fresh short one, once; the old
+            // code stops working (typing a 12-symbol code someone else still holds is still accepted when joining).
+            if (s.code.isNotEmpty() && s.code.length != RoomCode.LENGTH) s.copy(code = RoomCode.generate()).also { save(it) } else s
+        }
 
     private val _hosting = MutableStateFlow(HostingState(stored.code, false))
     val hosting: StateFlow<HostingState> = _hosting.asStateFlow()
@@ -132,8 +137,9 @@ class RoomManager(
         save()
     }
 
-    private fun save() {
-        val snapshot = stored
+    private fun save() = save(stored)
+
+    private fun save(snapshot: StoredRooms) {
         scope.launch(Dispatchers.IO) {
             runCatching { file.writeText(ProtoJson.encodeToString(StoredRooms.serializer(), snapshot)) }
         }
