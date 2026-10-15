@@ -52,9 +52,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        app.heat.platform.PeerLauncher.announce(this, intent.getBooleanExtra(app.heat.platform.PeerLauncher.EXTRA_FROM_PEER, false))
         readInvite(intent)
         setContent { PhoneRoot(invite) }
     }
+
+    override fun onStart() { super.onStart(); app.heat.platform.PeerLauncher.onScreen = true }
+    override fun onStop() { app.heat.platform.PeerLauncher.onScreen = false; super.onStop() }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)

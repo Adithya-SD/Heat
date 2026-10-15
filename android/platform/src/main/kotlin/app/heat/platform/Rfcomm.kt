@@ -80,7 +80,7 @@ class RfcommDialer(context: Context, private val hints: Hints) : Dialer {
     private suspend fun connect(adapter: android.bluetooth.BluetoothAdapter, device: BluetoothDevice): ByteDuplex =
         withContext(Dispatchers.IO) {
             val t0 = android.os.SystemClock.elapsedRealtime()
-            adapter.cancelDiscovery()                 // a running scan makes connecting several times slower
+            runCatching { adapter.cancelDiscovery() }                 // a running scan makes connecting several times slower
             val socket = device.createInsecureRfcommSocketToServiceRecord(RfcommNames.SERVICE_UUID)
             var ok = false
             try {

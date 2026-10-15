@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
         // Someone looking at a camera does not want the screen to doze mid-glance.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hub = (application as HeatWearApp).hub
+        app.heat.platform.PeerLauncher.announce(this, intent.getBooleanExtra(app.heat.platform.PeerLauncher.EXTRA_FROM_PEER, false))
         setContent { WatchRoot(hub) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        app.heat.platform.PeerLauncher.onScreen = true
         hub.setForeground(true)
         // Keep the process (and the link) alive for a while after we leave: the next open is then instant.
         runCatching { startForegroundService(android.content.Intent(this, WatchLinkService::class.java)) }
@@ -78,6 +80,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        app.heat.platform.PeerLauncher.onScreen = false
         hub.setForeground(false)
         super.onStop()
     }

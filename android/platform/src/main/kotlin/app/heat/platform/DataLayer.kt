@@ -151,6 +151,10 @@ open class HeatDataLayerService : WearableListenerService() {
         }
     }
 
+    override fun onMessageReceived(event: com.google.android.gms.wearable.MessageEvent) {
+        if (event.path == "/heat/open") PeerLauncher.opened(applicationContext)
+    }
+
     override fun onDataChanged(events: DataEventBuffer) {
         for (event in events) {
             val item = event.dataItem
