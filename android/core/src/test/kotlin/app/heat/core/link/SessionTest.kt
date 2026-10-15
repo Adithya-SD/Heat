@@ -273,8 +273,8 @@ class SessionTest {
 
         val frame = ByteArray(2000)
         // key, then deltas faster than the link can drain
-        for (i in 0 until 12) {
-            val flags = if (i == 0 || i == 9) MediaFlags.KEYFRAME else 0
+        for (i in 0 until 24) {
+            val flags = if (i == 0 || i == 17) MediaFlags.KEYFRAME else 0
             p.viewer.sendMedia(Stream.VIDEO, flags, i.toLong(), frame, 0, frame.size)
             advanceTimeBy(5); runCurrent()
         }
@@ -296,6 +296,27 @@ class SessionTest {
     }
 
     @Test
+    fun a_keyframe_written_slowly_does_not_break_the_chain_it_started() = runTest {
+        // The old single slot broke here: while a big keyframe is being written, the next frames arrive and used to
+        // collide with each other. A short queue holds them in order, so the picture never freezes.
+        val link = MemoryLink(capacityChunks = 2)
+        val p = connect(link)
+        link.faultsA.stalled = true
+        val big = ByteArray(2000)
+        p.viewer.sendMedia(Stream.VIDEO, MediaFlags.KEYFRAME, 0L, big, 0, big.size)
+        advanceTimeBy(5); runCurrent()
+        for (i in 1..5) {
+            assertTrue(p.viewer.sendMedia(Stream.VIDEO, 0, i * 33_000L, big, 0, big.size))
+            advanceTimeBy(33); runCurrent()
+        }
+        assertFalse("no break, so no keyframe request", p.viewer.awaitingKeyframe)
+        assertEquals(0, p.vr.dropped)
+        link.faultsA.stalled = false
+        advanceTimeBy(1_000); runCurrent()
+        assertEquals(listOf(0L) + (1..5).map { it * 33_000L }, p.cr.media.map { it.third })
+    }
+
+    @Test
     fun video_resumes_after_a_drop_as_soon_as_a_keyframe_is_offered() = runTest {
         val link = MemoryLink(capacityChunks = 2)
         val p = connect(link)
@@ -303,10 +324,12 @@ class SessionTest {
         link.faultsA.stalled = true
         p.viewer.sendMedia(Stream.VIDEO, MediaFlags.KEYFRAME, 1, frame, 0, frame.size)
         advanceTimeBy(20); runCurrent()
-        p.viewer.sendMedia(Stream.VIDEO, 0, 2, frame, 0, frame.size)
-        p.viewer.sendMedia(Stream.VIDEO, 0, 3, frame, 0, frame.size) // chain broken here
+        // The writer is stuck on the keyframe; deltas queue in order (up to the cap) and the next one breaks the chain.
+        for (i in 2L..11L) assertTrue(p.viewer.sendMedia(Stream.VIDEO, 0, i, frame, 0, frame.size))
+        assertFalse(p.viewer.awaitingKeyframe)
+        p.viewer.sendMedia(Stream.VIDEO, 0, 12, frame, 0, frame.size) // chain broken here
         assertTrue(p.viewer.awaitingKeyframe)
-        assertFalse(p.viewer.sendMedia(Stream.VIDEO, 0, 4, frame, 0, frame.size)) // refused
+        assertFalse(p.viewer.sendMedia(Stream.VIDEO, 0, 13, frame, 0, frame.size)) // refused
         link.faultsA.stalled = false
         assertTrue(p.viewer.sendMedia(Stream.VIDEO, MediaFlags.KEYFRAME, 5, frame, 0, frame.size))
         assertFalse(p.viewer.awaitingKeyframe)

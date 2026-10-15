@@ -458,16 +458,22 @@ class Session(
     private enum class OfferResult { QUEUED, REPLACED_KEY, GATED, CHAIN_BROKEN }
 
     /**
-     * One-slot, newest-wins video queue that can never produce a corrupt GOP.
+     * A short, strictly ordered video queue that can never produce a corrupt GOP and can never grow into lag.
      *
-     * Delta frames reference their predecessors, so silently overwriting an
-     * unsent frame would hand the decoder a picture built on something it never
-     * saw. Instead: if an unsent frame would be lost to a delta, the chain is
-     * declared broken, both frames are discarded, and every delta is refused
-     * until a keyframe resets the chain.
+     * Delta frames reference their predecessors, so an unsent frame can never be silently skipped: the decoder would
+     * be handed a picture built on something it never saw. So the queue only ever does one of two things with a frame
+     * it cannot send yet: keep it, in order, or (when the queue is full, see below) declare the chain broken, discard
+     * the lot, and refuse every delta until a keyframe resets it.
+     *
+     * It is short but not one frame. A slow link spends a while writing one big frame (a keyframe over Bluetooth takes
+     * about 300 ms), and the frames that arrive meanwhile must wait their turn rather than break the chain: with a
+     * single slot every keyframe on a slow link broke the very chain it started, and the picture froze until the next
+     * keyframe, over and over. The queue is capped by count and by how much time it spans, so the delay it can add is
+     * bounded ([MAX_VIDEO_SPAN_US]); a link that cannot keep up even with that still freezes briefly, never lags.
+     * A keyframe supersedes everything queued before it.
      */
     private inner class VideoSlot {
-        private var frame: Frame? = null
+        private val queue = java.util.ArrayDeque<Frame>()
         private var needKey = true
 
         val awaitingKey: Boolean get() = synchronized(this) { needKey }
@@ -475,27 +481,33 @@ class Session(
         fun offer(flags: Int, ptsUs: Long, src: ByteArray, off: Int, len: Int): OfferResult = synchronized(this) {
             val key = flags and MediaFlags.KEYFRAME != 0
             if (key) {
-                val replaced = frame != null
-                frame = copyFrame(flags, ptsUs, src, off, len)
+                val replaced = queue.isNotEmpty()
+                queue.clear()
+                queue.addLast(copyFrame(flags, ptsUs, src, off, len))
                 needKey = false
                 return if (replaced) OfferResult.REPLACED_KEY else OfferResult.QUEUED
             }
             if (needKey) return OfferResult.GATED
-            if (frame != null) {
-                frame = null
+            val first = queue.peekFirst()
+            if (queue.size >= MAX_VIDEO_QUEUE || (first != null && ptsUs - first.ptsUs > MAX_VIDEO_SPAN_US)) {
+                queue.clear()
                 needKey = true
                 return OfferResult.CHAIN_BROKEN
             }
-            frame = copyFrame(flags, ptsUs, src, off, len)
+            queue.addLast(copyFrame(flags, ptsUs, src, off, len))
             OfferResult.QUEUED
         }
 
-        fun take(): Frame? = synchronized(this) { frame.also { frame = null } }
+        fun take(): Frame? = synchronized(this) { queue.pollFirst() }
     }
 
     private companion object {
         const val MEDIA_HEAD = 10
         const val AUDIO_QUEUE = 8
+
+        /** Most video frames waiting for a slow link, and the most time they may span. See [VideoSlot]. */
+        const val MAX_VIDEO_QUEUE = 10
+        const val MAX_VIDEO_SPAN_US = 300_000L
         const val LIVENESS_TICK_MS = 250L
     }
 }
