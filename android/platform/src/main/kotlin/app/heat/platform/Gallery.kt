@@ -130,6 +130,7 @@ class Gallery(private val context: Context, folder: String = "heat/gallery") {
             }
             live = live.filter { it.file.exists() }
         }
+        Log.i(TAG, "scan: ${all.size} found, ${live.size} kept; limit=$limit expireDays=$days")
         _items.value = live
     }
 
@@ -145,6 +146,7 @@ class Gallery(private val context: Context, folder: String = "heat/gallery") {
         "${kind.name}_${atMs}_${durationMs}_${camera.replace(Regex("[^A-Za-z0-9]+"), "-").take(24).ifEmpty { "Camera" }}"
 
     fun delete(item: Item, refresh: Boolean = true) {
+        Log.i(TAG, "delete ${item.file.name} kept=${item.kept} age=${(System.currentTimeMillis() - item.atMs) / 1000}s refresh=$refresh", Throwable("who deletes"))
         item.file.delete()
         item.thumb.delete()
         File(dir, item.file.nameWithoutExtension + ".kept").delete()

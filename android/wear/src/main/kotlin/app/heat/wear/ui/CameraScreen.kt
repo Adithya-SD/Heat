@@ -279,7 +279,8 @@ fun CameraScreen(
                         haptics.action()
                         if (recordingSince != null) hub.gallery.stopClip()
                         else hub.gallery.startClip(decoder, g.w, g.h, g.rotation, hello?.name ?: "Camera")
-                    }
+                    },
+                    onEnableClipping = { haptics.action(); hub.gallery.prefs.clipping = true }
                 )
             }
         }
@@ -437,17 +438,18 @@ private fun CameraPicture(client: CameraClient, hub: WatchHub, placing: Boolean,
 // ── the ring of buttons ──────────────────────────────────────────────
 
 /**
- * The buttons on the rim, placed as in the reference layout: arm (shield) top-left and the gallery top-right, power
- * at nine and reset at three, settings bottom-left and blackout bottom-right, the capture button large at six with
- * record as a small dot beside it. The menu chip owns twelve o'clock. Angles are clockwise from twelve; radii and
- * sizes are fractions of the screen's own radius, so the layout is the same on every watch.
+ * The buttons on the rim, in mirrored pairs: arm (shield) upper-left and the gallery upper-right, power at nine and
+ * reset at three (a little below the middle), settings lower-left and blackout lower-right, and at six one glass pill
+ * holding both ways to capture, photo on the left and video on the right. The menu chip owns twelve o'clock and can
+ * grow wide in some menus, so the upper pair sits well below it. Angles are clockwise from twelve; radii and sizes are
+ * fractions of the screen's own radius, so the layout is the same on every watch.
  */
 @Composable
 private fun EdgeButtons(
     glass: GlassState, armed: Boolean, arming: Int,
     latest: Gallery.Item?, recordingSince: Long?, clipping: Boolean, flash: Boolean,
     onArm: () -> Unit, onGallery: () -> Unit, onSettings: () -> Unit, onReset: () -> Unit,
-    onBlackout: () -> Unit, onPower: () -> Unit, onPhoto: () -> Unit, onRecord: () -> Unit
+    onBlackout: () -> Unit, onPower: () -> Unit, onPhoto: () -> Unit, onRecord: () -> Unit, onEnableClipping: () -> Unit
 ) {
     // Power ends everything on both devices, so it asks once: the first tap turns it red, a second within 3 s ends.
     var powerArmed by remember { mutableStateOf(false) }
@@ -461,57 +463,19 @@ private fun EdgeButtons(
         }
         val small = r * 0.27f
         val icon = r * 0.13f
-        GlassButton(glass, Modifier.at(318.0, 0.80f), small, onArm, tint = if (armed) Color(0x3334D27A) else null) {
+        GlassButton(glass, Modifier.at(300.0, 0.82f), small, onArm, tint = if (armed) Color(0x3334D27A) else null) {
             if (arming > 0) HeatText("$arming", size = 13, weight = FontWeight.Bold, color = Heat.Amber)
             else HeatIconView(HeatIcon.Shield, if (armed) Heat.Green else Heat.Text, icon)
         }
-        GalleryButton(glass, Modifier.at(42.0, 0.80f), small, icon, latest, onGallery)
-        GlassButton(glass, Modifier.at(270.0, 0.78f), small, { if (powerArmed) onPower() else powerArmed = true }, tint = if (powerArmed) Color(0x55FF4D4D) else null) {
+        GalleryButton(glass, Modifier.at(60.0, 0.82f), small, icon, latest, onGallery)
+        GlassButton(glass, Modifier.at(262.0, 0.80f), small, { if (powerArmed) onPower() else powerArmed = true }, tint = if (powerArmed) Color(0x55FF4D4D) else null) {
             HeatIconView(HeatIcon.Power, if (powerArmed) Heat.Red else Heat.Text, icon)
         }
-        GlassButton(glass, Modifier.at(90.0, 0.78f), small, onReset) { HeatIconView(HeatIcon.Reset, Heat.Text, icon) }
-        GlassButton(glass, Modifier.at(223.0, 0.84f), small, onSettings) { HeatIconView(HeatIcon.Gear, Heat.Text, icon) }
-        GlassButton(glass, Modifier.at(137.0, 0.84f), small, onBlackout) { HeatIconView(HeatIcon.Eye, Heat.Text, icon) }
-        CaptureButton(glass, Modifier.at(180.0, 0.71f), r * 0.36f, onPhoto)
-        // Clips are off until switched on in settings; the dot is only there when they are (or while one is running).
-        if (clipping || recordingSince != null) RecordDot(glass, Modifier.at(214.0, 0.62f), r * 0.17f, recordingSince, onRecord)
+        GlassButton(glass, Modifier.at(98.0, 0.80f), small, onReset) { HeatIconView(HeatIcon.Reset, Heat.Text, icon) }
+        GlassButton(glass, Modifier.at(222.0, 0.80f), small, onSettings) { HeatIconView(HeatIcon.Gear, Heat.Text, icon) }
+        GlassButton(glass, Modifier.at(138.0, 0.80f), small, onBlackout) { HeatIconView(HeatIcon.Eye, Heat.Text, icon) }
+        CaptureRecord(glass, Modifier.at(180.0, 0.70f), r, clipping, recordingSince, onPhoto, onRecord, onEnableClipping)
         if (flash) Box(Modifier.fillMaxSize().background(Color(0x55FFFFFF)))
-    }
-}
-
-/** Take a picture: the one larger glass button, ringed in the accent colour. */
-@Composable
-private fun CaptureButton(glass: GlassState, modifier: Modifier, size: Dp, onPhoto: () -> Unit) {
-    GlassButton(glass, modifier, size, onPhoto) {
-        Box(Modifier.fillMaxSize().border(1.5.dp, Heat.Orange.copy(alpha = 0.8f), CircleShape), contentAlignment = Alignment.Center) {
-            HeatIconView(HeatIcon.Camera, Heat.Orange, size * 0.42f)
-        }
-    }
-}
-
-/** Record: a small dot that turns into the running time while a clip is being written. */
-@Composable
-private fun RecordDot(glass: GlassState, modifier: Modifier, size: Dp, recordingSince: Long?, onRecord: () -> Unit) {
-    val now by produceState(android.os.SystemClock.elapsedRealtime(), recordingSince) {
-        while (recordingSince != null) { value = android.os.SystemClock.elapsedRealtime(); delay(250) }
-    }
-    if (recordingSince == null) {
-        GlassButton(glass, modifier, size, onRecord) {
-            Box(Modifier.size(size * 0.45f).clip(CircleShape).background(Heat.Red))
-        }
-    } else {
-        val blink = ((now - recordingSince) / 500) % 2 == 0L
-        GlassSurface(
-            glass,
-            modifier.size(width = size * 2.6f, height = size).pointerInput(onRecord) { detectTapGestures(onTap = { onRecord() }) },
-            shape = GlassShape.Capsule, bezel = 6.dp, tint = 0.02f, scrim = 0.14f
-        ) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(if (blink) Heat.Red else Heat.Red.copy(alpha = 0.35f)))
-                Spacer(Modifier.width(3.dp))
-                HeatText(formatDuration(now - recordingSince), size = 9, weight = FontWeight.Bold, color = Heat.Text, maxLines = 1)
-            }
-        }
     }
 }
 
@@ -546,6 +510,45 @@ private fun GalleryButton(glass: GlassState, modifier: Modifier, size: Dp, icon:
             if (label != null) Box(
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).clip(RoundedCornerShape(6.dp)).background(Color(0x99000000)).padding(horizontal = 3.dp)
             ) { HeatText(label, size = 7, weight = FontWeight.Bold, color = Color.White, maxLines = 1) }
+        }
+    }
+}
+
+/**
+ * Both ways to capture in one glass pill, split by a hairline: photo on the left (always), video on the right. While a
+ * clip runs the right half shows the time. Clips are a setting that starts off, so until it is on the video half is
+ * dimmed, and one tap on it switches clipping on (the next tap records), which keeps "off until you turn it on" and
+ * still puts the button where you reach for it.
+ */
+@Composable
+private fun CaptureRecord(
+    glass: GlassState, modifier: Modifier, r: Dp, clipping: Boolean, recordingSince: Long?,
+    onPhoto: () -> Unit, onRecord: () -> Unit, onEnableClipping: () -> Unit
+) {
+    val now by produceState(android.os.SystemClock.elapsedRealtime(), recordingSince) {
+        while (recordingSince != null) { value = android.os.SystemClock.elapsedRealtime(); delay(250) }
+    }
+    GlassSurface(glass, modifier.size(width = r * 0.70f, height = r * 0.29f), shape = GlassShape.Capsule, bezel = 7.dp, tint = 0.02f, scrim = 0.12f) {
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f).fillMaxHeight().pointerInput(onPhoto) { detectTapGestures(onTap = { onPhoto() }) }, contentAlignment = Alignment.Center) {
+                HeatIconView(HeatIcon.Camera, Heat.Orange, r * 0.15f)
+            }
+            Box(Modifier.size(width = 0.6.dp, height = r * 0.15f).background(Color(0x40FFFFFF)))
+            Box(
+                Modifier.weight(1f).fillMaxHeight().pointerInput(clipping, recordingSince != null) {
+                    detectTapGestures(onTap = { if (clipping || recordingSince != null) onRecord() else onEnableClipping() })
+                },
+                contentAlignment = Alignment.Center
+            ) {
+                if (recordingSince != null) {
+                    val blink = ((now - recordingSince) / 500) % 2 == 0L
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(if (blink) Heat.Red else Heat.Red.copy(alpha = 0.35f)))
+                        Spacer(Modifier.width(3.dp))
+                        HeatText(formatDuration(now - recordingSince), size = 9, weight = FontWeight.Bold, color = Heat.Text, maxLines = 1)
+                    }
+                } else Box(Modifier.alpha(if (clipping) 1f else 0.4f)) { HeatIconView(HeatIcon.Record, Heat.Red, r * 0.13f) }
+            }
         }
     }
 }
