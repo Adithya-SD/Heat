@@ -450,11 +450,14 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <h1>Heat</h1>
 <p class="sub">Private video calls and motion cameras,<br>device to device. No accounts.</p>
 <div class="glass seg" id="seg" role="group" aria-label="What to start"><button data-m="call" aria-pressed="true">Video call</button><button data-m="link" aria-pressed="false">Motion camera</button></div>
+<p class="sub" id="lkask" hidden>Is this device the camera, or are you watching one?</p>
+<div class="glass seg" id="lkrole" role="group" aria-label="This device is" hidden><button data-r="host" aria-pressed="false">Host a camera</button><button data-r="recv" aria-pressed="false">Receive</button></div>
 <button class="glass card" id="bh"><span class="ico" data-i="video" aria-hidden="true"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
 <label class="glass card lockrow" id="lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
 <div class="glass card" id="jc"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
 <div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a Heat room</b><small>Enter the code from the app</small></span><input id="lki" aria-label="Heat room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH"></div>
-<a class="glass card" id="lkapp" href="download/Heat.apk" download hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Android</b><small id="lkapps">The camera app. Install it, open a room, share the code.</small></span></a>
+<a class="glass card" id="lkapp" href="https://github.com/Adithya-SD/Heat/releases/latest/download/Heat-phone.apk" hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Android</b><small id="lkapps">The phone app: camera, hub and receiver. Allow “install unknown apps” for your browser once.</small></span></a>
+<a class="glass card" id="lkwapp" href="https://github.com/Adithya-SD/Heat/releases/latest/download/Heat-watch.apk" hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Wear OS</b><small>The watch app. Install it on your watch, then open Heat on the phone once.</small></span></a>
 <button class="glass chip" id="rc" hidden></button><button class="glass chip" id="lkre" hidden></button>
 <p class="ft">Video and audio go straight between devices.<br><button class="lk" id="dgo">Check connection</button> · <button class="lk" id="hset">Settings</button> · <span id="bid"></span><span id="fxw"> · <button class="lk" id="fxb"></button></span></p>
 <p class="ft legal"><a href="privacy">Privacy</a> · <a href="terms">Terms</a> · <button class="lk" id="inst" hidden>Install app</button><button class="lk" id="kbo">Shortcuts</button></p>
@@ -773,7 +776,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-15.7'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-16.1'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -798,9 +801,12 @@ function toast(t,img,ms=3500){const e=$('#tt'),i=$('img',e);$('span',e).textCont
 const KINDS={call:['Start a video call','Create a room, then share the code'],watch:['Start a motion camera','This device watches for movement'],link:['Start a motion camera','This device watches for movement; the Heat app, the watch and other browsers can view it']};
 let pick=['watch','link'].includes(ls('km'))?'link':'call';   /* the old PeerJS motion camera became a Heat room, so 'watch' now means 'link' */
 function applyPick(){$$('#seg button').forEach(b=>{b.classList.toggle('on',b.dataset.m===pick);b.setAttribute('aria-pressed',String(b.dataset.m===pick))});$('#bht').textContent=KINDS[pick][0];$('#bhs').textContent=KINDS[pick][1];
- const lk=pick==='link';$('#jc').hidden=lk;$('#lkjoin').hidden=!lk;$('#lockrow').hidden=lk;$('#lkapp').hidden=!(lk&&apkSize)}
-let apkSize=0;   /* bytes of download/Heat.apk when this site serves one, else 0 and the card stays away */
-if(/^https?:/.test(location.protocol))fetch('download/Heat.apk',{method:'HEAD',cache:'no-store'}).then(r=>{const n=+r.headers.get('content-length');if(r.ok&&n>1e6){apkSize=n;$('#lkapps').textContent='Free · '+(n/1048576).toFixed(0)+' MB · camera, rooms and the watch link. Allow “install unknown apps” for your browser once.';applyPick()}}).catch(()=>{})
+ const lk=pick==='link',role=lk?(ls('hl.role')||''):'';
+ $('#jc').hidden=lk;$('#lockrow').hidden=lk;$('#lkrole').hidden=!lk;$('#lkask').hidden=!(lk&&!role);
+ $('#bh').hidden=lk&&role!=='host';$('#lkjoin').hidden=!(lk&&role==='recv');$('#lkre').style.display=lk&&role==='host'?'none':'';
+ $$('#lkrole button').forEach(b=>{b.classList.toggle('on',b.dataset.r===role);b.setAttribute('aria-pressed',String(b.dataset.r===role))});
+ $('#lkapp').hidden=!lk;$('#lkwapp').hidden=!lk;$('#rc').style.display=lk?'none':''}
+$('#lkrole').onclick=e=>{const b=e.target.closest('button');if(b){ls('hl.role',b.dataset.r);applyPick()}};
 $$('#seg button').forEach(b=>b.onclick=()=>{pick=b.dataset.m;ls('km',pick);applyPick()});
 
 /* stage fitting + ROI */
