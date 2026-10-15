@@ -182,3 +182,14 @@ Photo and clip capture and the events gallery, microphone streaming, tamper dete
 through the phone when the watch is off Wi-Fi, the link to `heat-wheat.vercel.app` (PeerJS/WebRTC interop), a
 two-sensor cross-fade between lenses (this phone's hidden logical cameras make it impossible here; the planner and
 the blend math are written and tested for phones that expose them), and measured latency on a shared Wi-Fi network.
+
+## Hosts, receivers and the hub (2026-10-16)
+
+One app, three jobs. Every phone is a **host** (its own camera and detection, one 8-symbol code), can be a **receiver** (watch other hosts, get their alerts) and acts as a **hub** for a paired watch.
+
+- **Adding hosts.** On the phone: Heat Link, Join a room, type a host's code, Watch. The code is kept (up to 8) and the phone stays joined to every saved host in the background (`HostRelay`), so alerts from all of them arrive. Browsers can be hosts too (Motion camera on the site, Host a camera).
+- **What the watch sees.** The watch only talks to the phone. The phone forwards ONE host's video at a time (`CameraHost.Audience.HUB`; other viewers of the phone keep its own camera). Alerts from every host reach the watch, labelled with the host's name (`Msg.Alert.hostId/hostName`).
+- **Switching.** Motion on a host puts it on show, unless the view is locked. The watch's Hosts button lists the hosts (`Msg.Hosts`), a tap shows one (`Msg.PickHost`), Lock view pins it (remembered). Arm/disarm from the watch goes to the shown host; other settings still address the phone.
+- **Website.** The Heat tab asks first: Host a camera or Receive. The receiver page has the watch's controls (sensitivity, zoom, full settings, detection area, photo/clip gallery, black screen, reset stream).
+- **Downloads.** Signed APKs are on the GitHub release (`Heat-phone.apk`, `Heat-watch.apk`); the site links `releases/latest/download/…`. Rebuild with `-PheatDist`.
+- **Anywhere.** Rooms use WebRTC; behind strict NATs they need a TURN relay. Set `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN` on the Vercel project (`api/ice.js`) and both the site and the app use it.
