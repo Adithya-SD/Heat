@@ -9,6 +9,8 @@ import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import app.heat.wear.ui.WatchRoot
 
 /**
@@ -66,6 +68,8 @@ class MainActivity : ComponentActivity() {
         // Tell the phone first: its camera takes a few seconds to come up, and the hub below can wait for that time.
         app.heat.platform.PeerLauncher.announce(this, intent.getBooleanExtra(app.heat.platform.PeerLauncher.EXTRA_FROM_PEER, false))
         hub = (application as HeatWearApp).hub
+        // The phone removed this watch from the room: the app closes, with its task.
+        lifecycleScope.launch { hub.kicked.collect { finishAndRemoveTask() } }
         setContent { WatchRoot(hub) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED

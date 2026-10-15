@@ -229,6 +229,13 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         _state.value = _state.value.copy(lanAddress = TcpListener.localAddress())
 
         host.onViewerPatch = { who, patch -> Log.i(TAG, "settings from $who: $patch") }
+        // Somebody in the room removed this phone: stop hosting and close the app outright.
+        host.onRemoved = {
+            Log.w(TAG, "removed from the room: closing")
+            runCatching { rooms.close() }
+            appContext.stopService(android.content.Intent(appContext, CameraService::class.java))
+            scope.launch { delay(300); android.os.Process.killProcess(android.os.Process.myPid()) }
+        }
         orientation = object : OrientationEventListener(appContext) {
             override fun onOrientationChanged(degrees: Int) {
                 if (degrees == ORIENTATION_UNKNOWN) return

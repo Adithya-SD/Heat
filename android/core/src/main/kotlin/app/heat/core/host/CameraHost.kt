@@ -78,6 +78,7 @@ class CameraHost(
 
         /** What this viewer said it is. A [Role.HUB] viewer (the watch) is the one a relayed host's picture is for. */
         @Volatile var role: Role = Role.VIEWER
+        @Volatile var name: String = ""
         @Volatile var lastKeyMs = 0L
 
         override fun onUp(kind: CarrierKind) = host.viewerUp(this)
@@ -133,6 +134,39 @@ class CameraHost(
     /** Arm/disarm for the host on screen. Return true to say it was handled elsewhere (a relayed host), false to arm this camera. */
     @Volatile var armHook: ((armed: Boolean, delaySec: Int?) -> Boolean)? = null
 
+    /** A viewer asked to remove a host this camera relays (the hub's own hosts); [key] as named in [Msg.Hosts]. */
+    @Volatile var onKickHost: ((key: String) -> Unit)? = null
+
+    /** Somebody in the room asked to remove this host. The platform decides what that means (the phone closes its app). */
+    @Volatile var onRemoved: (() -> Unit)? = null
+
+    /** Viewers removed from this host: they are turned away if they come back, until this host restarts. */
+    private val kicked = java.util.concurrent.ConcurrentHashMap.newKeySet<DeviceId>()
+    private var lastRoster: Msg.Roster? = null
+
+    private fun rosterNow(): Msg.Roster = Msg.Roster(
+        viewers.values.filter { registry.existing(it.id)?.isUp == true }
+            .map { app.heat.core.model.Member(it.id.hex, it.name.ifBlank { "Viewer" }, it.role == Role.HUB) }.sortedBy { it.id }
+    )
+
+    /** Tells every connected viewer who else is connected, when that changed. */
+    private fun broadcastRoster() {
+        val r = rosterNow()
+        if (r == lastRoster) return
+        lastRoster = r
+        val bytes = MsgCodec.encode(r)
+        for (v in viewers.values) registry.existing(v.id)?.send(bytes, reliable = true)
+    }
+
+    private fun kickViewer(id: String, by: DeviceId) {
+        val target = viewers.keys.firstOrNull { it.hex == id } ?: return
+        if (target == by) return
+        kicked += target
+        val conv = registry.existing(target) ?: return
+        conv.send(MsgCodec.encode(Msg.Kicked(by.short)), reliable = true)
+        scope.launch { delay(400); conv.close(); lastRoster = null; broadcastRoster() }
+    }
+
     /** Replaces what the status says while another host's picture is relayed: its picture size, armed state, lenses. */
     @Volatile var statusOverride: ((Msg.Status) -> Msg.Status)? = null
 
@@ -166,6 +200,7 @@ class CameraHost(
             reevaluateInterest()
             _viewerCount.value = viewers.values.count { registry.existing(it.id)?.isUp == true }
             if (_viewerCount.value > 0) broadcastStatus(reliable = false)
+            broadcastRoster()
             registry.reap()
         }
     }
@@ -277,12 +312,18 @@ class CameraHost(
 
     private fun viewerUp(v: Viewer) {
         val conv = registry.existing(v.id) ?: return
+        if (v.id in kicked) {
+            conv.send(MsgCodec.encode(Msg.Kicked("")), reliable = true)
+            scope.launch { delay(400); conv.close() }
+            return
+        }
         conv.send(MsgCodec.encode(Msg.Hello(name(), Role.CAMERA, appVersion, listOf("h264", "cfg-patch", "alerts"))))
         synchronized(lock) {
             conv.send(MsgCodec.encode(configHost.state(v.lastSeq)))
             conv.send(MsgCodec.encode(currentStatus(v)))
         }
         replayAlerts(conv)
+        broadcastRoster()
         hostsMsg?.let { conv.send(MsgCodec.encode(it), reliable = true) }
         _viewerCount.value = viewers.values.count { registry.existing(it.id)?.isUp == true }
         reevaluateInterest()
@@ -300,7 +341,12 @@ class CameraHost(
                     if (configHost.config != old) afterConfigChange(old) else markConfigDirty()
                 }
 
-                is Msg.Hello -> v.role = msg.role
+                is Msg.Hello -> { v.role = msg.role; v.name = msg.name.take(24); broadcastRoster() }
+                is Msg.Kick -> when {
+                    msg.id.isBlank() -> scope.launch { onRemoved?.invoke() }
+                    msg.id.startsWith("host:") -> scope.launch { onKickHost?.invoke(msg.id.removePrefix("host:")) }
+                    else -> kickViewer(msg.id, v.id)
+                }
                 is Msg.Arm -> if (v.role != Role.HUB || armHook?.invoke(msg.armed, msg.delaySec) != true) applyArm(msg.armed, msg.delaySec)
                 is Msg.PickHost -> scope.launch { onPick?.invoke(msg.id, msg.lock) }
 

@@ -83,4 +83,12 @@ class RoomCodeTest {
         assertNull(RoomCode.parseInvite("hello"))
         assertEquals("https://heat-wheat.vercel.app/#link=ABCDEFGHJKMN", RoomCode.inviteLink("abcd-efgh-jkmn", "https://heat-wheat.vercel.app/"))
     }
+
+    @Test
+    fun slot_zero_is_the_room_id_itself_and_the_others_are_numbered_after_it() {
+        val id = RoomCode.roomId("ABCDEFGH")
+        assertEquals(id, RoomCode.slotId(id, 0))
+        assertEquals("$id-3", RoomCode.slotId(id, 3))
+        assertEquals(RoomCode.SLOTS, (0 until RoomCode.SLOTS).map { RoomCode.slotId(id, it) }.toSet().size)
+    }
 }

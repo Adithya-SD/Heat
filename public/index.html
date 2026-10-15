@@ -335,11 +335,16 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 .lkzb i[data-h=sw]{left:0;bottom:0;transform:translate(-50%,50%);cursor:nesw-resize}.lkzb i[data-h=se]{right:0;bottom:0;transform:translate(50%,50%);cursor:nwse-resize}
 .lkzb.edit{border-style:solid;pointer-events:auto;cursor:move;background:rgba(255,159,10,.14);box-shadow:0 0 0 9999px rgba(0,0,0,.38)}.lkzb.edit em,.lkzb.edit i{display:block}
 .lkzb[hidden]{display:none}
+.lkh{display:flex;align-items:center;gap:12px;width:100%;padding:11px 8px;border-top:1px solid rgba(255,255,255,.12);text-align:left;border-radius:12px;color:#fff}.lkh.on{background:rgba(255,255,255,.16)}
+.lkh span{flex:1;min-width:0}.lkh b{display:block;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lkh small{display:block;color:var(--t2);font-size:12px;margin-top:1px}
+.lkhr{display:flex;align-items:center;gap:6px}.lkhr .lkh{flex:1;min-width:0}.lkpn{flex:1;min-width:0;padding:11px 8px;border-top:1px solid rgba(255,255,255,.12)}.lkpn b{display:block;font-weight:600;font-size:14px}.lkpn small{display:block;color:var(--t2);font-size:12px}
+.lkx2{min-width:36px;height:34px;padding:0 10px;border-radius:17px;background:rgba(255,255,255,.12);color:#ff8a80;font-weight:700;font-size:13px;flex:none}.lkx2.arm{background:rgba(255,69,58,.9);color:#fff}
+#lkrm{z-index:9}body[data-s=removed] #lkV{display:block}body[data-s=removed] #lkV>:not(#lkrm){display:none!important}
 #lkre{margin-top:-4px}
 #lkapp{text-decoration:none;color:#fff}
 .lkj{flex-wrap:wrap}
-#lki{flex:1 0 100%;order:3;height:44px;min-width:0;border-radius:14px;background:rgba(255,255,255,.14);text-align:center;font:600 19px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;cursor:text}
-#lki::placeholder{color:rgba(255,255,255,.34)}
+#lki,#lkhi{flex:1 0 100%;order:3;height:44px;min-width:0;border-radius:14px;background:rgba(255,255,255,.14);text-align:center;font:600 19px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;cursor:text}
+#lki::placeholder,#lkhi::placeholder{color:rgba(255,255,255,.34)}
 
 /* ============ responsive ============
    watch  <= 260px wide (or <= 260px tall) · small phone <= 380 · phone · landscape phone · tablet · desktop · TV */
@@ -455,6 +460,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <button class="glass card" id="bh"><span class="ico" data-i="video" aria-hidden="true"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
 <label class="glass card lockrow" id="lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
 <div class="glass card" id="jc"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
+<div class="glass card lkj" id="lkhcard" hidden><span class="ico v" data-i="share" aria-hidden="true"></span><span class="tx"><b>Host in a room</b><small>Enter a room’s code to add this camera to it, or leave empty for your own room</small></span><input id="lkhi" aria-label="Room code to host in" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH"></div>
 <div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a Heat room</b><small>Enter the code from the app</small></span><input id="lki" aria-label="Heat room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH"></div>
 <a class="glass card" id="lkapp" href="https://github.com/Adithya-SD/Heat/releases/latest/download/Heat-phone.apk" hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Android</b><small id="lkapps">The phone app: camera, hub and receiver. Allow “install unknown apps” for your browser once.</small></span></a>
 <a class="glass card" id="lkwapp" href="https://github.com/Adithya-SD/Heat/releases/latest/download/Heat-watch.apk" hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Wear OS</b><small>The watch app. Install it on your watch, then open Heat on the phone once.</small></span></a>
@@ -499,9 +505,10 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <div class="stage"><canvas id="lkc" aria-label="Live picture"></canvas></div>
 <div class="top"><div class="glass pill" role="status"><i class="dot" id="lkd"></i><span id="lkst">Connecting…</span><small id="lkms"></small><small id="lkbat"></small></div><div class="tb"><button class="glass b" id="lkinv" data-i="share" title="Invite"></button><button class="glass b red" id="lkx" data-i="x" title="Leave"></button></div></div>
 <div class="lkzb" id="lkzb" hidden><em>Detection area</em><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
-<nav class="glass rail l" aria-label="Picture"><button class="b" id="lkzone" data-i="grid" title="Detection area: where movement counts"></button><button class="b" id="lkgal" data-i="gallery" title="Gallery"><span class="bd" id="lkgbd"></span></button><button class="b" id="lkblk" data-i="eyeoff" title="Black screen: let this screen rest"></button><button class="b" id="lkrst" data-i="reset" title="Reset the stream"></button></nav>
+<nav class="glass rail l" aria-label="Picture"><button class="b" id="lkhb" data-i="monitor" title="Hosts in this room" hidden></button><button class="b" id="lkzone" data-i="grid" title="Detection area: where movement counts"></button><button class="b" id="lkgal" data-i="gallery" title="Gallery"><span class="bd" id="lkgbd"></span></button><button class="b" id="lkblk" data-i="eyeoff" title="Black screen: let this screen rest"></button><button class="b" id="lkrst" data-i="reset" title="Reset the stream"></button></nav>
 <nav class="glass rail r" aria-label="Panels"><button class="b" id="lkact" data-i="list" title="Activity"><span class="bd" id="lkbd"></span></button><button class="b" id="lkset" data-i="gear" title="Settings"></button><button class="b" id="lkfs" data-i="max" title="Full screen"></button></nav>
 <aside class="glass sheet" id="lksheet" aria-label="Activity"><button class="sx" data-i="x" title="Close"></button><h3>Activity</h3><div id="lkev"></div></aside>
+<aside class="glass sheet" id="lkhs" aria-label="Hosts"><button class="sx" data-i="x" title="Close"></button><h3>Hosts</h3><label class="sr"><span><b>Lock view</b><small>Movement on another host still alerts you, but the picture stays here</small></span><input type="checkbox" class="sw" role="switch" id="lklock"></label><div id="lkhl"></div><h4 class="sh">People here</h4><div id="lkpl"></div></aside>
 <aside class="glass sheet lkset" id="lkcs" aria-label="Settings"><button class="sx" data-i="x" title="Close"></button><h3>Settings</h3><input class="lksq" id="lkq" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off"><div id="lksl"></div></aside>
 <div class="glass dock lkdock" id="lkdock">
 <div class="lkg l"><button class="b" id="lkarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkarmt"></span></button><button class="lkchip" id="lksensb" title="Sensitivity" aria-haspopup="true"><svg class="i"><use href="#i-sens"/></svg><span><small>Sensitivity</small><b id="lksensv">–</b></span></button></div>
@@ -510,6 +517,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 </div>
 <div class="glass lkpo" id="lkpos" role="dialog" aria-label="Sensitivity"><header><svg class="i"><use href="#i-sens"/></svg><b>Sensitivity</b><output id="lkposv">–</output></header><p class="hint">How small a movement sets off an alert. Higher notices smaller, fainter movement.</p><div class="lkpr"><button class="b" data-d="-5" data-t="lksens" data-i="minus" title="Lower"></button><input id="lksens" type="range" min="1" max="100" step="1" aria-label="Sensitivity"><button class="b" data-d="5" data-t="lksens" data-i="plus" title="Higher"></button></div><div class="lkpp" id="lkposp"><button data-v="20">Low</button><button data-v="50">Medium</button><button data-v="80">High</button><button data-v="100">Max</button></div></div>
 <div class="glass lkpo" id="lkzps" role="dialog" aria-label="Zoom"><header><svg class="i"><use href="#i-zoom-in"/></svg><b>Zoom</b><output id="lkzpv">1×</output></header><p class="hint">Steps through the lenses and then crops in. The slider is spread so every step feels the same.</p><div class="lkpr"><button class="b" data-d="-4" data-t="lkzoom" data-i="minus" title="Zoom out"></button><input id="lkzoom" type="range" min="0" max="100" step="1" aria-label="Zoom"><button class="b" data-d="4" data-t="lkzoom" data-i="plus" title="Zoom in"></button></div><div class="lkpp" id="lkzpp"></div></div>
+<div class="ov" id="lkrm"><div class="glass c2" role="alert"><b>You were removed from this room</b><small class="hint">Someone in the room removed this device. Close this tab, or open Heat again to start over.</small><button class="ghost" onclick="location.replace(location.pathname)">Start over</button></div></div>
 <div class="blk" id="lkblkov"><span>Tap anywhere to wake</span></div>
 <div class="ov s" id="lkov"><div class="glass c2" role="status"><div class="sp"></div><b id="lkovt">Connecting…</b><small class="hint" id="lkovh"></small><a class="ghost" id="lkopen" href="#" hidden>Open in the Heat app</a><button class="ghost" id="lkovx">Leave</button></div></div>
 </section>
@@ -776,7 +784,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-16.1'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-16.4'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -803,7 +811,7 @@ let pick=['watch','link'].includes(ls('km'))?'link':'call';   /* the old PeerJS 
 function applyPick(){$$('#seg button').forEach(b=>{b.classList.toggle('on',b.dataset.m===pick);b.setAttribute('aria-pressed',String(b.dataset.m===pick))});$('#bht').textContent=KINDS[pick][0];$('#bhs').textContent=KINDS[pick][1];
  const lk=pick==='link',role=lk?(ls('hl.role')||''):'';
  $('#jc').hidden=lk;$('#lockrow').hidden=lk;$('#lkrole').hidden=!lk;$('#lkask').hidden=!(lk&&!role);
- $('#bh').hidden=lk&&role!=='host';$('#lkjoin').hidden=!(lk&&role==='recv');$('#lkre').style.display=lk&&role==='host'?'none':'';
+ $('#bh').hidden=lk&&role!=='host';$('#lkhcard').hidden=!(lk&&role==='host');$('#lkjoin').hidden=!(lk&&role==='recv');$('#lkre').style.display=lk&&role==='host'?'none':'';
  $$('#lkrole button').forEach(b=>{b.classList.toggle('on',b.dataset.r===role);b.setAttribute('aria-pressed',String(b.dataset.r===role))});
  $('#lkapp').hidden=!lk;$('#lkwapp').hidden=!lk;$('#rc').style.display=lk?'none':''}
 $('#lkrole').onclick=e=>{const b=e.target.closest('button');if(b){ls('hl.role',b.dataset.r);applyPick()}};
@@ -1065,7 +1073,7 @@ function hostPeer(){
   else if(p.disconnected&&!p.destroyed)setTimeout(()=>{if(p.disconnected&&!p.destroyed)p.reconnect()},2000)});
  p.on('close',()=>{if(mode==='host'&&!p.dead)setTimeout(hostPeer,1500)})}
 async function hostStart(){
- if(pick==='link')return LK.host();
+ if(pick==='link')return LK.host($('#lkhi').value);
  if(!window.Peer)return toast('Connection library didn’t load — check your internet');
  const id=++sid,isCall=pick==='call';
  if(lockPick&&!E.media)return toast('The end-to-end lock needs a newer browser (Chrome, Edge, Safari 15.4+ or Firefox 117+). Turn the lock off to continue.',undefined,7000);
@@ -1292,6 +1300,7 @@ on('#dgo',openDiag);$$('.dgb').forEach(b=>b.onclick=openDiag);on('#dga',runDiag)
 $('#dg').onclick=e=>{if(e.target.id==='dg'){$('#dg').classList.remove('s');dgRun++}};
 $('#bid').textContent='build '+BUILD;
 $('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();heatFb=v;viewStart(v)}};
+$('#lkhi').oninput=e=>{e.target.value=HL.fmt(HL.norm(e.target.value))};
 $('#lki').oninput=e=>{const v=HL.norm(e.target.value);e.target.value=HL.fmt(v);if(v.length===8){e.target.blur();e.target.value='';LK.view(v)}};
 $('#lki').addEventListener('paste',e=>{const c=linkCodeIn((e.clipboardData||window.clipboardData).getData('text')||'');if(c){e.preventDefault();$('#lki').value='';LK.view(c)}});
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
@@ -1829,7 +1838,9 @@ const AVC = (() => {
 const LK = (() => {
   'use strict';
   const ST = HL.ST, enc = HL.json.enc, dec = HL.json.dec, $e = id => document.getElementById(id);
+  const SELF_HEX_INIT = 1;
   const SELF = (() => { let h = ls('hl.id'); if (!/^[0-9a-f]{32}$/.test(h || '')) { h = HL.hex(HL.rnd(16)); ls('hl.id', h); } return HL.unhex(h); })();
+  const SELF_HEX = HL.hex(SELF);
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const mergePatch = (t, p) => {
     if (p === null || typeof p !== 'object' || Array.isArray(p)) return p;
@@ -1861,7 +1872,7 @@ const LK = (() => {
   }
 
   /* The camera: claim the room id and accept whoever dials it. cb.state(text), cb.conn(io, inbox). */
-  function listen(rid, cb) {
+  function listen(rid, cb, maxTries = 8) {
     let p = null, dead = false, tries = 0;
     const open = () => {
       if (dead) return;
@@ -1875,7 +1886,7 @@ const LK = (() => {
         if (dead || q.dead) return;
         if (e.type === 'unavailable-id') {                          /* our own earlier registration can linger for a few seconds */
           q.dead = true; try { q.destroy(); } catch {}
-          if (++tries > 8) return cb.state('taken');
+          if (++tries > maxTries) return cb.state('taken');
           cb.state('Claiming the room…'); setTimeout(open, 2000);
         } else if (q.disconnected && !q.destroyed) setTimeout(() => { if (q.disconnected && !q.destroyed) q.reconnect(); }, 2000);
       });
@@ -1986,38 +1997,111 @@ const LK = (() => {
   /* ======================================================================================================
      VIEWER
      ====================================================================================================== */
-  function view(raw) {
-    leave(true);
-    const code = HL.norm(raw);
-    if (!(code.length === 8 || code.length === 12)) return toast('That code is not complete');
-    if (!window.Peer) return toast('The connection library didn’t load — check your internet');
-    const R = cur = {
-      role: 'view', code, invite: inviteOf(code), stopped: false, sess: null, net: null, dec: null, cfg: null, st: null, hello: null,
-      pend: [], seq: 0, evs: [], unread: 0, live: false, drag: false, state: 'Connecting…', since: performance.now(), keyAt: 0, timers: [], thumbs: []
+  /* A room holds several hosts: slot 0 is the room id itself (so every older code is unchanged), slots 1-7 are id-1 .. id-7. */
+  const SLOTS = 8, slotId = (rid, n) => n > 0 ? rid + '-' + n : rid;
+  let ROOM = null;                                                 /* the room this tab receives from: its code, its hosts (members) and which one is on screen */
+
+  /* Which slots have a host in them. One signaling socket and a dummy offer to every slot id: the server answers EXPIRE at once for an empty
+     one, so a slot that stays quiet is occupied. Null when the look itself failed (nothing is concluded from it). */
+  function probeSlots(rid, slots) {
+    return new Promise(res => {
+      const rnd = () => Math.random().toString(36).slice(2, 12), absent = new Set();
+      let ws, done = false;
+      const fin = v => { if (done) return; done = true; try { ws && ws.close(); } catch {} res(v); };
+      try { ws = new WebSocket('wss://0.peerjs.com/peerjs?key=peerjs&id=' + rnd() + '&token=' + rnd()); } catch { return res(null); }
+      const guard = setTimeout(() => fin(null), 7000);
+      ws.onerror = () => { clearTimeout(guard); fin(null); };
+      ws.onmessage = e => {
+        let m; try { m = JSON.parse(e.data); } catch { return; }
+        if (m.type === 'OPEN') {
+          for (const n of slots) ws.send(JSON.stringify({ type: 'OFFER', dst: slotId(rid, n), payload: { sdp: { type: 'offer', sdp: 'v=0\r\n' }, type: 'data', connectionId: 'dc_probe_' + rnd(), label: 'probe', reliable: true, serialization: 'raw', browser: 'chrome' } }));
+          setTimeout(() => { clearTimeout(guard); fin(slots.filter(n => !absent.has(slotId(rid, n)))); }, 1800);
+        } else if (m.type === 'EXPIRE' && m.src) absent.add(m.src);
+      };
+    });
+  }
+
+  function newMember(RM, slot) {
+    const R = {
+      role: 'view', code: RM.code, invite: inviteOf(RM.code), room: RM, slot, stopped: false, sess: null, net: null, dec: null, cfg: null, st: null, hello: null,
+      pend: [], seq: 0, evs: RM.evs, unread: 0, live: false, drag: false, state: 'Connecting\u2026', since: performance.now(), keyAt: 0, timers: [], vt: [], thumbs: [], bg: true
     };
-    go('lkview');
-    { const o = $e('lkopen'); o.hidden = !/Android/i.test(navigator.userAgent); o.href = 'heat://link/' + code; }
-    $e('lkev').innerHTML = ''; $e('lksheet').classList.remove('open'); badge(R);
-    $e('lkdock').dataset.on = ''; paint(R); ov(R, true);
-    if (!VDec.supported()) { ov(R, true, 'This browser can’t play Heat video', 'Open this room in Chrome, Edge or Safari 16.4 or newer, or in the Heat app.'); return; }
+    RM.members.set(slot, R);
+    return R;
+  }
+  function startMember(R, d) {
+    R.net = connect(slotId(d.rid, R.slot), { state: s => { if (R.sess) return; R.state = s; ui(R); }, conn: (io, inbox) => onConn(R, d, io, inbox) });
+  }
+
+  /* put this host's picture on screen; the one that was there stops being sent (it keeps listening for alerts) */
+  function attachView(R) {
+    const old = cur;
+    if (old && old !== R && old.role === 'view') detachView(old);
+    cur = R; R.bg = false; R.live = false; R.since = performance.now(); R.room.shown = R.slot;
     R.dec = new VDec($e('lkc'), {
       needKey: () => needKey(R),
       frame: () => { R.lastAt = performance.now(); if (!R.live) { R.live = true; ov(R, false); paint(R); } },
       fail: msg => ov(R, true, msg)
     });
-    R.timers.push(setInterval(() => ui(R), 1000));
+    R.vt.push(setInterval(() => ui(R), 1000));
     /* Safety: a picture that has stopped must never pass for a live one. No new frame for 1.5 s and the canvas is
        wiped black and says so; the next real frame brings the picture back. */
-    R.timers.push(setInterval(() => {
+    R.vt.push(setInterval(() => {
       if (!R.live || performance.now() - (R.lastAt || 0) < 1500) return;
       R.live = false;
       const cv = $e('lkc'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
-      ov(R, true, 'No live picture', 'Waiting for the camera…'); paint(R);
+      ov(R, true, 'No live picture', 'Waiting for the camera\u2026'); paint(R);
     }, 250));
+    if (R.st && R.st.stream) R.dec.setRotation(R.st.stream.rotation | 0);
+    { const cv = $e('lkc'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); }
+    badge(R); drawEvents(R); paint(R); ov(R, true);
+    if (R.sess) { R.sess.sendControl(enc({ t: 'watch', video: !R.blk, audio: false, tier: 'MAX' })); R.keyAt = 0; needKey(R); }
+    paintHosts();
+  }
+  function detachView(R) {
+    R.bg = true; R.live = false; R.vt.forEach(clearInterval); R.vt = [];
+    try { R.dec && R.dec.close(); } catch {} R.dec = null;
+    stopClip(R, true);
+    if (R.sess) { try { R.sess.sendControl(enc({ t: 'watch', video: false, audio: false, tier: 'MAX' })); } catch {} }
+  }
+  function dropMember(RM, slot) {
+    const R = RM.members.get(slot); if (!R) return;
+    RM.members.delete(slot); teardown(R);
+    if (cur === R) { const next = RM.members.get(0) || [...RM.members.values()][0]; cur = null; if (next) attachView(next); }
+  }
+
+  /* find hosts that arrived (or left): a look at the room every 15 s */
+  async function scanRoom(RM) {
+    if (ROOM !== RM || !RM.d) return;
+    const present = await probeSlots(RM.d.rid, [...Array(SLOTS).keys()]);
+    if (ROOM !== RM || present === null) return;
+    if (!present.length && ![...RM.members.values()].some(m => m.sess)) return;
+    for (let n = 0; n < SLOTS; n++) {
+      const m = RM.members.get(n);
+      if (present.includes(n)) { RM.miss.delete(n); if (!m) startMember(newMember(RM, n), RM.d); }
+      else if (m && n > 0) { const k = (RM.miss.get(n) || 0) + 1; RM.miss.set(n, k); if (k >= 3) dropMember(RM, n); }
+    }
+    paintHosts();
+  }
+
+  function view(raw) {
+    leave(true);
+    const code = HL.norm(raw);
+    if (!(code.length === 8 || code.length === 12)) return toast('That code is not complete');
+    if (!window.Peer) return toast('The connection library didn\u2019t load \u2014 check your internet');
+    const RM = ROOM = { code, d: null, members: new Map(), shown: 0, locked: ls('hl.lock') === '1', scan: 0, miss: new Map(), evs: [] };
+    const R = newMember(RM, 0);
+    go('lkview');
+    { const o = $e('lkopen'); o.hidden = !/Android/i.test(navigator.userAgent); o.href = 'heat://link/' + code; }
+    $e('lkev').innerHTML = ''; $e('lksheet').classList.remove('open'); $e('lkhs').classList.remove('open');
+    $e('lkdock').dataset.on = '';
+    if (!VDec.supported()) { cur = R; paint(R); ov(R, true, 'This browser can\u2019t play Heat video', 'Open this room in Chrome, Edge or Safari 16.4 or newer, or in the Heat app.'); return; }
+    attachView(R);
     HL.derive(code).then(d => {
       if (R.stopped) return;
-      ls('hl.code', code); refreshRejoin();
-      R.net = connect(d.rid, { state: s => { if (R.sess) return; R.state = s; ui(R); }, conn: (io, inbox) => onConn(R, d, io, inbox) });
+      RM.d = d; ls('hl.code', code); refreshRejoin();
+      startMember(R, d);
+      RM.scan = setInterval(() => scanRoom(RM), 15000); setTimeout(() => scanRoom(RM), 2500);
     }, () => { toast('That code is not valid'); leave(); });
   }
 
@@ -2045,7 +2129,7 @@ const LK = (() => {
     });
     s.start();
     s.sendControl(enc({ t: 'hello', name: (myName() || 'Browser').slice(0, 24), role: 'VIEWER', app: 'web-' + BUILD, features: ['h264'] }));
-    s.sendControl(enc({ t: 'watch', video: !R.blk, audio: false, tier: 'MAX' }));
+    s.sendControl(enc({ t: 'watch', video: !R.blk && !R.bg, audio: false, tier: 'MAX' }));
     for (const p of R.pend) s.sendControl(enc({ t: 'set', seq: p.seq, patch: p.patch }));   /* edits the camera never acknowledged go again */
     R.state = 'Waiting for the picture…'; ui(R);
   }
@@ -2060,8 +2144,10 @@ const LK = (() => {
     const m = dec(u); if (!m || R.stopped) return;
     if (m.t === 'hello') R.hello = m;
     else if (m.t === 'cfg' && m.config) { R.cfg = m.config; R.pend = R.pend.filter(p => p.seq > (m.ackSeq | 0)); }
-    else if (m.t === 'status') { R.st = m; if (m.stream) R.dec.setRotation(m.stream.rotation | 0); }
+    else if (m.t === 'status') { R.st = m; if (m.stream && R.dec) R.dec.setRotation(m.stream.rotation | 0); }
     else if (m.t === 'alert') addAlert(R, m);
+    else if (m.t === 'roster') { R.roster = Array.isArray(m.members) ? m.members : []; paintHosts(); }
+    else if (m.t === 'kicked') { removedFromRoom(); return; }
     paint(R);
   }
 
@@ -2122,11 +2208,13 @@ const LK = (() => {
   }
 
   function addAlert(R, m) {
-    const e = { id: m.id, kind: m.kind, ts: m.atMs || Date.now(), pct: m.changedPct || 0, img: null, host: String(m.hostName || '').slice(0, 24) };
+    const e = { id: m.id, kind: m.kind, ts: m.atMs || Date.now(), pct: m.changedPct || 0, img: null, host: String(m.hostName || (R.room && R.room.members.size > 1 ? nameOf(R) : '')).slice(0, 24) };
     R.evs.unshift(e); R.evs.length = Math.min(R.evs.length, 50);
-    R.lastAlert = { e, at: performance.now() };
-    if (!$e('lksheet').classList.contains('open')) { R.unread++; badge(R); }
+    R.lastAlert = { e, at: performance.now() }; R.lastAlertMs = Date.now();
+    if (!$e('lksheet').classList.contains('open') && R === cur) { R.unread++; badge(R); }
+    paintHosts();
     toast((e.host ? e.host + ' · ' : '') + (kindName[m.kind] || 'Alert') + ' · ' + tm(e.ts));
+    if (m.kind === 'MOTION' && R.room && R !== cur && !R.room.locked && !R.stopped) attachView(R);
     if ((m.kind === 'MOTION' || m.kind === 'TAMPER') && R.blk) setBlackout(R, false);
     if (m.kind === 'MOTION' || m.kind === 'TAMPER') { chime(); !muted && navigator.vibrate && navigator.vibrate([120, 60, 120]); }
     if (document.hidden && window.Notification && Notification.permission === 'granted') { try { new Notification(kindName[m.kind] || 'Alert', { body: tm(e.ts) }); } catch {} }
@@ -2150,13 +2238,14 @@ const LK = (() => {
      ====================================================================================================== */
   const CAM = { w: 640, h: 480, fps: 15, bps: 1200000 };
 
-  async function host() {
+  async function host(joinRaw) {
     leave(true);
     if (!window.Peer) return toast('The connection library didn’t load — check your internet');
     if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return toast('This browser can’t send video to the Heat app. Use Chrome, Edge or Safari 16.4 or newer.', undefined, 7000);
-    let code = HL.norm(ls('hl.host') || ''); if (!(code.length === 8 || code.length === 12)) { code = HL.newCode(); ls('hl.host', code); }
+    const jc = HL.norm(joinRaw || ''), joined = jc.length === 8 || jc.length === 12;     /* a code typed in: host in that room instead of our own */
+    let code = joined ? jc : HL.norm(ls('hl.host') || ''); if (!joined && !(code.length === 8 || code.length === 12)) { code = HL.newCode(); ls('hl.host', code); }
     const R = cur = {
-      role: 'cam', code, invite: inviteOf(code), stopped: false, net: null, stream: null, enc: null, viewers: new Map(), timers: [], state: 'Starting camera…',
+      role: 'cam', code, joined, slot: 0, invite: inviteOf(code), stopped: false, net: null, stream: null, enc: null, viewers: new Map(), timers: [], state: 'Starting camera…',
       cool: 0, armed: false, armingIn: 0, armAt: 0, rev: 1, sens: 50, facing: 'environment', label: (myName() || 'Web camera').slice(0, 24), zone: { x: 0.34, y: 0.34, width: 0.32, height: 0.32 },
       zoom: 1, torch: false, frame: 0, lastKey: 0, wantKey: true, desc: null, annexb: true, sent: 0, hits: 0, prev: null, lastAlert: 0, alertId: Date.now(), flush: 0, battery: -1, charging: false
     };
@@ -2169,10 +2258,28 @@ const LK = (() => {
     if (R.stopped) return;
     const ok = await startEncoder(R);
     if (!ok || R.stopped) return;
-    R.net = listen(d.rid, {
-      state: s => { R.state = s === 'up' ? 'Ready — waiting for viewers' : s === 'taken' ? 'This room is open in another tab' : s; paintCam(R); },
-      conn: (io, inbox) => onViewer(R, d, io, inbox)
-    });
+    const claim = (slot, tries) => {
+      if (R.stopped) return;
+      R.slot = slot; try { R.net && R.net.stop(); } catch {}
+      R.net = listen(slotId(d.rid, slot), {
+        state: st => {
+          if (R.stopped) return;
+          if (st === 'taken') {
+            if (slot + 1 < SLOTS) { R.state = 'Looking for a free place in the room\u2026'; paintCam(R); return claim(slot + 1, 2); }
+            R.state = 'This room already has 8 hosts'; paintCam(R); return;
+          }
+          R.state = st === 'up' ? 'Ready \u2014 waiting for viewers' : st; paintCam(R);
+        },
+        conn: (io, inbox) => onViewer(R, d, io, inbox)
+      }, tries);
+    };
+    let first = 0;
+    if (joined) {                                                  /* somebody else's room: start at the first place nobody holds */
+      const present = await probeSlots(d.rid, [...Array(SLOTS).keys()]);
+      if (R.stopped) return;
+      if (present) while (present.includes(first) && first < SLOTS - 1) first++;
+    }
+    claim(first, joined ? 2 : 8);
     if (navigator.getBattery) navigator.getBattery().then(b => { const f = () => { R.battery = Math.round(b.level * 100); R.charging = b.charging; }; f(); b.addEventListener('levelchange', f); b.addEventListener('chargingchange', f); }).catch(() => {});
     R.timers.push(setInterval(() => tickCam(R), 1000));
     paintCam(R);
@@ -2285,6 +2392,11 @@ const LK = (() => {
       stream: { width: R.w, height: R.h, fps: CAM.fps, bitrate: CAM.bps, codec: 'avc', rotation: 0 }, lensLabel: R.zoom !== 1 ? (Math.round(R.zoom * 10) / 10) + '×' : '', lenses: [] };
     return s;
   }
+  function sendRoster(R) {
+    const members = [...R.viewers.values()].filter(x => x.sess).map(x => ({ id: x.id, name: x.name, hub: false }));
+    const msg = enc({ t: 'roster', members });
+    for (const x of R.viewers.values()) x.sess && x.sess.sendControl(msg);
+  }
   function pushCfg(R, v) { v.sess && v.sess.sendControl(enc({ t: 'cfg', rev: R.rev, ackSeq: v.ack | 0, config: cfgOf(R) })); }
   function pushAll(R) { clearTimeout(R.flush); R.flush = setTimeout(() => { for (const v of R.viewers.values()) pushCfg(R, v); }, 70); }
   function pushStatus(R, reliable) { const m = enc(statusOf(R)); for (const v of R.viewers.values()) v.sess && v.sess.sendControl(m, reliable); }
@@ -2297,12 +2409,13 @@ const LK = (() => {
     if (R.stopped) return io.close();
     const id = HL.hex(hs.peer), old = R.viewers.get(id);
     if (old && old.sess) old.sess.close('LOCAL');                   /* the same device came back: the new link replaces the old */
+    if (R.kicked && R.kicked.has(id)) { try { io.close(); } catch {} return; }                /* removed viewers are turned away */
     const v = { id, sess: null, watch: false, ack: 0, name: 'Viewer' };
     R.viewers.set(id, v);
     v.sess = new HL.Session(io, inbox, hs, {
       control: u => onViewerMsg(R, v, u),
       needKey: () => { R.wantKey = true; },
-      closed: (reason, err) => { R.last = { reason, err: err && err.message, at: Date.now(), who: v.name }; if (R.viewers.get(id) === v) R.viewers.delete(id); paintCam(R); }
+      closed: (reason, err) => { R.last = { reason, err: err && err.message, at: Date.now(), who: v.name }; if (R.viewers.get(id) === v) R.viewers.delete(id); sendRoster(R); paintCam(R); }
     });
     v.sess.start(); paintCam(R);
   }
@@ -2310,9 +2423,13 @@ const LK = (() => {
   function onViewerMsg(R, v, u) {
     const m = dec(u); if (!m || R.stopped) return;
     if (m.t === 'hello') {
-      v.name = String(m.name || 'Viewer').slice(0, 24); paintCam(R);
+      v.name = String(m.name || 'Viewer').slice(0, 24); sendRoster(R); paintCam(R);
       v.sess.sendControl(enc({ t: 'hello', name: R.label, role: 'CAMERA', app: 'web-' + BUILD, features: ['h264', 'cfg-patch', 'alerts'] }));
       pushCfg(R, v); v.sess.sendControl(enc(statusOf(R)));
+    } else if (m.t === 'kick') {
+      if (!m.id) { removedFromRoom(); return; }                        /* this host was removed from the room */
+      const t = R.viewers.get(String(m.id));
+      if (t && t !== v) { try { t.sess && t.sess.sendControl(enc({ t: 'kicked', by: v.name })); } catch {} R.kicked = R.kicked || new Set(); R.kicked.add(t.id); setTimeout(() => { try { t.sess && t.sess.close('LOCAL'); } catch {} }, 400); }
     } else if (m.t === 'watch') { v.watch = !!m.video; if (v.watch) R.wantKey = true; }
     else if (m.t === 'key') R.wantKey = true;
     else if (m.t === 'arm') setArmed(R, !!m.armed, m.delaySec | 0);
@@ -2356,18 +2473,25 @@ const LK = (() => {
   const fmtCode = c => HL.fmt(c);
 
   /* ---------- leaving, inviting ---------- */
+  function teardown(R) {
+    R.stopped = true; R.timers.forEach(clearInterval); (R.vt || []).forEach(clearInterval); clearTimeout(R.flush); clearTimeout(R.sensT);
+    if (R.role === 'view') stopClip(R, true);
+    try { R.net && R.net.stop(); } catch {}
+    if (R.sess) { try { R.sess.bye(); } catch {} }
+    for (const v of (R.viewers ? R.viewers.values() : [])) { try { v.sess && v.sess.bye(); } catch {} }
+    try { R.dec && R.dec.close(); } catch {}
+    try { R.enc && R.enc.close(); } catch {}
+    if (R.stream) R.stream.getTracks().forEach(t => t.stop());
+    (R.thumbs || []).forEach(u => URL.revokeObjectURL(u));
+  }
   function leave(quiet) {
-    const R = cur; cur = null;
-    if (R) {
-      R.stopped = true; R.timers.forEach(clearInterval); clearTimeout(R.flush); clearTimeout(R.sensT);
-      if (R.role === 'view') { stopClip(R, true); closePopovers(); $e('lkblkov').classList.remove('s'); $e('lkcs').classList.remove('open'); $e('lkV').classList.remove('so'); }
-      try { R.net && R.net.stop(); } catch {}
-      if (R.sess) { try { R.sess.bye(); } catch {} }
-      for (const v of (R.viewers ? R.viewers.values() : [])) { try { v.sess && v.sess.bye(); } catch {} }
-      try { R.dec && R.dec.close(); } catch {}
-      try { R.enc && R.enc.close(); } catch {}
-      if (R.stream) R.stream.getTracks().forEach(t => t.stop());
-      (R.thumbs || []).forEach(u => URL.revokeObjectURL(u));
+    const R0 = cur; cur = null;
+    const RM = ROOM; ROOM = null;
+    if (RM) clearInterval(RM.scan);
+    const all = new Set(RM ? RM.members.values() : []); if (R0) all.add(R0);
+    for (const R of all) teardown(R);
+    if (R0) {
+      if (R0.role === 'view') { closePopovers(); $e('lkblkov').classList.remove('s'); $e('lkcs').classList.remove('open'); $e('lkhs').classList.remove('open'); $e('lkV').classList.remove('so'); }
       $e('lkv').srcObject = null; $e('lkov').classList.remove('s'); $e('lksheet').classList.remove('open');
     }
     if (!quiet) { go('home'); refreshChip(); refreshRejoin(); }
@@ -2401,10 +2525,10 @@ const LK = (() => {
   sel('lkx').onclick = () => leave(); sel('lkcx').onclick = () => leave();
   sel('lkinv').onclick = invite; sel('lkcinv').onclick = invite;
   sel('lkfs').onclick = () => fs();
-  const sheets = () => sel('lkV').classList.toggle('so', sel('lksheet').classList.contains('open') || sel('lkcs').classList.contains('open'));
-  sel('lkact').onclick = () => { const R = cur; if (!R) return; const s = sel('lksheet'); sel('lkcs').classList.remove('open'); s.classList.toggle('open'); if (s.classList.contains('open')) { R.unread = 0; badge(R); } closePopovers(); sheets(); };
+  const sheets = () => sel('lkV').classList.toggle('so', ['lksheet', 'lkcs', 'lkhs'].some(i => sel(i).classList.contains('open')));
+  sel('lkact').onclick = () => { const R = cur; if (!R) return; const s = sel('lksheet'); sel('lkcs').classList.remove('open'); sel('lkhs').classList.remove('open'); s.classList.toggle('open'); if (s.classList.contains('open')) { R.unread = 0; badge(R); } closePopovers(); sheets(); };
   $('#lksheet .sx').onclick = () => { sel('lksheet').classList.remove('open'); sheets(); };
-  sel('lkset').onclick = () => { const R = cur; if (!R) return; const s = sel('lkcs'); sel('lksheet').classList.remove('open'); s.classList.toggle('open'); closePopovers(); if (s.classList.contains('open')) buildSettings(R, true); sheets(); };
+  sel('lkset').onclick = () => { const R = cur; if (!R) return; const s = sel('lkcs'); sel('lksheet').classList.remove('open'); sel('lkhs').classList.remove('open'); s.classList.toggle('open'); closePopovers(); if (s.classList.contains('open')) buildSettings(R, true); sheets(); };
   $('#lkcs .sx').onclick = () => { sel('lkcs').classList.remove('open'); sheets(); };
   sel('lkarm').onclick = () => { const R = cur; if (!R || R.role !== 'view' || !R.sess) return; R.sess.sendControl(enc({ t: 'arm', armed: !(R.st && (R.st.armed || R.st.armingIn > 0)), delaySec: null })); };
   sel('lkcarm').onclick = () => { const R = cur; if (R && R.role === 'cam') setArmed(R, !R.armed, 0); };
@@ -2677,6 +2801,52 @@ const LK = (() => {
     sel('lkzb').addEventListener('pointermove', move); sel('lkzb').addEventListener('pointerup', up); sel('lkzb').addEventListener('pointercancel', up);
   });
 
+
+  /* ---------- removed from the room: this tab's work ends ---------- */
+  function removedFromRoom() {
+    try { ls('hl.code', ''); } catch {}
+    leave(true);
+    document.body.dataset.s = 'removed';
+    const m = $e('lkrm'); if (m) m.classList.add('s');
+    try { window.close(); } catch {}
+  }
+
+  /* ---------- the hosts in this room ---------- */
+  function paintHosts() {
+    const RM = ROOM; if (!RM) return;
+    const list = [...RM.members.values()].sort((a, b) => a.slot - b.slot);
+    sel('lkhb').hidden = list.length < 2;
+    sel('lklock').checked = !!RM.locked;
+    sel('lkhb').hidden = false;
+    if (!sel('lkhs').classList.contains('open')) return;
+    sel('lkhl').innerHTML = list.map(R => {
+      const ago = R.lastAlertMs ? Math.round((Date.now() - R.lastAlertMs) / 1000) : -1;
+      const sub = R === cur ? (RM.locked ? 'Showing \u00b7 locked' : 'Showing') : !R.sess ? 'Offline' : ago >= 0 && ago < 3600 ? 'Motion ' + (ago < 60 ? ago + 's' : Math.round(ago / 60) + ' min') + ' ago' : (R.st && R.st.armed ? 'Armed' : 'Ready');
+      return `<div class="lkhr"><button class="lkh${R === cur ? ' on' : ''}" data-s="${R.slot}"><i class="dot${R.sess ? ' ok' : ''}"></i><span><b>${esc(nameOf(R))}</b><small>${sub}</small></span></button><button class="lkx2" data-rm="${R.slot}" title="Remove this host from the room" aria-label="Remove this host">\u2715</button></div>`;
+    }).join('');
+    const me = SELF_HEX, pl = (cur && cur.roster) || [];
+    sel('lkpl').innerHTML = pl.length ? pl.map(x => `<div class="lkhr"><span class="lkpn"><b>${esc(x.name || 'Viewer')}${x.id === me ? ' (you)' : ''}</b><small>${x.hub ? 'Hub' : 'Viewer'}</small></span>${x.id === me ? '' : `<button class="lkx2" data-kick="${esc(x.id)}" title="Remove this person" aria-label="Remove this person">\u2715</button>`}</div>`).join('') : '<p class="none" style="color:var(--t2);padding:8px 2px">Nobody else yet.</p>';
+  }
+  sel('lkhb').onclick = () => { const h = sel('lkhs'); sel('lksheet').classList.remove('open'); sel('lkcs').classList.remove('open'); closePopovers(); h.classList.toggle('open'); sheets(); paintHosts(); };
+  $('#lkhs .sx').onclick = () => { sel('lkhs').classList.remove('open'); sheets(); };
+  sel('lklock').onchange = e => { if (ROOM) { ROOM.locked = e.target.checked; ls('hl.lock', ROOM.locked ? '1' : '0'); paintHosts(); } };
+  /* removing is two taps: the first turns the button red and says so, the second does it */
+  function twoTap(btn, run) {
+    if (btn.dataset.armed) { clearTimeout(btn._t); btn.dataset.armed = ''; return run(); }
+    btn.dataset.armed = '1'; btn.classList.add('arm'); btn.textContent = 'Remove?';
+    btn._t = setTimeout(() => { btn.dataset.armed = ''; btn.classList.remove('arm'); btn.textContent = '\u2715'; }, 3000);
+  }
+  sel('lkhl').onclick = e => {
+    const rm = e.target.closest('[data-rm]');
+    if (rm) { const R = ROOM && ROOM.members.get(+rm.dataset.rm); if (R) twoTap(rm, () => { if (R.sess) R.sess.sendControl(enc({ t: 'kick', id: '' })); toast('Removed ' + nameOf(R)); }); return; }
+    const b = e.target.closest('.lkh'), R = b && ROOM && ROOM.members.get(+b.dataset.s); if (R && R !== cur) attachView(R);
+  };
+  sel('lkpl').onclick = e => {
+    const k = e.target.closest('[data-kick]');
+    if (k && cur && cur.sess) twoTap(k, () => { cur.sess.sendControl(enc({ t: 'kick', id: k.dataset.kick })); toast('Removed'); });
+  };
+  setInterval(() => { if (ROOM && sel('lkhs').classList.contains('open')) paintHosts(); }, 2000);
+
   /* ---------- keeping the panels in step with the camera ---------- */
   function paintPanels(R, det, z, s) {
     if (!R || R.role !== 'view') return;
@@ -2816,6 +2986,7 @@ const LK = (() => {
   return {
     view, host, leave, invite, refreshRejoin,
     get active() { return !!cur; },
+    members() { return ROOM ? [...ROOM.members.values()].map(R => ({ slot: R.slot, sess: !!R.sess, state: R.state, last: R.last, bg: R.bg, live: R.live })) : []; },
     info() { return cur ? { url: cur.invite, code: cur.code } : null; },
     debug() { return cur ? { role: cur.role, last: cur.last, state: cur.state, live: cur.live, cfg: cur.cfg, pend: cur.pend, st: cur.st, rtt: cur.sess && cur.sess.rtt, viewers: cur.viewers ? cur.viewers.size : undefined, sent: cur.sent, decoded: cur.dec && cur.dec.shown, rxv: cur.rxv, dec: cur.dec && { ready: cur.dec.ready, state: cur.dec.dec && cur.dec.dec.state, q: cur.dec.dec && cur.dec.dec.decodeQueueSize } } : null; }
   };

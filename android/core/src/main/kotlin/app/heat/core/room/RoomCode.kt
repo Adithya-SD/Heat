@@ -32,6 +32,12 @@ object RoomCode {
     /** The length codes used to have. Still accepted, never generated. */
     const val LEGACY_LENGTH = 12
 
+    /** A room holds up to this many hosts: slot 0 is the room id itself (so every older code is unchanged), the rest are `id-1`..`id-7`. */
+    const val SLOTS = 8
+
+    /** The signaling id of host slot [slot] in the room [roomId]. */
+    fun slotId(roomId: String, slot: Int): String = if (slot <= 0) roomId else "$roomId-$slot"
+
     private const val KEY_SALT = "heat-link-v1 key"
     private const val ROOM_SALT = "heat-link-v1 room"
     private const val KEY_ROUNDS = 150_000

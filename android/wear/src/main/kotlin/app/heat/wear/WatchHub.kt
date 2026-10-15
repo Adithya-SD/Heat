@@ -107,6 +107,9 @@ class WatchHub(context: Context) {
     val banner: StateFlow<Banner?> = _banner.asStateFlow()
     fun dismissBanner() { _banner.value = null }
 
+    /** Emits when the phone removed this watch from its room: the app closes. */
+    val kicked = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(replay = 1, extraBufferCapacity = 1)
+
     /** One value per motion alert that should flash the screen white (the app is on screen). */
     val flashes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 4)
 
@@ -416,6 +419,7 @@ class WatchHub(context: Context) {
                         if (n == 1L) Log.i(TAG, "first picture on screen at +${android.os.SystemClock.elapsedRealtime() - born} ms after the camera became known")
                     }
                 }
+                scope.launch { c.kicked.collect { kicked.tryEmit(Unit) } }
                 scope.launch {
                     c.alerts.collect { a ->
                         val profile = c.config.value?.alerts?.watchHaptics ?: HapticProfile.NORMAL

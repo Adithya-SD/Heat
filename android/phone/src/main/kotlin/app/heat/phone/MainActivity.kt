@@ -117,6 +117,9 @@ private fun PhoneRoot(invite: androidx.compose.runtime.MutableState<String?>) {
         screen = "rooms"
     }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewer?.let { v -> HubHolder.hub.value?.relay?.viewing(v.code, false) } } }
+    // Removed from the room being watched: this app closes, with its task.
+    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    LaunchedEffect(viewer) { viewer?.client?.kicked?.collect { activity?.finishAndRemoveTask() } }
     LaunchedEffect(invite.value, hub) {
         val code = invite.value
         if (code != null && hub != null) {

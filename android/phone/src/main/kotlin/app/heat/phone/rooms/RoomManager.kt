@@ -19,6 +19,7 @@ import app.heat.platform.PreviewDecoder
 import app.heat.rooms.PeerServer
 import app.heat.rooms.RoomDialer
 import app.heat.rooms.RoomHost
+import app.heat.rooms.RoomSlotHost
 import app.heat.rooms.RoomNet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,9 @@ data class HostingState(
     /** The code people use to join. Empty until the room has been opened once. */
     val code: String = "",
     val open: Boolean = false,
-    val phase: RoomHost.Phase = RoomHost.Phase.CONNECTING
+    val phase: RoomHost.Phase = RoomHost.Phase.CONNECTING,
+    /** Which of the room's host slots this phone holds (0 is the first host), or -1 while it has none. */
+    val slot: Int = -1
 )
 
 @Serializable
@@ -73,7 +76,7 @@ class RoomManager(
     private val _recent = MutableStateFlow(stored.recent)
     val recent: StateFlow<List<String>> = _recent.asStateFlow()
 
-    private var host: RoomHost? = null
+    private var host: RoomSlotHost? = null
     private var watcher: Job? = null
 
     /** Call once the camera hub is up: reopens the room if it was open when the app last ran. */
@@ -93,10 +96,10 @@ class RoomManager(
             // Deriving the key is deliberately slow (150,000 rounds); it never blocks the UI thread.
             val key = RoomCode.groupKey(code)
             val rid = RoomCode.roomId(code)
-            val h = RoomHost(net, rid, Acceptor(deviceId, key, scope, handler = accepted))
+            val h = RoomSlotHost(net, rid, Acceptor(deviceId, key, scope, handler = accepted))
             host = h
             h.start()
-            h.state.collect { s -> _hosting.value = _hosting.value.copy(phase = s.phase) }
+            h.state.collect { s -> _hosting.value = _hosting.value.copy(phase = s.phase, slot = s.slot) }
         }
     }
 
@@ -106,6 +109,20 @@ class RoomManager(
         stored = stored.copy(hosting = false)
         save()
         _hosting.value = _hosting.value.copy(open = false, phase = RoomHost.Phase.CONNECTING)
+    }
+
+    /**
+     * Hosts this phone's camera in a room that already exists (somebody else's code): it takes the next free host
+     * slot there. The code shown for this phone is that room's until [newCode] makes its own.
+     */
+    fun hostIn(code: String) {
+        val c = RoomCode.normalize(code)
+        if (!RoomCode.isComplete(c)) return
+        close()
+        stored = stored.copy(code = c, hosting = true)
+        save()
+        _hosting.value = HostingState(c, false)
+        open()
     }
 
     /** A new code: everyone who had the old one is locked out. The room reopens under it if it was open. */
@@ -146,11 +163,19 @@ class RoomManager(
     }
 
     /** Joins a room as a viewer. Suspends while the key is derived. */
-    suspend fun join(code: String): RoomViewer = withContext(Dispatchers.Default) {
+    suspend fun join(code: String, slot: Int = 0): RoomViewer = withContext(Dispatchers.Default) {
         val c = RoomCode.normalize(code)
         val key = RoomCode.groupKey(c)
-        val rid = RoomCode.roomId(c)
-        RoomViewer(c, rid, key, DialerFactory { RoomDialer(net, rid) }, deviceId, scope)
+        val id = RoomCode.slotId(roomIdOf(c), slot)
+        RoomViewer(c, id, key, DialerFactory { RoomDialer(net, id) }, deviceId, scope, slot)
+    }
+
+    private val roomIds = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun roomIdOf(code: String): String = roomIds.getOrPut(code) { RoomCode.roomId(code) }
+
+    /** Which host slots of a room have somebody in them right now (a quick look: no video, no connection set up). */
+    suspend fun scan(code: String): Set<Int> = withContext(Dispatchers.Default) {
+        app.heat.rooms.scanRoom(net, roomIdOf(RoomCode.normalize(code)))
     }
 
     fun interface DialerFactory { fun create(): RoomDialer }
@@ -170,7 +195,9 @@ class RoomViewer internal constructor(
     key: app.heat.core.link.GroupKey,
     dialers: RoomManager.DialerFactory,
     self: DeviceId,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    /** Which host slot of the room this viewer is looking at. */
+    val slot: Int = 0
 ) {
     // The camera in a room is whoever holds the code; its real id is learned from the handshake. This one only names the
     // conversation locally.

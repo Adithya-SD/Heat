@@ -365,6 +365,55 @@ class HostClientTest {
         assertEquals(1, hubGot.get()); assertEquals(1, plainGot.get())
     }
 
+    // ── people in the room ───────────────────────────────────────────
+
+    @Test
+    fun everyone_connected_sees_who_else_is_connected() = runTest {
+        val r = Rig(this)
+        val (a, _) = r.client(); val (b, _) = r.client()
+        r.settle(1_500)
+        assertEquals(2, a.roster.value.size)
+        assertEquals(2, b.roster.value.size)
+        assertEquals(setOf("Watch"), a.roster.value.map { it.name }.toSet())
+    }
+
+    @Test
+    fun any_viewer_can_remove_another_who_is_told_and_turned_away_if_they_come_back() = runTest {
+        val r = Rig(this)
+        fun mk(id: DeviceId): CameraClient {
+            val c = CameraClient(camera, "Phone", id, group, r.scope.backgroundScope, r.clock)
+            c.link.setDialer(CarrierKind.LAN, FakeDialer(r.acceptor)); c.start(); return c
+        }
+        val ida = DeviceId.random(); val idb = DeviceId.random()
+        val a = mk(ida); val b = mk(idb)
+        val told = CopyOnWriteArrayList<String>()
+        val job = backgroundScope.launch(Dispatchers.Unconfined) { b.kicked.collect { told += it } }
+        r.settle(1_500)
+        assertEquals(2, r.host.viewerCount.value)
+        a.kick(idb.hex)
+        r.settle(2_000)
+        assertEquals("the removed viewer is told", 1, told.size)
+        assertTrue("and its link is stopped", b.linkState.value.phase != LinkState.Phase.UP)
+        assertEquals(1, r.host.viewerCount.value)
+        // coming back with the same identity is turned away
+        val b2 = mk(idb)
+        r.settle(3_000)
+        assertEquals(1, r.host.viewerCount.value)
+        job.cancel()
+    }
+
+    @Test
+    fun removing_a_host_calls_the_platform() = runTest {
+        val r = Rig(this)
+        val (a, _) = r.client()
+        val removed = AtomicInteger()
+        r.host.onRemoved = { removed.incrementAndGet() }
+        r.settle()
+        a.removeHost()
+        r.settle()
+        assertEquals(1, removed.get())
+    }
+
     @Test
     fun an_alert_raised_while_the_viewer_is_disconnected_arrives_exactly_once_on_return() = runTest {
         val r = Rig(this)

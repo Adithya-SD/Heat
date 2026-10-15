@@ -129,7 +129,7 @@ fun RoomsScreen(hub: CameraHub, onBack: () -> Unit, onJoin: (String) -> Unit) {
             }
 
             // ── join a room ──
-            JoinCard(recent, onJoin = { rooms.remember(it); onJoin(it) }, onForget = { rooms.forget(it) })
+            JoinCard(recent, onJoin = { rooms.remember(it); onJoin(it) }, onHost = { rooms.hostIn(it) }, onForget = { rooms.forget(it) })
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -207,7 +207,7 @@ private fun ActionChip(icon: HeatIcon, label: String, modifier: Modifier = Modif
 }
 
 @Composable
-private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onForget: (String) -> Unit) {
+private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onHost: (String) -> Unit, onForget: (String) -> Unit) {
     val ctx = LocalContext.current
     var field by remember { mutableStateOf(TextFieldValue("")) }
     val complete = RoomCode.isComplete(field.text)
@@ -221,7 +221,7 @@ private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onForget: (
             Spacer(Modifier.width(10.dp))
             Column {
                 HeatText("Join a room", size = 18, weight = FontWeight.SemiBold)
-                HeatText("Enter the code from a camera, or paste its link.", size = 13, color = Heat.TextDim)
+                HeatText("Enter a room code, then choose: receive its cameras, or add this phone's camera to it.", size = 13, color = Heat.TextDim)
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -238,20 +238,26 @@ private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onForget: (
             )
         }
         Spacer(Modifier.height(12.dp))
+        ActionChip(HeatIcon.Copy, "Paste", Modifier.fillMaxWidth(), dim = true) {
+            val clip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+            RoomCode.parseInvite(clip)?.let { set(it) }
+        }
+        Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionChip(HeatIcon.Copy, "Paste", Modifier.weight(1f), dim = true) {
-                val clip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
-                RoomCode.parseInvite(clip)?.let { set(it) }
-            }
             Box(
                 Modifier.weight(1f).matte(RoundedCornerShape(16.dp), if (complete) Heat.Ember0 else Heat.MatteHi)
                     .tappable({ if (complete) onJoin(RoomCode.normalize(field.text)) }).padding(vertical = 13.dp),
                 contentAlignment = Alignment.Center
-            ) { HeatText("Watch", size = 15, weight = FontWeight.SemiBold, color = if (complete) Color.White else Heat.TextFaint) }
+            ) { HeatText("Receive", size = 15, weight = FontWeight.SemiBold, color = if (complete) Color.White else Heat.TextFaint) }
+            Box(
+                Modifier.weight(1f).matte(RoundedCornerShape(16.dp), Heat.MatteHi)
+                    .tappable({ if (complete) onHost(RoomCode.normalize(field.text)) }).padding(vertical = 13.dp),
+                contentAlignment = Alignment.Center
+            ) { HeatText("Host here", size = 15, weight = FontWeight.SemiBold, color = if (complete) Heat.Text else Heat.TextFaint) }
         }
         if (recent.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            HeatText("RECENT", size = 11, weight = FontWeight.SemiBold, color = Heat.TextFaint)
+            HeatText("RECEIVING FROM", size = 11, weight = FontWeight.SemiBold, color = Heat.TextFaint)
             Spacer(Modifier.height(6.dp))
             for (code in recent) {
                 Row(

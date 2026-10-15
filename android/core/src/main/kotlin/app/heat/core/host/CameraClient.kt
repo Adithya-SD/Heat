@@ -75,6 +75,16 @@ class CameraClient(
     /** Each alert once, in order, including ones raised while this viewer was briefly disconnected. */
     val alerts: SharedFlow<Msg.Alert> = _alerts.asSharedFlow()
 
+    private val _roster = MutableStateFlow<List<app.heat.core.model.Member>>(emptyList())
+
+    /** Everyone connected to this camera, this viewer included. */
+    val roster: StateFlow<List<app.heat.core.model.Member>> = _roster.asStateFlow()
+
+    private val _kicked = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
+
+    /** Emits when this camera removed us from its room. The link is already stopped; the app closes itself. */
+    val kicked: SharedFlow<String> = _kicked.asSharedFlow()
+
     private val _hosts = MutableStateFlow<Msg.Hosts?>(null)
 
     /** When this camera is a hub: every host it relays and which one is on show. Null for an ordinary camera. */
@@ -120,6 +130,15 @@ class CameraClient(
     /** Ask a hub to show another host's picture ([id] from [hosts]); [lock] pins the view there, null leaves the pin alone. */
     fun pickHost(id: String, lock: Boolean? = null) = send(Msg.PickHost(id, lock))
 
+    /** Remove a viewer from this camera ([Msg.Roster] ids). */
+    fun kick(id: String) = send(Msg.Kick(id))
+
+    /** Ask a hub to remove one of the hosts it relays ([Msg.Hosts] key). */
+    fun kickHost(key: String) = send(Msg.Kick("host:$key"))
+
+    /** Remove this camera itself from the room. */
+    fun removeHost() = send(Msg.Kick(""))
+
     fun needKeyframe() = send(Msg.NeedKey, reliable = false)
     fun snap() = send(Msg.Snap)
     fun identify() = send(Msg.Identify)
@@ -143,6 +162,8 @@ class CameraClient(
             is Msg.Status -> _status.value = msg
             is Msg.Hello -> _hello.value = msg
             is Msg.Hosts -> _hosts.value = msg
+            is Msg.Roster -> _roster.value = msg.members
+            is Msg.Kicked -> { link.stop(); _kicked.tryEmit(msg.by) }
             is Msg.Alert -> if (seenAlerts.add("${msg.hostId}/${msg.id}@${msg.atMs}")) {
                 if (seenAlerts.size > 64) seenAlerts.remove(seenAlerts.first())
                 _alerts.tryEmit(msg)

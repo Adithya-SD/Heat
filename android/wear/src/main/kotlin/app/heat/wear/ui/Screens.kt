@@ -112,7 +112,7 @@ fun WatchRoot(hub: WatchHub) {
             screen == Screen.Cameras -> CamerasScreen(hub, cameras, client) { screen = Screen.Camera }
             screen == Screen.Settings -> SettingsScreen(client, cameras, hub) { screen = Screen.Camera }
             screen == Screen.Activity -> GalleryScreen(hub) { screen = Screen.Camera }
-            screen == Screen.Hosts -> HostsScreen(client) { screen = Screen.Camera }
+            screen == Screen.Hosts -> HostsScreen(client, hub.deviceId.hex) { screen = Screen.Camera }
             else -> CameraScreen(
                 client, incoming, hub, glass,
                 onCameras = { screen = Screen.Cameras }, onActivity = { screen = Screen.Activity }, onSettings = { screen = Screen.Settings },
@@ -141,8 +141,9 @@ private fun Waiting(paired: Boolean) {
  * there, so movement on another host still flashes and buzzes (with that host's name) but no longer switches the picture.
  */
 @Composable
-private fun HostsScreen(client: CameraClient, back: () -> Unit) {
+private fun HostsScreen(client: CameraClient, selfHex: String, back: () -> Unit) {
     val hosts by client.hosts.collectAsState()
+    val roster by client.roster.collectAsState()
     val list = rememberScalingLazyListState()
     val h = hosts
     ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -151,14 +152,23 @@ private fun HostsScreen(client: CameraClient, back: () -> Unit) {
             item { HeatText("Only this phone is a host. Add a host's code in the Heat app on the phone.", size = 12, color = Heat.TextDim, align = TextAlign.Center, modifier = Modifier.fillMaxWidth(0.8f)) }
         } else {
             item { Toggle("Lock view", h.locked) { client.pickHost(h.shown, lock = it) } }
-            for (host in h.hosts) item(key = host.id) { HostRow(host, selected = host.id == h.shown, locked = h.locked && host.id == h.shown) { client.pickHost(host.id); back() } }
+            for (host in h.hosts) item(key = host.id) {
+                HostRow(host, selected = host.id == h.shown, locked = h.locked && host.id == h.shown,
+                    onRemove = if (host.id == app.heat.core.model.HostInfo.SELF) null else { { client.kickHost(host.id) } }) { client.pickHost(host.id); back() }
+            }
+        }
+        // Everyone connected to this phone, to remove one.
+        val others = roster.filter { it.id != selfHex }
+        if (others.isNotEmpty()) {
+            item { HeatText("People here", size = 12, weight = FontWeight.SemiBold, color = Heat.TextDim, modifier = Modifier.padding(top = 6.dp)) }
+            for (m in others) item(key = "m" + m.id) { PersonRow(m.name, if (m.hub) "Hub" else "Viewer") { client.kick(m.id) } }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
 @Composable
-private fun HostRow(host: app.heat.core.model.HostInfo, selected: Boolean, locked: Boolean, onClick: () -> Unit) {
+private fun HostRow(host: app.heat.core.model.HostInfo, selected: Boolean, locked: Boolean, onRemove: (() -> Unit)?, onClick: () -> Unit) {
     val now = System.currentTimeMillis()
     Row(
         Modifier.fillMaxWidth(0.88f).clip(RoundedCornerShape(20.dp)).background(if (selected) Color(0x44FF7A2F) else Color(0x26FFFFFF))
@@ -183,6 +193,33 @@ private fun HostRow(host: app.heat.core.model.HostInfo, selected: Boolean, locke
             )
         }
         if (locked) HeatIconView(HeatIcon.Lock, Heat.Orange, 14.dp)
+        if (onRemove != null) { Spacer(Modifier.width(6.dp)); RemoveButton(onRemove) }
+    }
+}
+
+/** Removing is two taps: the first turns the button red and says "Remove?", the second does it. */
+@Composable
+private fun RemoveButton(onConfirmed: () -> Unit) {
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) { if (armed) { delay(3_000); armed = false } }
+    Box(
+        Modifier.clip(RoundedCornerShape(14.dp)).background(if (armed) Color(0xCCFF453A) else Color(0x33FFFFFF))
+            .clickable { if (armed) { armed = false; onConfirmed() } else armed = true }.padding(horizontal = 9.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center
+    ) { HeatText(if (armed) "Remove?" else "✕", size = 11, weight = FontWeight.Bold, color = if (armed) Color.White else Color(0xFFFF8A80)) }
+}
+
+@Composable
+private fun PersonRow(name: String, sub: String, onRemove: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth(0.88f).clip(RoundedCornerShape(20.dp)).background(Color(0x26FFFFFF)).padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            HeatText(name, size = 13, weight = FontWeight.SemiBold, maxLines = 1)
+            HeatText(sub, size = 10, color = Heat.TextDim)
+        }
+        RemoveButton(onRemove)
     }
 }
 

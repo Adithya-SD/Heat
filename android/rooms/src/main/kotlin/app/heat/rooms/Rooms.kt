@@ -154,7 +154,9 @@ class RoomHost(
     private val net: RoomNet,
     private val roomId: String,
     private val acceptor: Acceptor,
-    private val maxPeers: Int = 8
+    private val maxPeers: Int = 8,
+    /** How many times the server may say the id is taken before this host gives up on it (our own old registration lingers a few seconds). */
+    private val takenAfter: Int = 8
 ) {
     enum class Phase { CONNECTING, READY, TAKEN, OFFLINE }
 
@@ -195,7 +197,7 @@ class RoomHost(
             } catch (e: SignalException) {
                 if (e.kind == SignalException.Kind.ID_TAKEN) {
                     // Our own earlier registration lingers for a few seconds after a restart; give it time to expire.
-                    if (++taken > 8) _state.value = State(Phase.TAKEN)
+                    if (++taken >= takenAfter) _state.value = State(Phase.TAKEN)
                 } else {
                     _state.value = State(Phase.OFFLINE)
                     failures++
@@ -224,6 +226,8 @@ class RoomHost(
                 if (active.size >= maxPeers) return
                 val src = m.src ?: return
                 val sdp = PeerJsCodec.sdpOf(m.payload) ?: return
+                // A room probe (a receiver looking for hosts) sends a stub that is not a session description: nothing to answer.
+                if (!sdp.contains("m=")) return
                 active[id]?.cancel()
                 active[id] = scope.launch {
                     try {
@@ -233,7 +237,9 @@ class RoomHost(
                     } catch (e: Exception) {
                         Log.i(TAG, "a viewer could not connect: ${e.message}")
                     } finally {
-                        sinks.remove(id); earlyCandidates.remove(id)
+                        // Finished (connected or not): it no longer counts against maxPeers. It used to stay forever, so after
+                        // eight attempts in the life of a room every new viewer was refused until the app restarted.
+                        sinks.remove(id); earlyCandidates.remove(id); active.remove(id)
                     }
                 }
             }

@@ -124,10 +124,27 @@ sealed interface Msg {
     @Serializable @SerialName("hosts")
     data class Hosts(val hosts: List<HostInfo>, val shown: String = HostInfo.SELF, val locked: Boolean = false) : Msg
 
+    // ── people in the room ───────────────────────────────────────────
+
+    /** Who is connected to this host right now. Sent to every one of them whenever it changes. */
+    @Serializable @SerialName("roster")
+    data class Roster(val members: List<Member>) : Msg
+
+    /** Remove a viewer from this host ([id] from [Roster]), or, with a blank id, remove this host itself from the room. Anyone who holds the room code may. */
+    @Serializable @SerialName("kick")
+    data class Kick(val id: String = "") : Msg
+
+    /** You were removed from the room: the receiver closes its app. Sent to a removed viewer, and to a host that was removed. */
+    @Serializable @SerialName("kicked")
+    data class Kicked(val by: String = "") : Msg
+
     /** Show this host's video. [lock] pins the view there (movement elsewhere still alerts but no longer switches); null leaves the pin as it is. */
     @Serializable @SerialName("pick")
     data class PickHost(val id: String, val lock: Boolean? = null) : Msg
 }
+
+@Serializable
+data class Member(val id: String, val name: String, val hub: Boolean = false)
 
 @Serializable
 data class HostInfo(

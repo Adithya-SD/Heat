@@ -38,7 +38,9 @@ class HostRelay(
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("heat-relay", Context.MODE_PRIVATE)
 
-    private inner class Entry(val code: String, val viewer: RoomViewer) {
+    /** One host in one room: [code] names the room, [slot] which of its hosts; [key] is what the watch uses to name it. */
+    private inner class Entry(val code: String, val slot: Int, val viewer: RoomViewer) {
+        val key: String get() = keyOf(code, slot)
         @Volatile var name: String = ""
         @Volatile var live = false
         @Volatile var lastAlertMs = 0L
@@ -46,9 +48,11 @@ class HostRelay(
         @Volatile var watching = false
         @Volatile var uiViewing = false
         val jobs = mutableListOf<Job>()
-        fun label() = name.ifBlank { "Camera ${code.take(4)}" }
+        @Volatile var absentScans = 0
+        fun label() = name.ifBlank { "Camera ${code.take(4)}" + if (slot > 0) " ${slot + 1}" else "" }
     }
 
+    private fun keyOf(code: String, slot: Int) = if (slot == 0) code else "$code#$slot"
     private val entries = ConcurrentHashMap<String, Entry>()
     private var order: List<String> = emptyList()
     private val lock = Any()
@@ -63,14 +67,17 @@ class HostRelay(
 
     fun start() {
         host.onPick = { id, lockWanted -> pick(id, lockWanted) }
+        host.onKickHost = { key -> entries[key]?.let { it.viewer.client.removeHost(); forgetEntry(it) } }
         host.armHook = { armed, delay -> forwardArm(armed, delay) }
         scope.launch { rooms.recent.collect { sync(it) } }
+        scope.launch { scanLoop() }
         scope.launch { while (true) { delay(1_000); publish() } }
         publish()
     }
 
     fun shutdown() {
         host.onPick = null
+        host.onKickHost = null
         host.armHook = null
         host.statusOverride = null
         for (e in entries.values) stop(e)
@@ -81,20 +88,53 @@ class HostRelay(
 
     private suspend fun sync(codes: List<String>) {
         synchronized(lock) { order = codes }
-        for (c in codes) if (!entries.containsKey(c)) runCatching { add(c) }.onFailure { Log.w(TAG, "could not join $c", it) }
-        for (c in entries.keys.toList()) if (c !in codes) remove(c)
+        for (c in codes) if (!entries.containsKey(c) && !isOwn(c, 0)) runCatching { add(c, 0) }.onFailure { Log.w(TAG, "could not join $c", it) }
+        for (e in entries.values.toList()) if (e.code !in codes) remove(e.key)
         publish()
     }
 
-    private suspend fun add(code: String) {
-        val v = rooms.join(code)
-        val e = Entry(code, v)
-        if (entries.putIfAbsent(code, e) != null) { v.stop(); return }
-        v.tap = VideoSink { flags, pts, data, off, len -> if (shown == code) host.sendVideo(flags, pts, data, off, len, CameraHost.Audience.HUB) }
+    /** A host slot this very phone holds: never watched by itself. */
+    private fun isOwn(code: String, slot: Int): Boolean {
+        val h = rooms.hosting.value
+        return h.open && h.code == code && h.slot == slot
+    }
+
+    /**
+     * Rooms can have several hosts, and a host can arrive at any time. Every so often each saved room is looked at once
+     * (a signaling-only probe, no video) and any host slot that is occupied but not yet joined gets a viewer. A slot that has
+     * been empty for several looks in a row is let go again so a host that left costs nothing.
+     */
+    private suspend fun scanLoop() {
+        delay(4_000)
+        while (true) {
+            for (code in synchronized(lock) { order }) {
+                val present = runCatching { rooms.scan(code) }.getOrDefault(emptySet())
+                if (present.isEmpty() && entries[code]?.live != true) continue     // the probe itself may have failed: change nothing
+                for (slot in 1 until app.heat.core.room.RoomCode.SLOTS) {
+                    val key = keyOf(code, slot)
+                    val e = entries[key]
+                    if (slot in present && !isOwn(code, slot)) {
+                        e?.absentScans = 0
+                        if (e == null) runCatching { add(code, slot) }.onFailure { Log.w(TAG, "could not join $key", it) }
+                    } else if (e != null && ++e.absentScans >= 3) remove(key)
+                }
+            }
+            publish()
+            delay(SCAN_MS)
+        }
+    }
+
+    private suspend fun add(code: String, slot: Int) {
+        val v = rooms.join(code, slot)
+        val key = keyOf(code, slot)
+        val e = Entry(code, slot, v)
+        if (entries.putIfAbsent(key, e) != null) { v.stop(); return }
+        v.tap = VideoSink { flags, pts, data, off, len -> if (shown == key) host.sendVideo(flags, pts, data, off, len, CameraHost.Audience.HUB) }
         v.rawThumb = { jpeg -> host.sendThumbnail(jpeg) }
         v.start(video = false)
         val c = v.client
         e.jobs += scope.launch { c.alerts.collect { onAlert(e, it) } }
+        e.jobs += scope.launch { c.kicked.collect { Log.i(TAG, "hub: removed from ${e.code.take(4)}… by ${it}"); forgetEntry(e) } }
         e.jobs += scope.launch { c.linkState.collect { e.live = it.phase == LinkState.Phase.UP; publish() } }
         e.jobs += scope.launch {
             c.config.collect { cfg -> cfg?.label?.takeIf { it.isNotBlank() }?.let { if (e.name != it) { e.name = it; publish() } } }
@@ -107,17 +147,24 @@ class HostRelay(
             c.status.collect { st ->
                 e.status = st
                 val g = st?.stream
-                if (g != geometry) { geometry = g; if (shown == code) host.refreshStatus() }
+                if (g != geometry) { geometry = g; if (shown == key) host.refreshStatus() }
             }
         }
-        Log.i(TAG, "hub: joined host ${code.take(4)}…")
+        Log.i(TAG, "hub: joined host ${code.take(4)}… slot $slot")
     }
 
-    private fun remove(code: String) {
-        val e = entries.remove(code) ?: return
+    private fun remove(key: String) {
+        val e = entries.remove(key) ?: return
         stop(e)
-        if (shown == code) setShown(HostInfo.SELF)
-        Log.i(TAG, "hub: left host ${code.take(4)}…")
+        if (shown == key) setShown(HostInfo.SELF)
+        Log.i(TAG, "hub: left host ${e.code.take(4)}… slot ${e.slot}")
+    }
+
+    /** This host is out of the hub for good: gone from the list, and its code no longer kept (slot 0 is the room itself). */
+    private fun forgetEntry(e: Entry) {
+        remove(e.key)
+        if (e.slot == 0) rooms.forget(e.code)
+        publish()
     }
 
     private fun stop(e: Entry) {
@@ -131,12 +178,12 @@ class HostRelay(
 
     private fun onAlert(e: Entry, a: Msg.Alert) {
         e.lastAlertMs = System.currentTimeMillis()
-        host.raiseAlert(a.kind, a.changedPct, a.escalation, e.code, e.label())
+        host.raiseAlert(a.kind, a.changedPct, a.escalation, e.key, e.label())
         if (a.kind == AlertKind.MOTION) {
             AlertNotifier.motion(appContext, host.config.value.copy(label = e.label()), host.viewerCount.value)
-            if (!locked && shown != e.code) {
+            if (!locked && shown != e.key) {
                 Log.i(TAG, "hub: motion on ${e.label()}: showing it")
-                setShown(e.code)
+                setShown(e.key)
             }
         }
         publish()
@@ -206,7 +253,7 @@ class HostRelay(
     }
 
     private fun interest(e: Entry, forceKey: Boolean = false) {
-        val want = (shown == e.code && wantVideo) || e.uiViewing
+        val want = (shown == e.key && wantVideo) || e.uiViewing
         if (e.watching != want) {
             e.watching = want
             e.viewer.client.watch(video = want)
@@ -240,8 +287,9 @@ class HostRelay(
         val list = ArrayList<HostInfo>()
         list += HostInfo(HostInfo.SELF, host.config.value.label, live = true, armed = host.armed.value, lastAlertMs = lastLocalAlertMs)
         val codes = synchronized(lock) { order }
-        for (c in codes) entries[c]?.let { e ->
-            list += HostInfo(e.code, e.label(), live = e.live, armed = e.status?.armed == true, lastAlertMs = e.lastAlertMs)
+        val ordered = codes.flatMap { c -> entries.values.filter { it.code == c }.sortedBy { it.slot } }
+        for (e in ordered) e.let { e ->
+            list += HostInfo(e.key, e.label(), live = e.live, armed = e.status?.armed == true, lastAlertMs = e.lastAlertMs)
         }
         host.setHosts(Msg.Hosts(list, if (showingSelf) HostInfo.SELF else shown, locked))
     }
@@ -250,5 +298,6 @@ class HostRelay(
         const val TAG = "HeatHostRelay"
         const val KEY_SHOWN = "shown"
         const val KEY_LOCKED = "locked"
+        const val SCAN_MS = 15_000L
     }
 }
