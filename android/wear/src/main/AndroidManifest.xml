@@ -26,6 +26,7 @@
             android:exported="true"
             android:taskAffinity=""
             android:launchMode="singleTask"
+            android:screenOrientation="portrait"
             android:theme="@style/HeatWatch">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

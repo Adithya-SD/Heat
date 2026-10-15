@@ -113,9 +113,9 @@ async function connect(code = 'ABCDEFGHJKMN', codeB = code, hs = {}) {
     x.cs.close(); x.ss.close();
   });
 
-  await test('generated codes are 12 valid symbols, all different, all derivable', async () => {
+  await test('generated codes are 8 valid symbols, all different, all derivable', async () => {
     const seen = new Set();
-    for (let i = 0; i < 300; i++) { const c = HL.newCode(); assert.strictEqual(c.length, 12); assert.strictEqual(HL.norm(c), c); seen.add(c); }
+    for (let i = 0; i < 300; i++) { const c = HL.newCode(); assert.strictEqual(c.length, 8); assert.strictEqual(HL.norm(c), c); seen.add(c); }
     assert.ok(seen.size > 295);
     await HL.derive(HL.newCode());
   });

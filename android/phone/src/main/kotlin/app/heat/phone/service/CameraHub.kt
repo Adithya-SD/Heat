@@ -88,7 +88,7 @@ data class HubState(
 )
 
 @Serializable
-private class StoredConfig(val rev: Long, val config: CameraConfig)
+private data class StoredConfig(val rev: Long, val config: CameraConfig)
 
 /**
  * Everything the phone does as a camera, wired together. Lives exactly as long
@@ -162,7 +162,10 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
 
     private val stored: StoredConfig = runCatching {
         ProtoJson.decodeFromString(StoredConfig.serializer(), configFile.readText())
-    }.getOrNull() ?: StoredConfig(0, CameraConfig())
+    }.getOrNull()?.let { s ->
+        // Every setting is kept, except where the zoom was left: the camera always opens at 1x on the main lens.
+        s.copy(config = s.config.copy(camera = s.config.camera.copy(zoom = 1f)))
+    } ?: StoredConfig(0, CameraConfig())
 
     // A slider drag or a bezel spin changes the config dozens of times a second; the file only needs the last.
     private var saveJob: Job? = null
@@ -221,7 +224,9 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
                     pushStatus()
                 }
             }
-        }.also { if (it.canDetectOrientation()) it.enable() }
+        }
+        // The picture is locked upright as the phone stands (portrait): turning the phone must not turn what the
+        // watch and viewers see. The listener stays defined but is never enabled, so the rotation is always 0.
 
         // Give the watch the household key. Retried until the Data Layer accepts it.
         scope.launch {

@@ -44,7 +44,7 @@ class RoomCodeTest {
         val seen = HashSet<String>()
         repeat(200) {
             val c = RoomCode.generate()
-            assertEquals(12, c.length)
+            assertEquals(RoomCode.LENGTH, c.length)
             assertTrue(c.all { it in RoomCode.ALPHABET })
             assertFalse(c.any { it in "0O1IL" })
             seen += c
@@ -55,8 +55,8 @@ class RoomCodeTest {
     @Test
     fun the_symbols_are_used_evenly() {
         val counts = IntArray(RoomCode.ALPHABET.length)
-        repeat(3000) { RoomCode.generate().forEach { counts[RoomCode.ALPHABET.indexOf(it)]++ } }
-        val mean = 3000 * 12 / RoomCode.ALPHABET.length.toDouble()
+        repeat(4500) { RoomCode.generate().forEach { counts[RoomCode.ALPHABET.indexOf(it)]++ } }
+        val mean = 4500 * RoomCode.LENGTH / RoomCode.ALPHABET.length.toDouble()
         for (c in counts) assertTrue("symbol count $c vs mean $mean", c > mean * 0.85 && c < mean * 1.15)
     }
 
@@ -67,7 +67,9 @@ class RoomCodeTest {
         assertEquals("", RoomCode.format("0O1IL"))                 // none of those symbols exist
         assertEquals("ABCDEFGHJKMN", RoomCode.normalize("ab-cd ef:gh jk_mn xyz"))
         assertTrue(RoomCode.isComplete("ABCD-EFGH-JKMN"))
-        assertFalse(RoomCode.isComplete("ABCD-EFGH"))
+        assertTrue(RoomCode.isComplete("ABCD-EFGH"))
+        assertFalse(RoomCode.isComplete("ABCD-EFG"))
+        assertFalse(RoomCode.isComplete("ABCD-EFGH-JK"))
     }
 
     @Test

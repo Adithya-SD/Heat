@@ -386,7 +386,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <button class="glass card" id="bh"><span class="ico" data-i="video" aria-hidden="true"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
 <label class="glass card lockrow" id="lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
 <div class="glass card" id="jc"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
-<div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a Heat room</b><small>Enter the code from the app</small></span><input id="lki" aria-label="Heat room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH-JKMN"></div>
+<div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a Heat room</b><small>Enter the code from the app</small></span><input id="lki" aria-label="Heat room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH"></div>
 <a class="glass card" id="lkapp" href="download/Heat.apk" download hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Android</b><small id="lkapps">The camera app. Install it, open a room, share the code.</small></span></a>
 <button class="glass chip" id="rc" hidden></button><button class="glass chip" id="lkre" hidden></button>
 <p class="ft">Video and audio go straight between devices.<br><button class="lk" id="dgo">Check connection</button> · <button class="lk" id="hset">Settings</button> · <span id="bid"></span><span id="fxw"> · <button class="lk" id="fxb"></button></span></p>
@@ -694,7 +694,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-15.1'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-15.2'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -1204,7 +1204,7 @@ on('#dgo',openDiag);$$('.dgb').forEach(b=>b.onclick=openDiag);on('#dga',runDiag)
 $('#dg').onclick=e=>{if(e.target.id==='dg'){$('#dg').classList.remove('s');dgRun++}};
 $('#bid').textContent='build '+BUILD;
 $('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();viewStart(v)}};
-$('#lki').oninput=e=>{const v=HL.norm(e.target.value);e.target.value=HL.fmt(v);if(v.length===12){e.target.blur();e.target.value='';LK.view(v)}};
+$('#lki').oninput=e=>{const v=HL.norm(e.target.value);e.target.value=HL.fmt(v);if(v.length===8){e.target.blur();e.target.value='';LK.view(v)}};
 $('#lki').addEventListener('paste',e=>{const c=linkCodeIn((e.clipboardData||window.clipboardData).getData('text')||'');if(c){e.preventDefault();$('#lki').value='';LK.view(c)}});
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
 roiInit($('#hroi'),$('#hostS .stage'));drawRoi();ui();ui2();applyPick();refreshChip();list();
@@ -1275,8 +1275,8 @@ addEventListener('keydown',e=>{
  else if(k==='f'&&sc!=='home')fs();else h=0;
  if(h)e.preventDefault()});
 /* paste an invite link (or "ABCD-1234") straight into the code box */
-/* a Heat Link invite: https://…/#link=CODE, heat://link/CODE, or the bare 12-symbol code */
-const linkCodeIn=t=>{t=String(t||'').trim();const m=/(?:link=|heat:\/\/link\/)([A-Za-z2-9-]{12,16})/i.exec(t),c=HL.norm(m?m[1]:/^[A-Za-z2-9 -]{12,16}$/.test(t)?t:'');return c.length===12?c:''};
+/* a Heat Link invite: https://…/#link=CODE, heat://link/CODE, or the bare code (8 symbols; older codes 12) */
+const linkCodeIn=t=>{t=String(t||'').trim();const m=/(?:link=|heat:\/\/link\/)([A-Za-z2-9-]{8,16})/i.exec(t),c=HL.norm(m?m[1]:/^[A-Za-z2-9 -]{12,16}$/.test(t)?t:'');return c.length===8||c.length===12?c:''};
 $('#ci').addEventListener('paste',e=>{
  const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)||HL.norm(lt).length===12?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
  const t=lt.trim(),m=/join=([A-Z2-9]{8})/i.exec(t),km=/[#&]k=([A-Z2-9]{12})/i.exec(t);
@@ -1422,9 +1422,11 @@ const HL = (() => {
   const MF_KEY = 1;                                       /* media flag: keyframe */
 
   const norm = s => String(s || '').toUpperCase().split('').filter(c => KA.includes(c)).join('').slice(0, 12);
+  /* codes are 8 symbols (ABCD-EFGH); 12-symbol codes made before still work */
+  const okLen = n => n === 8 || n === 12;
   const fmt = s => (norm(s).match(/.{1,4}/g) || []).join('-');
-  /* a fresh 12-symbol code, uniformly (248 = 8 * 31, so rejecting the top 8 byte values removes modulo bias) */
-  const newCode = () => { let c = ''; while (c.length < 12) for (const x of rnd(24)) if (x < 248 && c.length < 12) c += KA[x % 31]; return c; };
+  /* a fresh 8-symbol code, uniformly (248 = 8 * 31, so rejecting the top 8 byte values removes modulo bias) */
+  const newCode = () => { let c = ''; while (c.length < 8) for (const x of rnd(16)) if (x < 248 && c.length < 8) c += KA[x % 31]; return c; };
   const hex = u => Array.from(u, b => b.toString(16).padStart(2, '0')).join('');
   const unhex = h => Uint8Array.from(h.match(/../g) || [], x => parseInt(x, 16));
   const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let p = 0; for (const x of a) { o.set(x, p); p += x.length; } return o; };
@@ -1455,7 +1457,7 @@ const HL = (() => {
   /* room code -> { secret, rid, group }. The same derivations as RoomCode.kt. */
   async function derive(code) {
     const secret = norm(code);
-    if (secret.length !== 12 || !subtle) throw new Error('bad code');
+    if (!okLen(secret.length) || !subtle) throw new Error('bad code');
     const [rid, master] = await Promise.all([pbkdf2(secret, 'heat-link-v1 room', 30000, 10), pbkdf2(secret, 'heat-link-v1 key', 150000, 32)]);
     return { secret, rid: 'hl-' + hex(rid), group: await Group.make(master) };
   }

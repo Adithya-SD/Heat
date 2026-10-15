@@ -47,6 +47,39 @@ object PeerLauncher {
         }
     }
 
+    /**
+     * The power button: end the whole operation on both devices. The other device is told first (`/heat/close`),
+     * then this app closes itself. Each app sets [closer] once at start-up to whatever "close completely" means there.
+     */
+    fun endAll(context: Context) {
+        val app = context.applicationContext
+        DataLayerHooks.scope.launch {
+            runCatching {
+                kotlinx.coroutines.withTimeoutOrNull(1_500) {
+                    for (n in Wearable.getNodeClient(app).connectedNodes.await()) {
+                        Wearable.getMessageClient(app).sendMessage(n.id, CLOSE_PATH, ByteArray(0)).await()
+                    }
+                }
+            }
+            closeHere(app)
+        }
+    }
+
+    /** Stops services, removes the app's tasks, and ends the process. */
+    @Volatile var closer: ((Context) -> Unit)? = null
+
+    internal fun closeHere(context: Context) {
+        val app = context.applicationContext
+        Log.i(TAG, "closing everything")
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            runCatching { closer?.invoke(app) }
+            runCatching { app.getSystemService(android.app.ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() } }
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 400)
+        }
+    }
+
+    const val CLOSE_PATH = "/heat/close"
+
     internal fun opened(context: Context) {
         if (onScreen) return
         val app = context.applicationContext

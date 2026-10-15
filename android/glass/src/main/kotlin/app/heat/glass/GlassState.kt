@@ -157,6 +157,6 @@ class GlassState(maxQuality: Int = if (GlassSupport.shader) 2 else 0) {
 
     companion object {
         /** Must match the array sizes in liquid_glass.agsl. */
-        const val MAX_LENSES = 8
+        const val MAX_LENSES = 10
     }
 }

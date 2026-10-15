@@ -32,9 +32,9 @@ class ZoomSmoother(
     private val minZoom: Float,
     private val maxZoom: Float,
     /** Seconds to settle a tiny move. */
-    private val baseSettleSec: Float = 0.15f,
+    private val baseSettleSec: Float = 0.11f,
     /** Extra seconds per natural-log unit of distance (a doubling is 0.69). */
-    private val perLogUnitSec: Float = 0.30f
+    private val perLogUnitSec: Float = 0.22f
 ) {
     private var x1 = ln(initial.coerceIn(minZoom, maxZoom).toDouble())
     private var v1 = 0.0

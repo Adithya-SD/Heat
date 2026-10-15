@@ -15,6 +15,11 @@ class HeatWearApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The power button (here or on the phone) ends the operation: the link service and the hub go with the app.
+        app.heat.platform.PeerLauncher.closer = { ctx ->
+            ctx.stopService(android.content.Intent(ctx, WatchLinkService::class.java))
+            runCatching { hub.stop() }
+        }
         // Start dialing before the first screen exists. The activity's own first access just waits for this
         // (the lazy is synchronized), so there is exactly one hub, and the connection is under way while the
         // window is still being built.

@@ -55,10 +55,21 @@ class PreviewDecoder(private val onNeedKeyframe: () -> Unit) {
     /** Frames put on screen since the decoder last started. Goes above 0 when the first picture appears. */
     val rendered: StateFlow<Long> = _rendered.asStateFlow()
 
+    /** Sees every access unit as it arrives (a recording). Called on the network thread; must not block. */
+    @Volatile var tap: ((keyframe: Boolean, ptsUs: Long, data: ByteArray, offset: Int, length: Int) -> Unit)? = null
+
+    /** The frames from the last keyframe up to now, for a still or the start of a clip. */
+    fun group(): List<FrameFeed.Frame> = feed.snapshot()
+
+    /** Size of the frames being received, 0 until known. */
+    val frameWidth: Int get() = feedWidth
+    val frameHeight: Int get() = feedHeight
+
     // ── network thread ───────────────────────────────────────────────
 
     /** Offer one access unit. Never blocks. [data] is borrowed and copied. */
     fun submit(keyframe: Boolean, ptsUs: Long, data: ByteArray, offset: Int, length: Int) {
+        tap?.invoke(keyframe, ptsUs, data, offset, length)
         when (feed.offer(keyframe, ptsUs, data, offset, length)) {
             FrameFeed.Offer.ACCEPTED -> if (pumping.compareAndSet(false, true)) handler.post { pumping.set(false); pump() }
             FrameFeed.Offer.NEED_KEYFRAME -> onNeedKeyframe()

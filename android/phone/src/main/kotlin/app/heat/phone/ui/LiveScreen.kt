@@ -74,9 +74,9 @@ import kotlinx.coroutines.delay
  * The camera view.
  *
  * Deliberately matte: it sits over a live picture, and glass over moving video is both busy to look at and costly
- * to draw every frame. The picture is the hero; around it is quiet dark chrome, with ember (the colour of heat) for
- * whatever is live. One big control at the bottom, a ruler above it that adjusts whichever setting is chosen in
- * the row of chips, and the same settings, worded the same way, that the watch's menu offers.
+ * to draw every frame. The picture is the hero: a status pill at the top (nothing to press there), the lens buttons,
+ * and one dock at the bottom. The dock's Camera folder opens the ruler and the setting chips (the same settings,
+ * worded the same way, that the watch's menu offers); arming is one tap on the shield in the middle.
  */
 @Composable
 fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
@@ -89,6 +89,7 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
     var aiming by remember { mutableStateOf(false) }
     var peekUntil by remember { mutableStateOf(0L) }
     var active by remember { mutableStateOf(BezelMode.ZOOM) }
+    var toolsOpen by remember { mutableStateOf(false) }
     val now = rememberTicker(armed || armingEnds > 0)
 
     // A camera view that goes dark on its own is not a camera view. While armed the app draws its own black
@@ -185,9 +186,8 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(420.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000)))))
 
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            TopBar(armed, remaining, viewers, hubState.battery, hubState.carrier?.label, onFlip = {
-                hub.host.editLocally { it.copy(camera = it.camera.copy(facing = if (it.camera.facing == Facing.REAR) Facing.FRONT else Facing.REAR)) }
-            }, onRooms = onRooms, onSettings = onSettings)
+            // Top: status only, nothing to press.
+            StatusPill(armed, remaining, viewers, hubState.battery, hubState.carrier?.label)
 
             hubState.error?.let { err ->
                 Spacer(Modifier.height(10.dp))
@@ -203,57 +203,66 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
 
             Spacer(Modifier.weight(1f))
 
-            // ── the lens buttons and the ruler ──
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 LensButtons(hubState.lenses, hubState.zoomMax, { zoomShown.floatValue }, onSelect = { setZoom(it) })
             }
             Spacer(Modifier.height(12.dp))
-            Box(Modifier.padding(horizontal = 16.dp)) {
-                val detent = Controls.detentFor(active)
-                if (active == BezelMode.ZOOM || detent == null) {
-                    LogRuler(
-                        zoomState = { zoomShown.floatValue },
-                        minZoom = hubState.zoomMin, maxZoom = hubState.zoomMax,
-                        stops = hubState.lenses.map { it.ratio },
-                        onTarget = { setZoom(it) },
-                        onDragging = {}
-                    )
-                } else {
-                    DetentRuler(
-                        detent.labels, detent.read(config),
-                        onIndex = { i -> hub.host.editLocally { c -> detent.write(c, i) } }
-                    )
+
+            // The camera folder: the ruler and every picture setting, out of sight until asked for.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = toolsOpen,
+                enter = androidx.compose.animation.fadeIn(tween(160)) + androidx.compose.animation.expandVertically(tween(220)),
+                exit = androidx.compose.animation.fadeOut(tween(120)) + androidx.compose.animation.shrinkVertically(tween(180))
+            ) {
+                Column {
+                    Box(Modifier.padding(horizontal = 16.dp)) {
+                        val detent = Controls.detentFor(active)
+                        if (active == BezelMode.ZOOM || detent == null) {
+                            LogRuler(
+                                zoomState = { zoomShown.floatValue },
+                                minZoom = hubState.zoomMin, maxZoom = hubState.zoomMax,
+                                stops = hubState.lenses.map { it.ratio },
+                                onTarget = { setZoom(it) },
+                                onDragging = {}
+                            )
+                        } else {
+                            DetentRuler(
+                                detent.labels, detent.read(config),
+                                onIndex = { i -> hub.host.editLocally { c -> detent.write(c, i) } }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    ChipRow {
+                        ControlChip(BezelMode.ZOOM, liveZoomText(zoomShown.floatValue), active == BezelMode.ZOOM, isSwitch = false, on = false) { active = BezelMode.ZOOM }
+                        ControlChip(BezelMode.EXPOSURE, BezelController.describe(BezelMode.EXPOSURE, config), active == BezelMode.EXPOSURE, false, false) { active = BezelMode.EXPOSURE }
+                        if (hubState.manualFocus) ControlChip(BezelMode.FOCUS, BezelController.describe(BezelMode.FOCUS, config), active == BezelMode.FOCUS, false, false) { active = BezelMode.FOCUS }
+                        ControlChip(BezelMode.WHITE_BALANCE, BezelController.describe(BezelMode.WHITE_BALANCE, config), active == BezelMode.WHITE_BALANCE, false, false) { active = BezelMode.WHITE_BALANCE }
+                        if (hubState.manualExposure) {
+                            ControlChip(BezelMode.ISO, BezelController.describe(BezelMode.ISO, config), active == BezelMode.ISO, false, false) { active = BezelMode.ISO }
+                            ControlChip(BezelMode.SHUTTER, BezelController.describe(BezelMode.SHUTTER, config), active == BezelMode.SHUTTER, false, false) { active = BezelMode.SHUTTER }
+                        }
+                        ControlChip(BezelMode.NIGHT, BezelController.describe(BezelMode.NIGHT, config), active == BezelMode.NIGHT, false, false) { active = BezelMode.NIGHT }
+                        if (hubState.hasTorch) {
+                            val sw = Controls.switchFor(BezelMode.FLASH)!!
+                            ControlChip(BezelMode.FLASH, "", false, true, sw.read(config)) { hub.host.editLocally { c -> sw.write(c, !sw.read(c)) } }
+                        }
+                        val lock = Controls.switchFor(BezelMode.LOCK)!!
+                        ControlChip(BezelMode.LOCK, "", false, true, lock.read(config)) { hub.host.editLocally { c -> lock.write(c, !lock.read(c)) } }
+                        ControlChip(BezelMode.TRACKER, "", aiming, false, false) { aiming = !aiming }
+                    }
+                    Spacer(Modifier.height(12.dp))
                 }
             }
-            Spacer(Modifier.height(12.dp))
 
-            // ── the controls ──
-            ChipRow {
-                ControlChip(BezelMode.ZOOM, liveZoomText(zoomShown.floatValue), active == BezelMode.ZOOM, isSwitch = false, on = false) { active = BezelMode.ZOOM }
-                ControlChip(BezelMode.EXPOSURE, BezelController.describe(BezelMode.EXPOSURE, config), active == BezelMode.EXPOSURE, false, false) { active = BezelMode.EXPOSURE }
-                if (hubState.manualFocus) ControlChip(BezelMode.FOCUS, BezelController.describe(BezelMode.FOCUS, config), active == BezelMode.FOCUS, false, false) { active = BezelMode.FOCUS }
-                ControlChip(BezelMode.WHITE_BALANCE, BezelController.describe(BezelMode.WHITE_BALANCE, config), active == BezelMode.WHITE_BALANCE, false, false) { active = BezelMode.WHITE_BALANCE }
-                if (hubState.manualExposure) {
-                    ControlChip(BezelMode.ISO, BezelController.describe(BezelMode.ISO, config), active == BezelMode.ISO, false, false) { active = BezelMode.ISO }
-                    ControlChip(BezelMode.SHUTTER, BezelController.describe(BezelMode.SHUTTER, config), active == BezelMode.SHUTTER, false, false) { active = BezelMode.SHUTTER }
-                }
-                ControlChip(BezelMode.NIGHT, BezelController.describe(BezelMode.NIGHT, config), active == BezelMode.NIGHT, false, false) { active = BezelMode.NIGHT }
-                if (hubState.hasTorch) {
-                    val sw = Controls.switchFor(BezelMode.FLASH)!!
-                    ControlChip(BezelMode.FLASH, "", false, true, sw.read(config)) { hub.host.editLocally { c -> sw.write(c, !sw.read(c)) } }
-                }
-                val lock = Controls.switchFor(BezelMode.LOCK)!!
-                ControlChip(BezelMode.LOCK, "", false, true, lock.read(config)) { hub.host.editLocally { c -> lock.write(c, !lock.read(c)) } }
-                ControlChip(BezelMode.TRACKER, "", aiming, false, false) { aiming = !aiming }
-            }
-            Spacer(Modifier.height(14.dp))
-
-            // ── the big one ──
-            ArmTrack(
-                armed = armed, arming = remaining, delaySec = config.detect.armDelaySec,
-                onArm = { hub.host.setArmed(true) },
-                onDisarm = { hub.host.setArmed(false) },
-                modifier = Modifier.padding(horizontal = 16.dp)
+            // One dock: the folders either side, and arming in the middle (a tap, no slide).
+            Dock(
+                armed = armed, arming = remaining, toolsOpen = toolsOpen,
+                onTools = { toolsOpen = !toolsOpen; if (!toolsOpen) aiming = false },
+                onRooms = onRooms,
+                onArm = { if (armed || remaining > 0) hub.host.setArmed(false) else hub.host.setArmed(true) },
+                onFlip = { hub.host.editLocally { it.copy(camera = it.camera.copy(facing = if (it.camera.facing == Facing.REAR) Facing.FRONT else Facing.REAR)) } },
+                onSettings = onSettings
             )
             Spacer(Modifier.height(14.dp))
         }
@@ -273,42 +282,79 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
 }
 
 @Composable
-private fun TopBar(armed: Boolean, remaining: Int, viewers: Int, battery: Int, carrier: String?, onFlip: () -> Unit, onRooms: () -> Unit, onSettings: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.matte(CircleShape).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(9.dp).background(if (armed) Heat.Green else if (remaining > 0) Heat.Amber else Heat.TextFaint, CircleShape))
-            Spacer(Modifier.width(9.dp))
-            HeatText(if (remaining > 0) "Arming $remaining" else if (armed) "Watching" else "Ready", size = 14, weight = FontWeight.SemiBold)
+private fun StatusPill(armed: Boolean, remaining: Int, viewers: Int, battery: Int, carrier: String?) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.Center) {
+        Row(Modifier.matte(CircleShape).padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).background(if (armed) Heat.Green else if (remaining > 0) Heat.Amber else Heat.TextFaint, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            HeatText(if (remaining > 0) "Arming $remaining" else if (armed) "Watching" else "Ready", size = 13, weight = FontWeight.SemiBold)
             if (viewers > 0) {
                 Spacer(Modifier.width(10.dp))
-                HeatIconView(HeatIcon.Eye, Heat.Ember1, 16.dp)
+                HeatIconView(HeatIcon.Eye, Heat.Ember1, 14.dp)
                 Spacer(Modifier.width(3.dp))
-                HeatText("$viewers", size = 14, color = Heat.Ember1, weight = FontWeight.SemiBold)
+                HeatText("$viewers", size = 13, color = Heat.Ember1, weight = FontWeight.SemiBold)
                 if (carrier != null) {
-                    Spacer(Modifier.width(8.dp))
-                    HeatIconView(when (carrier) { "Wi-Fi" -> HeatIcon.Wifi; "Internet" -> HeatIcon.Link; else -> HeatIcon.Bluetooth }, Heat.TextDim, 14.dp)
+                    Spacer(Modifier.width(6.dp))
+                    HeatIconView(when (carrier) { "Wi-Fi" -> HeatIcon.Wifi; "Internet" -> HeatIcon.Link; else -> HeatIcon.Bluetooth }, Heat.TextDim, 13.dp)
                 }
             }
-        }
-        Spacer(Modifier.weight(1f))
-        if (battery >= 0) {
-            Row(Modifier.matte(CircleShape).padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                HeatText("$battery%", size = 13, color = if (battery <= 20) Heat.Amber else Heat.TextDim, weight = FontWeight.Medium)
+            if (battery >= 0) {
+                Spacer(Modifier.width(10.dp))
+                HeatText("$battery%", size = 12, color = if (battery <= 20) Heat.Amber else Heat.TextDim, weight = FontWeight.Medium)
             }
-            Spacer(Modifier.width(8.dp))
         }
-        RoundButton(HeatIcon.Flip, onFlip)
-        Spacer(Modifier.width(8.dp))
-        RoundButton(HeatIcon.Link, onRooms)
-        Spacer(Modifier.width(8.dp))
-        RoundButton(HeatIcon.Gear, onSettings)
+    }
+}
+
+/**
+ * The bottom dock: Camera (the settings folder), Link, the arm shield in the middle, Flip, Settings. Mirrored, one
+ * row, nothing else on the picture.
+ */
+@Composable
+private fun Dock(
+    armed: Boolean, arming: Int, toolsOpen: Boolean,
+    onTools: () -> Unit, onRooms: () -> Unit, onArm: () -> Unit, onFlip: () -> Unit, onSettings: () -> Unit
+) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        DockButton(HeatIcon.Focus, "Camera", toolsOpen, onTools)
+        DockButton(HeatIcon.Link, "Link", false, onRooms)
+        ArmButton(armed, arming, onArm)
+        DockButton(HeatIcon.Flip, "Flip", false, onFlip)
+        DockButton(HeatIcon.Gear, "Settings", false, onSettings)
     }
 }
 
 @Composable
-private fun RoundButton(icon: HeatIcon, onClick: () -> Unit) {
-    Box(Modifier.size(42.dp).matte(CircleShape).tappable(onClick), contentAlignment = Alignment.Center) {
-        HeatIconView(icon, Heat.Text, 20.dp)
+private fun DockButton(icon: HeatIcon, label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.tappable(onClick)) {
+        Box(
+            Modifier.size(46.dp).matte(CircleShape, if (selected) Color(0xFF3A2414) else Heat.Matte),
+            contentAlignment = Alignment.Center
+        ) { HeatIconView(icon, if (selected) Heat.Ember1 else Heat.Text, 20.dp) }
+        Spacer(Modifier.height(5.dp))
+        HeatText(label, size = 11, color = if (selected) Heat.Ember1 else Heat.TextDim)
+    }
+}
+
+/** Tap to arm (with the arming countdown inside), tap again to stop. */
+@Composable
+private fun ArmButton(armed: Boolean, arming: Int, onClick: () -> Unit) {
+    val ring = when {
+        armed -> Heat.Green
+        arming > 0 -> Heat.Amber
+        else -> Heat.Ember0
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.tappable(onClick)) {
+        Box(
+            Modifier.size(64.dp).background(Brush.radialGradient(listOf(ring.copy(alpha = 0.32f), ring.copy(alpha = 0.10f))), CircleShape)
+                .padding(3.dp).background(Color(0xFF0B0B0F), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (arming > 0) HeatText("$arming", size = 22, weight = FontWeight.Bold, color = Heat.Amber)
+            else HeatIconView(HeatIcon.Shield, ring, 26.dp)
+        }
+        Spacer(Modifier.height(5.dp))
+        HeatText(if (armed) "Armed" else if (arming > 0) "Arming" else "Arm", size = 11, weight = FontWeight.SemiBold, color = ring)
     }
 }
 

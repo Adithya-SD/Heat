@@ -7,7 +7,8 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
 /**
- * A Heat room's code: twelve letters and digits, shown as `ABCD-EFGH-JKLM`.
+ * A Heat room's code: eight letters and digits, shown as `ABCD-EFGH`. (Codes made before were twelve long,
+ * `ABCD-EFGH-JKLM`; those still work everywhere, so nobody holding one is locked out.)
  *
  * One code is all a person has to share. From it both ends derive, independently and identically:
  *
@@ -16,8 +17,8 @@ import javax.crypto.spec.PBEKeySpec
  *  - the **group key** that authenticates and encrypts every session in the room (the same [GroupKey] that pairs a
  *    phone with its own watch), stretched the same way as the web page's room key.
  *
- * The code is the only secret, so it has to be unguessable: twelve symbols from 31 is about 59 bits, and every guess
- * costs a 150,000-round key derivation on top. It never goes to the signaling server (only the room id does), and in
+ * The code is the only secret, so it has to be unguessable: eight symbols from 31 is about 40 bits, and every guess
+ * costs a 150,000-round key derivation on top (a trillion guesses at that price is out of anyone's reach). It never goes to the signaling server (only the room id does), and in
  * an invite link it rides in the `#fragment`, which browsers do not send anywhere.
  *
  * The alphabet leaves out 0, O, 1, I and L so a code read aloud or off a screen is not ambiguous. It is the web
@@ -26,7 +27,10 @@ import javax.crypto.spec.PBEKeySpec
  */
 object RoomCode {
     const val ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-    const val LENGTH = 12
+    const val LENGTH = 8
+
+    /** The length codes used to have. Still accepted, never generated. */
+    const val LEGACY_LENGTH = 12
 
     private const val KEY_SALT = "heat-link-v1 key"
     private const val ROOM_SALT = "heat-link-v1 room"
@@ -50,11 +54,11 @@ object RoomCode {
         return out.toString()
     }
 
-    /** What the user typed or pasted, reduced to the code: upper case, valid symbols only, at most [LENGTH]. */
-    fun normalize(text: String): String = text.uppercase().filter { it in ALPHABET }.take(LENGTH)
+    /** What the user typed or pasted, reduced to the code: upper case, valid symbols only, at most [LEGACY_LENGTH]. */
+    fun normalize(text: String): String = text.uppercase().filter { it in ALPHABET }.take(LEGACY_LENGTH)
 
     /** True when [text] holds a complete code (separators and case are ignored). */
-    fun isComplete(text: String): Boolean = normalize(text).length == LENGTH
+    fun isComplete(text: String): Boolean = normalize(text).length.let { it == LENGTH || it == LEGACY_LENGTH }
 
     /** `ABCD-EFGH-JKLM`, or the partial code grouped the same way while it is being typed. */
     fun format(code: String): String = normalize(code).chunked(4).joinToString("-")
@@ -71,7 +75,7 @@ object RoomCode {
             t.startsWith("heat://link/") -> t.removePrefix("heat://link/").substringBefore('?')
             else -> t
         }
-        return normalize(candidate).takeIf { it.length == LENGTH }
+        return normalize(candidate).takeIf { it.length == LENGTH || it.length == LEGACY_LENGTH }
     }
 
     /** The invite link to put in a QR code or share sheet. */

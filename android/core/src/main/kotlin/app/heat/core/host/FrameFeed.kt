@@ -88,6 +88,13 @@ class FrameFeed(
         catchingUp = false
     }
 
+    /**
+     * The group of pictures held right now, from its keyframe: everything needed to decode the latest frame (a
+     * still) or to start a recording from the last keyframe instead of waiting for the next one. Empty if none.
+     */
+    @Synchronized
+    fun snapshot(): List<Frame> = if (frames.firstOrNull()?.key == true) frames.toList() else emptyList()
+
     /** Forget everything, e.g. the picture size changed or the camera changed. */
     @Synchronized
     fun clear() {

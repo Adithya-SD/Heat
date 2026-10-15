@@ -152,6 +152,44 @@ class WatchHub(context: Context) {
     /** Whether the watch is being looked at. The screen only builds a cross-fade when someone is there to see it. */
     val visible: StateFlow<Boolean> = _visible.asStateFlow()
 
+    /** Pictures, clips and alert pictures kept on the watch. */
+    val gallery by lazy { Gallery(appContext) }
+
+    @Volatile private var blackout = false
+    private val _blackout = MutableStateFlow(false)
+
+    /** Blackout: the screen is black and no video is asked for, so the watch rests. Tap anywhere to leave it. */
+    val isBlackout: StateFlow<Boolean> = _blackout.asStateFlow()
+
+    fun setBlackout(on: Boolean) {
+        if (blackout == on) return
+        blackout = on
+        _blackout.value = on
+        if (on) gallery.stopClip()
+        applyInterest()
+    }
+
+    /**
+     * Something looks wrong with the picture: throw away what this camera's decoder holds, ask for a fresh keyframe,
+     * ask the camera to start its video over, and nudge the link. The screen rebuilds the picture as well.
+     */
+    fun resetStream(client: CameraClient) {
+        Log.i(TAG, "stream reset by hand: ${client.cameraId.short}")
+        decoders[client.cameraId]?.reset()
+        client.watch(video = false)
+        watching.remove(client.cameraId)
+        applyInterest()
+        client.needKeyframe()
+        client.refresh()
+        onNetworkChange()
+        _resets.value++
+    }
+
+    private val _resets = MutableStateFlow(0)
+
+    /** Counts hand resets; the screen keys the picture on it so the surface and decoder hook-up are rebuilt. */
+    val resets: StateFlow<Int> = _resets.asStateFlow()
+
     /** Whether someone is looking at the watch now, and when they last were: the warm link service reads these. */
     val isForeground: Boolean get() = foreground
     @Volatile var lastForegroundMs = android.os.SystemClock.elapsedRealtime()
@@ -383,6 +421,7 @@ class WatchHub(context: Context) {
                     if (e != null && e.picture == null && System.currentTimeMillis() - e.atMs < 8_000) {
                         val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
                         e.picture = runCatching { BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, opts) }.getOrNull()
+                        gallery.saveAlert(jpeg, e.atMs, e.cameraName)
                         _activity.value = _activity.value.toList()      // tell the list the entry changed
                     }
                 }
@@ -395,7 +434,7 @@ class WatchHub(context: Context) {
     private fun applyInterest() {
         val sel = selected
         for (c in clients.values) {
-            val want = foreground && (c === sel || holds.containsKey(c.cameraId))
+            val want = foreground && !blackout && (c === sel || holds.containsKey(c.cameraId))
             if (watching.put(c.cameraId, want) != want) c.watch(video = want)
         }
     }

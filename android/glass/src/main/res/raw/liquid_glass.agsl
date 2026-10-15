@@ -35,9 +35,9 @@ uniform shader content;
 
 uniform float2 uSize;                // size of the layer in px
 uniform float uCount;                // number of active lenses
-uniform float4 uRect[8];    // left, top, right, bottom (px)
-uniform float4 uShape[8];   // cornerRadius px, kind (0 rrect, 1 ring), ringThickness px, unused
-uniform float4 uLook[8];    // bezel px, strength 0..1, tint 0..1, scrim 0..1
+uniform float4 uRect[10];    // left, top, right, bottom (px)
+uniform float4 uShape[10];   // cornerRadius px, kind (0 rrect, 1 ring), ringThickness px, unused
+uniform float4 uLook[10];    // bezel px, strength 0..1, tint 0..1, scrim 0..1
 
 uniform float2 uLight;               // unit vector pointing TOWARD the light, in screen space
 uniform float uIor;                  // refractive index, ~1.5
@@ -130,7 +130,7 @@ half4 main(float2 fc) {
     int hit = -1;
     float hitD = 0.0;
     float shadow = 0.0;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 10; i++) {
         if (i >= count) break;
         float4 r = uRect[i];
         // Far from this lens (beyond its shadow): nothing to do. This is what keeps the pass cheap,
@@ -167,7 +167,7 @@ half4 main(float2 fc) {
     float4 r = float4(0.0);
     float4 sh = float4(0.0);
     float4 lk = float4(0.0);
-    for (int j = 0; j < 8; j++) {
+    for (int j = 0; j < 10; j++) {
         if (j == hit) { r = uRect[j]; sh = uShape[j]; lk = uLook[j]; }
     }
     float2 c = float2(r.x + r.z, r.y + r.w) * 0.5;

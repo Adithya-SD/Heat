@@ -63,7 +63,7 @@ class ZoomSmootherTest {
         val long = secondsToSettle(0.5f, 10f)
         assertTrue("$short < $medium < $long", short < medium && medium < long)
         assertTrue("long journey $long s", long < 1.3f)
-        assertTrue("medium journey $medium s", medium > 0.28f)
+        assertTrue("medium journey $medium s", medium > 0.15f)
     }
 
     @Test

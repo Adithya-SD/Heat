@@ -111,7 +111,7 @@ fun WatchRoot(hub: WatchHub) {
             client == null -> Waiting(paired = pairing != null)
             screen == Screen.Cameras -> CamerasScreen(hub, cameras, client) { screen = Screen.Camera }
             screen == Screen.Settings -> SettingsScreen(client, cameras, hub) { screen = Screen.Camera }
-            screen == Screen.Activity -> ActivityScreen(hub) { screen = Screen.Camera }
+            screen == Screen.Activity -> GalleryScreen(hub) { screen = Screen.Camera }
             else -> CameraScreen(
                 client, incoming, hub, glass,
                 onCameras = { screen = Screen.Cameras }, onActivity = { screen = Screen.Activity }, onSettings = { screen = Screen.Settings }

@@ -47,7 +47,8 @@ object Heat {
 
 enum class HeatIcon {
     Bolt, Flip, Gear, Shield, Back, Close, Check, Eye, Plus, Minus, Camera, Alert, Wifi, Bluetooth, Aim, List, Chevron,
-    Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search, Link, Share, Copy, Power, Rooms, Pictures, EyeOff
+    Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search, Link, Share, Copy, Power, Rooms, Pictures, EyeOff,
+    Reset, Record, Capture, Play, Trash
 }
 
 /**
@@ -81,13 +82,39 @@ private fun DrawScope.drawIcon(icon: HeatIcon, c: Color, u: Float) {
             poly(6.5f to 21f, 6.5f to 16.5f, 11f to 16.5f)
         }
         HeatIcon.Gear -> {
-            drawCircle(c, 3.2f * u, p(12f, 12f), style = stroke)
-            for (i in 0 until 8) {
-                val a = Math.toRadians(i * 45.0)
-                val (cx, sx) = Math.cos(a).toFloat() to Math.sin(a).toFloat()
-                drawLine(c, p(12f + 6.2f * cx, 12f + 6.2f * sx), p(12f + 9f * cx, 12f + 9f * sx), strokeWidth = 2.6f * u, cap = StrokeCap.Round)
+            // A cog: eight flat-topped teeth on a solid rim (one closed outline), and the axle hole.
+            val gear = Path()
+            val teeth = 8
+            val rootR = 7.0f
+            val tipR = 9.8f
+            for (i in 0 until teeth) {
+                val a = i * 360.0 / teeth
+                fun at(deg: Double, r: Float): Offset {
+                    val t = Math.toRadians(deg - 90.0)
+                    return p(12f + r * Math.cos(t).toFloat(), 12f + r * Math.sin(t).toFloat())
+                }
+                val pts = listOf(at(a - 15.5, rootR), at(a - 8.5, tipR), at(a + 8.5, tipR), at(a + 15.5, rootR), at(a + 22.5, rootR))
+                pts.forEachIndexed { k, o -> if (i == 0 && k == 0) gear.moveTo(o.x, o.y) else gear.lineTo(o.x, o.y) }
             }
-            drawCircle(c, 6.2f * u, p(12f, 12f), style = stroke)
+            gear.close()
+            drawPath(gear, c, style = stroke)
+            drawCircle(c, 2.9f * u, p(12f, 12f), style = stroke)
+        }
+        HeatIcon.Reset -> {
+            // A circle chasing its own tail: start over.
+            drawArc(c, -60f, 300f, false, p(4.5f, 4.5f), Size(15f * u, 15f * u), style = stroke)
+            poly(15.6f to 2.9f, 15.75f to 5.5f, 13.3f to 6.6f)
+        }
+        HeatIcon.Record -> drawCircle(c, 6.2f * u, p(12f, 12f), style = Fill)
+        HeatIcon.Capture -> {
+            drawCircle(c, 8.6f * u, p(12f, 12f), style = stroke)
+            drawCircle(c, 6.1f * u, p(12f, 12f), style = Fill)
+        }
+        HeatIcon.Play -> poly(8f to 5f, 19f to 12f, 8f to 19f, close = true, fill = true)
+        HeatIcon.Trash -> {
+            poly(4f to 6.5f, 20f to 6.5f)
+            poly(9.5f to 6.5f, 9.5f to 4f, 14.5f to 4f, 14.5f to 6.5f)
+            poly(6f to 6.5f, 7f to 20f, 17f to 20f, 18f to 6.5f)
         }
         HeatIcon.Shield -> {
             val path = Path().apply {

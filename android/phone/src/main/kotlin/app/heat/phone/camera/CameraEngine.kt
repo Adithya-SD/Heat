@@ -283,7 +283,15 @@ class CameraEngine(context: Context, private val listener: Listener) {
             return
         }
         val all = profiles ?: runCatching {
-            manager.cameraIdList.mapNotNull { id ->
+            // Phones (Samsung especially) keep some lenses off the public list: the tele, and logical cameras that front
+            // every rear lens at once. They still answer by id, so ask for the usual hidden ones too. One that cannot be
+            // opened later is dropped from the plan like any other bad lens.
+            val listed = manager.cameraIdList.toList()
+            val hidden = HIDDEN_IDS.filter { it !in listed }.filter { id ->
+                runCatching { manager.getCameraCharacteristics(id) }.isSuccess
+            }
+            if (hidden.isNotEmpty()) Log.i(TAG, "hidden cameras answer: $hidden")
+            (listed + hidden).mapNotNull { id ->
                 runCatching { profile(id, manager.getCameraCharacteristics(id)) }.getOrNull()
             }
         }.getOrDefault(emptyList()).also { profiles = it }
@@ -311,6 +319,24 @@ class CameraEngine(context: Context, private val listener: Listener) {
             if (curRatio != null && pick.second < curRatio && z > curRatio * 0.98f) return cur
         }
         return pick.first
+    }
+
+    /**
+     * Which device should serve the zoom while it moves. A lens change freezes the picture for the better part of a
+     * second, so it is never done in the middle of a motion: going wider than the open lens can show, the change
+     * happens first (at the current framing) and the motion follows; going tighter, the open lens carries the whole
+     * motion as long as it can crop that far, and the sharper lens takes over only once the picture has settled.
+     */
+    private fun deviceForPath(sm: ZoomSmoother): String? {
+        val lo = minOf(sm.zoom, sm.target)
+        val hi = maxOf(sm.zoom, sm.target)
+        val cur = openId
+        if (!sm.settled && cur != null) {
+            val ratio = lensRatioOfOpenDevice()
+            val reach = ratio * (chars?.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.upper ?: 1f)
+            if (ratio <= lo * 1.0001f && hi <= reach) return cur
+        }
+        return deviceFor(lo)
     }
 
     private fun lensRatioOfOpenDevice(): Float {
@@ -343,6 +369,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
                     opening = false
                     device = camera
                     openId = id
+                    if (switching) Log.i(TAG, "lens switch: device open at +${SystemClock.elapsedRealtime() - switchStartedMs} ms")
                     openedFacing = desired.facing
                     retryDelayMs = 500L
                     buildReader()
@@ -353,6 +380,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
                 }
 
                 override fun onClosed(camera: CameraDevice) {
+                    if (switching) Log.i(TAG, "lens switch: old device closed at +${SystemClock.elapsedRealtime() - switchStartedMs} ms")
                     if (openAfterClose) {
                         openAfterClose = false
                         handler.post { if (wanted && device == null && !opening) openCamera() }
@@ -519,6 +547,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
                                 return
                             }
                             session = s
+                            if (switching) Log.i(TAG, "lens switch: session ready at +${SystemClock.elapsedRealtime() - switchStartedMs} ms")
                             builtPreview = preview
                             builtEncoder = encoder
                             applyRequest()
@@ -583,7 +612,11 @@ class CameraEngine(context: Context, private val listener: Listener) {
         val dt = if (lastFrameNs == 0L) 1f / 30f else ((timestampNs - lastFrameNs) / 1e9f).coerceIn(0.001f, 0.25f)
         lastFrameNs = timestampNs
         if (graph?.strategy == LensStrategy.SWITCH) {
-            val want = deviceFor(sm.zoom)
+            // Heading wider than this lens can show (1x -> 0.5x): change lens *first*, at the framing we are at now
+            // (the wide lens crops to it exactly), and only then start moving. The camera change takes a few hundred
+            // milliseconds; spending them before the motion means the motion itself is never interrupted. Heading
+            // tighter, the wide lens zooms in on itself up to the next lens's own view, where the hand-over is seamless.
+            val want = deviceForPath(sm)
             if (want != null && want != openId) {
                 switchTo(want)
                 return
@@ -601,7 +634,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
         sm.step(dt)
 
         // Separate lens cameras: cross the boundary by changing device. The smoother keeps its place meanwhile.
-        val want = deviceFor(sm.zoom)
+        val want = deviceForPath(sm)
         if (want != null && want != openId && graph?.strategy == LensStrategy.SWITCH) {
             switchTo(want)
             return
@@ -754,5 +787,6 @@ class CameraEngine(context: Context, private val listener: Listener) {
 
     private companion object {
         const val TAG = "HeatCamera"
+        val HIDDEN_IDS = (2..9).map { it.toString() } + (20..29).map { it.toString() } + (50..59).map { it.toString() }
     }
 }
