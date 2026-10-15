@@ -126,7 +126,7 @@ class RoomManager(
     /** Remembers a room this phone has joined, newest first. */
     fun remember(code: String) {
         val c = RoomCode.normalize(code)
-        stored = stored.copy(recent = (listOf(c) + stored.recent.filter { it != c }).take(5))
+        stored = stored.copy(recent = (listOf(c) + stored.recent.filter { it != c }).take(8))
         _recent.value = stored.recent
         save()
     }
@@ -181,6 +181,15 @@ class RoomViewer internal constructor(
 
     val decoder = PreviewDecoder { client.needKeyframe() }
 
+    /** The hub forwards this host's encoded video to the watch from here. */
+    @Volatile var tap: VideoSink? = null
+
+    /** The raw JPEG that comes with an alert, for the hub to forward. */
+    @Volatile var rawThumb: ((ByteArray) -> Unit)? = null
+
+    /** Decode only while this phone's own screen is showing the room: the hub alone has no use for the pixels. */
+    @Volatile var decoding = false
+
     private val _thumbs = MutableStateFlow<List<Bitmap>>(emptyList())
 
     /** The newest alert pictures, newest first. */
@@ -188,9 +197,11 @@ class RoomViewer internal constructor(
 
     init {
         client.videoSink = VideoSink { flags, pts, data, offset, length ->
-            decoder.submit(flags and MediaFlags.KEYFRAME != 0, pts, data, offset, length)
+            tap?.onFrame(flags, pts, data, offset, length)
+            if (decoding) decoder.submit(flags and MediaFlags.KEYFRAME != 0, pts, data, offset, length)
         }
         client.thumbnailSink = { jpeg ->
+            rawThumb?.invoke(jpeg)
             runCatching { android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) }.getOrNull()?.let { b ->
                 _thumbs.value = (listOf(b) + _thumbs.value).take(12)
             }
@@ -198,9 +209,9 @@ class RoomViewer internal constructor(
         client.link.setDialer(CarrierKind.WEBRTC, dialers.create())
     }
 
-    fun start() {
+    fun start(video: Boolean = true) {
         client.start()
-        client.watch(video = true)
+        client.watch(video = video)
     }
 
     /** Leaves the room and frees the decoder. */

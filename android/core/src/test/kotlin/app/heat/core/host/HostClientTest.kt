@@ -289,6 +289,82 @@ class HostClientTest {
         job.cancel()
     }
 
+    // ── hub: one camera relays several hosts ─────────────────────────
+
+    @Test
+    fun a_relayed_alert_carries_the_host_it_came_from_and_two_hosts_with_the_same_alert_number_are_both_heard() = runTest {
+        val r = Rig(this)
+        val (c, _) = r.client()
+        val got = CopyOnWriteArrayList<Msg.Alert>()
+        val job = backgroundScope.launch(Dispatchers.Unconfined) { c.alerts.collect { got += it } }
+        r.settle()
+        r.host.raiseAlert(AlertKind.MOTION, 3f, 0, "ABCD2345", "Garage")
+        r.host.raiseAlert(AlertKind.MOTION, 3f, 0, "WXYZ6789", "Porch door")
+        r.settle()
+        assertEquals(listOf("Garage", "Porch door"), got.map { it.hostName })
+        assertEquals(listOf("ABCD2345", "WXYZ6789"), got.map { it.hostId })
+        job.cancel()
+    }
+
+    @Test
+    fun the_host_list_reaches_a_viewer_on_connect_and_on_change_and_a_pick_comes_back() = runTest {
+        val r = Rig(this)
+        val picks = CopyOnWriteArrayList<Pair<String, Boolean?>>()
+        r.host.onPick = { id, lock -> picks += id to lock }
+        r.host.setHosts(app.heat.core.model.Msg.Hosts(listOf(app.heat.core.model.HostInfo("self", "Phone", live = true)), "self", false))
+        val (c, _) = r.client()
+        r.settle()
+        assertEquals(listOf("Phone"), c.hosts.value?.hosts?.map { it.name })
+        r.host.setHosts(app.heat.core.model.Msg.Hosts(
+            listOf(app.heat.core.model.HostInfo("self", "Phone", live = true), app.heat.core.model.HostInfo("ABCD2345", "Garage", live = true)), "ABCD2345", true
+        ))
+        r.settle()
+        assertEquals("ABCD2345", c.hosts.value?.shown)
+        assertTrue(c.hosts.value?.locked == true)
+        c.pickHost("self", lock = false)
+        r.settle()
+        assertEquals(listOf("self" to false), picks.toList())
+    }
+
+    @Test
+    fun arming_goes_to_the_relayed_host_for_the_hub_receiver_and_to_this_camera_for_everyone_else() = runTest {
+        val r = Rig(this)
+        val d = FakeDialer(r.acceptor)
+        val hubClient = CameraClient(camera, "Watch", DeviceId.random(), group, r.scope.backgroundScope, r.clock, role = app.heat.core.model.Role.HUB)
+        hubClient.link.setDialer(CarrierKind.LAN, d); hubClient.start()
+        val (plain, _) = r.client()
+        r.settle()
+        val forwarded = CopyOnWriteArrayList<Boolean>()
+        r.host.armHook = { armed, _ -> forwarded += armed; true }
+        hubClient.arm(true, 0)
+        r.settle()
+        assertEquals(listOf(true), forwarded.toList())
+        assertFalse("this camera must not arm when the hub's arm was forwarded", r.host.armed.value)
+        plain.arm(true, 0)
+        r.settle()
+        assertEquals("a browser arms the phone itself", listOf(true), forwarded.toList())
+        assertTrue(r.host.armed.value)
+    }
+
+    @Test
+    fun a_relayed_picture_goes_to_the_hub_receiver_only_and_the_cameras_own_to_everyone_else() = runTest {
+        val r = Rig(this)
+        val hubGot = AtomicInteger(); val plainGot = AtomicInteger()
+        val hubClient = CameraClient(camera, "Watch", DeviceId.random(), group, r.scope.backgroundScope, r.clock, role = app.heat.core.model.Role.HUB)
+        hubClient.link.setDialer(CarrierKind.LAN, FakeDialer(r.acceptor)); hubClient.videoSink = VideoSink { _, _, _, _, _ -> hubGot.incrementAndGet() }; hubClient.start()
+        val (plain, _) = r.client(); plain.videoSink = VideoSink { _, _, _, _, _ -> plainGot.incrementAndGet() }
+        r.settle()
+        hubClient.watch(video = true); plain.watch(video = true)
+        r.settle()
+        val frame = ByteArray(40)
+        r.host.sendVideo(MediaFlags.KEYFRAME, 1, frame, 0, frame.size, CameraHost.Audience.HUB)
+        r.settle()
+        assertEquals(1, hubGot.get()); assertEquals(0, plainGot.get())
+        r.host.sendVideo(MediaFlags.KEYFRAME, 2, frame, 0, frame.size, CameraHost.Audience.NOT_HUB)
+        r.settle()
+        assertEquals(1, hubGot.get()); assertEquals(1, plainGot.get())
+    }
+
     @Test
     fun an_alert_raised_while_the_viewer_is_disconnected_arrives_exactly_once_on_return() = runTest {
         val r = Rig(this)

@@ -156,6 +156,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         override fun onConfig(new: CameraConfig, old: CameraConfig?) = applyConfig(new, old)
         override fun onArmed(armed: Boolean) = applyArmed(armed)
         override fun onStreaming(video: Boolean, audio: Boolean, tier: Tier) {
+            relay.setWantVideo(video)
             if (video && !streaming.first) {
                 watchRequestedAt = android.os.SystemClock.elapsedRealtime()
                 Log.i(TAG, "timeline: a viewer asked for video at +${watchRequestedAt - startedAt} ms")
@@ -163,7 +164,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
             streaming = Triple(video, audio, tier)
             updateBitrate()
         }
-        override fun requestKeyframe() = encoder.requestKeyframe()
+        override fun requestKeyframe() { relay.requestKeyframe(); encoder.requestKeyframe() }
         override fun snap() { Log.i(TAG, "snap requested (stills not wired yet)") }
         override fun identify() = this@CameraHub.identify()
     }
@@ -199,6 +200,9 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
     /** Heat Link: this phone's own room, and the rooms it joins. Sessions that arrive over the internet land in [host]. */
     val rooms = RoomManager(appContext, scope, deviceId, host.acceptHandler())
 
+    /** This phone as the hub: the other hosts it was given codes for, and which one the watch is looking at. */
+    val relay = app.heat.phone.rooms.HostRelay(appContext, scope, host, rooms) { encoder.requestKeyframe() }
+
     // ── lifecycle ────────────────────────────────────────────────────
 
     fun start() {
@@ -210,6 +214,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         rfcomm = RfcommListener(appContext, scope, acceptor).also { it.start() }
         mark("accepting viewers (Wi-Fi and Bluetooth)")
         rooms.restore()
+        relay.start()
 
         multicast.acquire()
         beacon = Beacon(deviceId, groupKey, scope, clock)
@@ -266,6 +271,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
 
     fun close() {
         DataLayerHooks.acceptor = null
+        runCatching { relay.shutdown() }
         runCatching { rooms.shutdown() }
         runCatching { network.stop() }
         runCatching { orientation.disable() }
@@ -300,6 +306,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         val r = motion.analyze(y, width, height, rowStride, 1, System.currentTimeMillis())
         if (r.triggered) {
             host.raiseAlert(AlertKind.MOTION, r.changedPercent, r.escalation)
+            relay.onLocalMotion()
             _state.value = _state.value.copy(lastMotionMs = System.currentTimeMillis(), motionPercent = r.changedPercent)
             AlertNotifier.motion(appContext, host.config.value, host.viewerCount.value)
         }
@@ -386,7 +393,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
             watchRequestedAt = 0
             Log.i(TAG, "timeline: first keyframe (${length} bytes) out ${android.os.SystemClock.elapsedRealtime() - asked} ms after the viewer asked")
         }
-        host.sendVideo(flags, ptsUs, data, offset, length)
+        host.sendVideo(flags, ptsUs, data, offset, length, if (relay.showingSelf) CameraHost.Audience.ALL else CameraHost.Audience.NOT_HUB)
     }
 
     private fun ceiling(): Int {

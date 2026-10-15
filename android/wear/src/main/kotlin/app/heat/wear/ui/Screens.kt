@@ -65,7 +65,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.jsonObject
 
-private enum class Screen { Camera, Cameras, Settings, Activity }
+private enum class Screen { Camera, Cameras, Settings, Activity, Hosts }
 
 @Composable
 fun WatchRoot(hub: WatchHub) {
@@ -112,9 +112,11 @@ fun WatchRoot(hub: WatchHub) {
             screen == Screen.Cameras -> CamerasScreen(hub, cameras, client) { screen = Screen.Camera }
             screen == Screen.Settings -> SettingsScreen(client, cameras, hub) { screen = Screen.Camera }
             screen == Screen.Activity -> GalleryScreen(hub) { screen = Screen.Camera }
+            screen == Screen.Hosts -> HostsScreen(client) { screen = Screen.Camera }
             else -> CameraScreen(
                 client, incoming, hub, glass,
-                onCameras = { screen = Screen.Cameras }, onActivity = { screen = Screen.Activity }, onSettings = { screen = Screen.Settings }
+                onCameras = { screen = Screen.Cameras }, onActivity = { screen = Screen.Activity }, onSettings = { screen = Screen.Settings },
+                onHosts = { screen = Screen.Hosts }
             )
         }
     }
@@ -129,6 +131,58 @@ private fun Waiting(paired: Boolean) {
             if (paired) "Open Heat on a phone and start its camera." else "Open Heat on your phone once. It shares its key with this watch.",
             size = 12, color = Heat.TextDim, align = TextAlign.Center
         )
+    }
+}
+
+// ── hosts ────────────────────────────────────────────────────────────
+
+/**
+ * Every host the phone relays, to pick which one the picture shows. A tap shows that host; the lock row pins the view
+ * there, so movement on another host still flashes and buzzes (with that host's name) but no longer switches the picture.
+ */
+@Composable
+private fun HostsScreen(client: CameraClient, back: () -> Unit) {
+    val hosts by client.hosts.collectAsState()
+    val list = rememberScalingLazyListState()
+    val h = hosts
+    ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        item { HeatText("Hosts", size = 15, weight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp)) }
+        if (h == null) {
+            item { HeatText("Only this phone is a host. Add a host's code in the Heat app on the phone.", size = 12, color = Heat.TextDim, align = TextAlign.Center, modifier = Modifier.fillMaxWidth(0.8f)) }
+        } else {
+            item { Toggle("Lock view", h.locked) { client.pickHost(h.shown, lock = it) } }
+            for (host in h.hosts) item(key = host.id) { HostRow(host, selected = host.id == h.shown, locked = h.locked && host.id == h.shown) { client.pickHost(host.id); back() } }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun HostRow(host: app.heat.core.model.HostInfo, selected: Boolean, locked: Boolean, onClick: () -> Unit) {
+    val now = System.currentTimeMillis()
+    Row(
+        Modifier.fillMaxWidth(0.88f).clip(RoundedCornerShape(20.dp)).background(if (selected) Color(0x44FF7A2F) else Color(0x26FFFFFF))
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(9.dp).background(if (host.live) Heat.Green else Heat.Amber, CircleShape))
+        Spacer(Modifier.width(9.dp))
+        Column(Modifier.weight(1f)) {
+            HeatText(host.name, size = 14, weight = FontWeight.SemiBold, maxLines = 1)
+            val ago = if (host.lastAlertMs > 0) (now - host.lastAlertMs) / 1000 else -1
+            HeatText(
+                when {
+                    selected && locked -> "Showing · locked"
+                    selected -> "Showing"
+                    !host.live -> "Offline"
+                    ago in 0..3599 -> "Motion " + (if (ago < 60) "${ago}s" else "${ago / 60} min") + " ago"
+                    host.armed -> "Armed"
+                    else -> "Ready"
+                },
+                size = 11, color = Heat.TextDim, maxLines = 1
+            )
+        }
+        if (locked) HeatIconView(HeatIcon.Lock, Heat.Orange, 14.dp)
     }
 }
 

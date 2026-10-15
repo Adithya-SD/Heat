@@ -48,7 +48,7 @@ object Heat {
 enum class HeatIcon {
     Bolt, Flip, Gear, Shield, Back, Close, Check, Eye, Plus, Minus, Camera, Alert, Wifi, Bluetooth, Aim, List, Chevron,
     Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search, Link, Share, Copy, Power, Rooms, Pictures, EyeOff,
-    Reset, Record, Capture, Play, Trash, Save
+    Reset, Record, Capture, Play, Trash, Save, Hosts
 }
 
 /**
@@ -105,6 +105,12 @@ private fun DrawScope.drawIcon(icon: HeatIcon, c: Color, u: Float) {
             // A clockwise arc from one o'clock round to eleven, the head at its end pointing on, clockwise, into the gap.
             drawArc(c, -60f, 300f, false, p(4.5f, 4.5f), Size(15f * u, 15f * u), style = stroke)
             poly(5.75f to 4.2f, 9.55f to 4.75f, 8.15f to 8.35f)
+        }
+        HeatIcon.Hosts -> {
+            // Two screens, one in front of the other: switch between the views.
+            poly(8f to 10.5f, 8f to 6f, 9.5f to 3.5f, 18f to 3.5f, 20.5f to 5.5f, 20.5f to 12f, 18.5f to 14.5f, 16.5f to 14.5f)
+            drawRoundRect(c, p(3.5f, 10.5f), Size(13f * u, 10f * u), CornerRadius(2.6f * u), style = stroke)
+            drawCircle(c, 1.5f * u, p(10f, 15.5f), style = Fill)
         }
         HeatIcon.Record -> drawCircle(c, 6.2f * u, p(12f, 12f), style = Fill)
         HeatIcon.Capture -> {

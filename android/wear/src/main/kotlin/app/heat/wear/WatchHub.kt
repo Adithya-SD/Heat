@@ -381,7 +381,7 @@ class WatchHub(context: Context) {
     private val clientsLock = Any()
 
     private fun createClient(id: DeviceId, name: String, p: Pairing): CameraClient =
-            CameraClient(id, "Watch", deviceId, p.key, scope, clock).also { c ->
+            CameraClient(id, "Watch", deviceId, p.key, scope, clock, role = app.heat.core.model.Role.HUB).also { c ->
                 val decoder = PreviewDecoder { c.needKeyframe() }
                 decoders[id] = decoder
                 c.videoSink = VideoSink { flags, pts, data, off, len ->
@@ -421,7 +421,8 @@ class WatchHub(context: Context) {
                         val profile = c.config.value?.alerts?.watchHaptics ?: HapticProfile.NORMAL
                         haptics.alert(profile, a)
                         _lastAlert.value = AlertEvent(c.cameraId, a)
-                        val who = c.hello.value?.name ?: name
+                        // A hub (the phone) relays other hosts: the alert says which one it really came from.
+                        val who = a.hostName.ifBlank { c.hello.value?.name ?: name }
                         if (a.kind == AlertKind.MOTION || a.kind == AlertKind.TAMPER) {
                             _banner.value = Banner(c.cameraId, who, a.kind, System.currentTimeMillis())
                             // An alert always breaks blackout: the screen that was resting is the one that must be seen.
@@ -430,7 +431,7 @@ class WatchHub(context: Context) {
                         }
                         // App closed: a notification on the watch. App open: the flash, the buzz and the indicator are the alert.
                         if (!foreground) WatchAlerts.post(appContext, who, a.kind)
-                        val entry = ActivityEntry(c.cameraId, c.hello.value?.name ?: name, a.kind, System.currentTimeMillis())
+                        val entry = ActivityEntry(c.cameraId, who, a.kind, System.currentTimeMillis())
                         lastEntry[c.cameraId] = entry
                         _activity.value = (listOf(entry) + _activity.value).take(ACTIVITY_MAX)
                         followMotion(c, a)

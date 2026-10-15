@@ -75,6 +75,11 @@ class CameraClient(
     /** Each alert once, in order, including ones raised while this viewer was briefly disconnected. */
     val alerts: SharedFlow<Msg.Alert> = _alerts.asSharedFlow()
 
+    private val _hosts = MutableStateFlow<Msg.Hosts?>(null)
+
+    /** When this camera is a hub: every host it relays and which one is on show. Null for an ordinary camera. */
+    val hosts: StateFlow<Msg.Hosts?> = _hosts.asStateFlow()
+
     val linkState: StateFlow<LinkState> get() = link.state
 
     @Volatile var videoSink: VideoSink? = null
@@ -112,6 +117,9 @@ class CameraClient(
         send(wanted)
     }
 
+    /** Ask a hub to show another host's picture ([id] from [hosts]); [lock] pins the view there, null leaves the pin alone. */
+    fun pickHost(id: String, lock: Boolean? = null) = send(Msg.PickHost(id, lock))
+
     fun needKeyframe() = send(Msg.NeedKey, reliable = false)
     fun snap() = send(Msg.Snap)
     fun identify() = send(Msg.Identify)
@@ -134,7 +142,8 @@ class CameraClient(
 
             is Msg.Status -> _status.value = msg
             is Msg.Hello -> _hello.value = msg
-            is Msg.Alert -> if (seenAlerts.add("${msg.id}@${msg.atMs}")) {
+            is Msg.Hosts -> _hosts.value = msg
+            is Msg.Alert -> if (seenAlerts.add("${msg.hostId}/${msg.id}@${msg.atMs}")) {
                 if (seenAlerts.size > 64) seenAlerts.remove(seenAlerts.first())
                 _alerts.tryEmit(msg)
             }

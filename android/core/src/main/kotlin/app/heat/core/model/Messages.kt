@@ -112,8 +112,33 @@ sealed interface Msg {
         val kind: AlertKind,
         val atMs: Long,
         val changedPct: Float = 0f,
-        val escalation: Int = 0
+        val escalation: Int = 0,
+        /** Which host saw it, when a hub is relaying for several. Empty: the camera that sent this message itself. */
+        val hostId: String = "",
+        val hostName: String = ""
     ) : Msg
+
+    // ── hub ↔ receiver: one phone relays many hosts to a watch ───────
+
+    /** Every host the hub knows, which one its video is showing, and whether the view is pinned there. Sent whenever any of it changes. */
+    @Serializable @SerialName("hosts")
+    data class Hosts(val hosts: List<HostInfo>, val shown: String = HostInfo.SELF, val locked: Boolean = false) : Msg
+
+    /** Show this host's video. [lock] pins the view there (movement elsewhere still alerts but no longer switches); null leaves the pin as it is. */
+    @Serializable @SerialName("pick")
+    data class PickHost(val id: String, val lock: Boolean? = null) : Msg
+}
+
+@Serializable
+data class HostInfo(
+    /** [SELF] for the hub's own camera, otherwise the host's room code. */
+    val id: String,
+    val name: String,
+    val live: Boolean = false,
+    val armed: Boolean = false,
+    val lastAlertMs: Long = 0
+) {
+    companion object { const val SELF = "self" }
 }
 
 /** Encode/decode helper that never throws on bad input. */

@@ -75,6 +75,9 @@ class CameraHost(
         /** Seq of the last SetConfig received from this viewer; echoed so it can retire its pending edits. */
         @Volatile var lastSeq = 0
         @Volatile var watch: Msg.Watch? = null
+
+        /** What this viewer said it is. A [Role.HUB] viewer (the watch) is the one a relayed host's picture is for. */
+        @Volatile var role: Role = Role.VIEWER
         @Volatile var lastKeyMs = 0L
 
         override fun onUp(kind: CarrierKind) = host.viewerUp(this)
@@ -119,6 +122,32 @@ class CameraHost(
 
     /** Diagnostics: every settings change a viewer sends, with who sent it. */
     @Volatile var onViewerPatch: ((viewer: String, patch: String) -> Unit)? = null
+
+    // ── hub: this camera also relays other hosts to its viewers ──────
+
+    private var hostsMsg: Msg.Hosts? = null
+
+    /** A viewer asked to look at another host. Called off the host's lock, on the scope. */
+    @Volatile var onPick: ((id: String, lock: Boolean?) -> Unit)? = null
+
+    /** Arm/disarm for the host on screen. Return true to say it was handled elsewhere (a relayed host), false to arm this camera. */
+    @Volatile var armHook: ((armed: Boolean, delaySec: Int?) -> Boolean)? = null
+
+    /** Replaces what the status says while another host's picture is relayed: its picture size, armed state, lenses. */
+    @Volatile var statusOverride: ((Msg.Status) -> Msg.Status)? = null
+
+    /** Tells every viewer (now and on connect) which hosts exist and which one is shown. */
+    fun setHosts(msg: Msg.Hosts) {
+        synchronized(lock) {
+            if (hostsMsg == msg) return
+            hostsMsg = msg
+            val bytes = MsgCodec.encode(msg)
+            for (v in viewers.values) registry.existing(v.id)?.send(bytes, reliable = true)
+        }
+    }
+
+    /** The status changed because the relayed host (or the choice of host) did: say so now, not at the next tick. */
+    fun refreshStatus() = broadcastStatus(reliable = true)
 
     /** Errors thrown by application callbacks; never fatal. Collected for diagnostics. */
     @Volatile var lastError: Throwable? = null
@@ -178,8 +207,8 @@ class CameraHost(
      * Raises an alert to every connected viewer, reliably: one that is briefly
      * disconnected still gets it, exactly once, when its link returns.
      */
-    fun raiseAlert(kind: AlertKind, changedPct: Float = 0f, escalation: Int = 0) {
-        val alert = Msg.Alert(alertIds.incrementAndGet(), kind, System.currentTimeMillis(), changedPct, escalation)
+    fun raiseAlert(kind: AlertKind, changedPct: Float = 0f, escalation: Int = 0, hostId: String = "", hostName: String = "") {
+        val alert = Msg.Alert(alertIds.incrementAndGet(), kind, System.currentTimeMillis(), changedPct, escalation, hostId, hostName)
         synchronized(recentAlerts) {
             recentAlerts.addLast(alert)
             while (recentAlerts.size > RECENT_ALERTS) recentAlerts.removeFirst()
@@ -204,15 +233,20 @@ class CameraHost(
      * Delivers one encoded video frame to every viewer that asked for video.
      * Returns how many accepted it. Never blocks.
      */
-    fun sendVideo(flags: Int, ptsUs: Long, data: ByteArray, offset: Int, length: Int): Int {
+    fun sendVideo(flags: Int, ptsUs: Long, data: ByteArray, offset: Int, length: Int, audience: Audience = Audience.ALL): Int {
         var sent = 0
         for (v in viewers.values) {
             if (v.watch?.video != true) continue
+            if (audience == Audience.HUB && v.role != Role.HUB) continue
+            if (audience == Audience.NOT_HUB && v.role == Role.HUB) continue
             val conv = registry.existing(v.id) ?: continue
             if (conv.sendMedia(Stream.VIDEO, flags, ptsUs, data, offset, length)) sent++
         }
         return sent
     }
+
+    /** Who a frame is for: a hub relays another host's picture to its [Role.HUB] viewer only; everyone else keeps this camera's own. */
+    enum class Audience { ALL, HUB, NOT_HUB }
 
     /** The carrier each video-watching viewer is currently on. The slowest of these sets what the encoder may send. */
     fun videoCarriers(): List<CarrierKind> = viewers.values.mapNotNull { v ->
@@ -246,9 +280,10 @@ class CameraHost(
         conv.send(MsgCodec.encode(Msg.Hello(name(), Role.CAMERA, appVersion, listOf("h264", "cfg-patch", "alerts"))))
         synchronized(lock) {
             conv.send(MsgCodec.encode(configHost.state(v.lastSeq)))
-            conv.send(MsgCodec.encode(currentStatus()))
+            conv.send(MsgCodec.encode(currentStatus(v)))
         }
         replayAlerts(conv)
+        hostsMsg?.let { conv.send(MsgCodec.encode(it), reliable = true) }
         _viewerCount.value = viewers.values.count { registry.existing(it.id)?.isUp == true }
         reevaluateInterest()
     }
@@ -265,7 +300,9 @@ class CameraHost(
                     if (configHost.config != old) afterConfigChange(old) else markConfigDirty()
                 }
 
-                is Msg.Arm -> applyArm(msg.armed, msg.delaySec)
+                is Msg.Hello -> v.role = msg.role
+                is Msg.Arm -> if (v.role != Role.HUB || armHook?.invoke(msg.armed, msg.delaySec) != true) applyArm(msg.armed, msg.delaySec)
+                is Msg.PickHost -> scope.launch { onPick?.invoke(msg.id, msg.lock) }
 
                 is Msg.Watch -> {
                     val before = v.watch
@@ -347,16 +384,17 @@ class CameraHost(
         }
     }
 
-    private fun currentStatus(): Msg.Status {
+    private fun currentStatus(v: Viewer? = null): Msg.Status {
         val arming = if (armingEndsMs > 0) ((armingEndsMs - clock.nowMs() + 999) / 1000).toInt().coerceAtLeast(0) else 0
-        return base.copy(armed = _armed.value, armingIn = arming)
+        val own = base.copy(armed = _armed.value, armingIn = arming)
+        // Only the hub's own receiver is told about the relayed host; everyone else hears about this camera.
+        return if (v == null || v.role == Role.HUB) statusOverride?.invoke(own) ?: own else own
     }
 
     private fun broadcastStatus(reliable: Boolean) = synchronized(lock) { broadcastStatusLocked(reliable) }
 
     private fun broadcastStatusLocked(reliable: Boolean) {
-        val bytes = MsgCodec.encode(currentStatus())
-        for (v in viewers.values) registry.existing(v.id)?.send(bytes, reliable)
+        for (v in viewers.values) registry.existing(v.id)?.send(MsgCodec.encode(currentStatus(v)), reliable)
     }
 
     private fun reevaluateInterest() = synchronized(lock) { reevaluateLocked() }

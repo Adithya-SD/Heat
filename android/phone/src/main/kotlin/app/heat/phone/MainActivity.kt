@@ -99,22 +99,24 @@ private fun PhoneRoot(invite: androidx.compose.runtime.MutableState<String?>) {
     // A joined room. Not saveable on purpose: leaving the app leaves the room, so no decoder or link is left running.
     var viewer by remember { mutableStateOf<RoomViewer?>(null) }
     val scope = rememberCoroutineScope()
+    // The hub (see HostRelay) owns every joined room, so a host's alerts keep coming when this screen is closed; the screen
+    // only borrows the room's viewer and asks for its picture while it is showing.
     fun join(code: String) {
         val h = hub ?: return
         scope.launch {
-            viewer?.stop()
-            val v = h.rooms.join(code)
-            v.start()
+            viewer?.let { h.relay.viewing(it.code, false) }
+            val v = h.relay.viewerFor(code) ?: return@launch
+            h.relay.viewing(v.code, true)
             viewer = v
             screen = "view"
         }
     }
     fun leave() {
-        viewer?.stop()
+        viewer?.let { v -> hub?.relay?.viewing(v.code, false) }
         viewer = null
         screen = "rooms"
     }
-    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewer?.stop() } }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewer?.let { v -> HubHolder.hub.value?.relay?.viewing(v.code, false) } } }
     LaunchedEffect(invite.value, hub) {
         val code = invite.value
         if (code != null && hub != null) {

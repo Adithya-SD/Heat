@@ -115,7 +115,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun CameraScreen(
     client: CameraClient, incoming: CameraClient?, hub: WatchHub, glass: GlassState,
-    onCameras: () -> Unit, onActivity: () -> Unit, onSettings: () -> Unit
+    onCameras: () -> Unit, onActivity: () -> Unit, onSettings: () -> Unit, onHosts: () -> Unit
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -266,7 +266,7 @@ fun CameraScreen(
                     flash = flash,
                     onArm = { client.arm(!(armed || arming > 0)); haptics.action() },
                     onGallery = onActivity, onSettings = onSettings,
-                    onReset = { hub.resetStream(client); haptics.action() },
+                    onHosts = onHosts,
                     onBlackout = { hub.setBlackout(true); haptics.action() },
                     onPower = { haptics.action(); app.heat.platform.PeerLauncher.endAll(ctx) },
                     onPhoto = {
@@ -439,7 +439,7 @@ private fun CameraPicture(client: CameraClient, hub: WatchHub, placing: Boolean,
 
 /**
  * The buttons on the rim, in mirrored pairs: arm (shield) upper-left and the gallery upper-right, power at nine and
- * reset at three (a little below the middle), settings lower-left and blackout lower-right, and at six one glass pill
+ * the hosts switcher at three (a little below the middle), settings lower-left and blackout lower-right, and at six one glass pill
  * holding both ways to capture, photo on the left and video on the right. The menu chip owns twelve o'clock and can
  * grow wide in some menus, so the upper pair sits well below it. Angles are clockwise from twelve; radii and sizes are
  * fractions of the screen's own radius, so the layout is the same on every watch.
@@ -448,7 +448,7 @@ private fun CameraPicture(client: CameraClient, hub: WatchHub, placing: Boolean,
 private fun EdgeButtons(
     glass: GlassState, armed: Boolean, arming: Int,
     latest: Gallery.Item?, recordingSince: Long?, clipping: Boolean, flash: Boolean,
-    onArm: () -> Unit, onGallery: () -> Unit, onSettings: () -> Unit, onReset: () -> Unit,
+    onArm: () -> Unit, onGallery: () -> Unit, onSettings: () -> Unit, onHosts: () -> Unit,
     onBlackout: () -> Unit, onPower: () -> Unit, onPhoto: () -> Unit, onRecord: () -> Unit, onEnableClipping: () -> Unit
 ) {
     // Power ends everything on both devices, so it asks once: the first tap turns it red, a second within 3 s ends.
@@ -471,7 +471,7 @@ private fun EdgeButtons(
         GlassButton(glass, Modifier.at(262.0, 0.80f), small, { if (powerArmed) onPower() else powerArmed = true }, tint = if (powerArmed) Color(0x55FF4D4D) else null) {
             HeatIconView(HeatIcon.Power, if (powerArmed) Heat.Red else Heat.Text, icon)
         }
-        GlassButton(glass, Modifier.at(98.0, 0.80f), small, onReset) { HeatIconView(HeatIcon.Reset, Heat.Text, icon) }
+        GlassButton(glass, Modifier.at(98.0, 0.80f), small, onHosts) { HeatIconView(HeatIcon.Hosts, Heat.Text, icon) }
         GlassButton(glass, Modifier.at(222.0, 0.80f), small, onSettings) { HeatIconView(HeatIcon.Gear, Heat.Text, icon) }
         GlassButton(glass, Modifier.at(138.0, 0.80f), small, onBlackout) { HeatIconView(HeatIcon.Eye, Heat.Text, icon) }
         CaptureRecord(glass, Modifier.at(180.0, 0.70f), r, clipping, recordingSince, onPhoto, onRecord, onEnableClipping)
