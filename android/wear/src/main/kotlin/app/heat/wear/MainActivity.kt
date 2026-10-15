@@ -40,10 +40,29 @@ object Rotary {
 class MainActivity : ComponentActivity() {
     private lateinit var hub: WatchHub
 
+    // The screen never sleeps while the app is open: the window flag, and a screen wake lock held from the moment the app is on
+    // screen until it is left. Two independent holds, so one being dropped by the system (a theme, a dialog, a mode change) is not
+    // enough to let the watch doze. Only the user (power key, covering the screen, leaving the app) ends it.
+    @Suppress("DEPRECATION")
+    private val screenLock by lazy {
+        (getSystemService(POWER_SERVICE) as android.os.PowerManager)
+            .newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "heat:watch-screen")
+            .apply { setReferenceCounted(false) }
+    }
+
+    private fun holdScreen() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        runCatching { if (!screenLock.isHeld) screenLock.acquire() }
+    }
+
+    private fun releaseScreen() {
+        runCatching { if (screenLock.isHeld) screenLock.release() }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Someone looking at a camera does not want the screen to doze mid-glance.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        holdScreen()
         // Tell the phone first: its camera takes a few seconds to come up, and the hub below can wait for that time.
         app.heat.platform.PeerLauncher.announce(this, intent.getBooleanExtra(app.heat.platform.PeerLauncher.EXTRA_FROM_PEER, false))
         hub = (application as HeatWearApp).hub
@@ -70,6 +89,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         app.heat.platform.PeerLauncher.onScreen = true
+        holdScreen()
         WatchAlerts.clear(this)          // looking at the app is answering its notification
         hub.setForeground(true)
         // Keep the process (and the link) alive for a while after we leave: the next open is then instant.
@@ -78,13 +98,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        holdScreen()
         hub.refresh()
     }
 
     override fun onStop() {
         app.heat.platform.PeerLauncher.onScreen = false
         hub.setForeground(false)
+        releaseScreen()
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        releaseScreen()
+        super.onDestroy()
     }
 
     override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
