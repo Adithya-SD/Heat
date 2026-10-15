@@ -340,6 +340,22 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 .lkhr{display:flex;align-items:center;gap:6px}.lkhr .lkh{flex:1;min-width:0}.lkpn{flex:1;min-width:0;padding:11px 8px;border-top:1px solid rgba(255,255,255,.12)}.lkpn b{display:block;font-weight:600;font-size:14px}.lkpn small{display:block;color:var(--t2);font-size:12px}
 .lkx2{min-width:36px;height:34px;padding:0 10px;border-radius:17px;background:rgba(255,255,255,.12);color:#ff8a80;font-weight:700;font-size:13px;flex:none}.lkx2.arm{background:rgba(255,69,58,.9);color:#fff}
 #lkrm{z-index:9}body[data-s=removed] #lkV{display:block}body[data-s=removed] #lkV>:not(#lkrm){display:none!important}
+
+/* ---- tiny screens (a watch, a small window): the dock keeps arm, photo and one "more" button; every other tool is in a grid ---- */
+.lkmenu{position:absolute;left:var(--gut);right:var(--gut);top:calc(max(var(--gut),var(--sat)) + 44px);bottom:calc(var(--dock-h) + max(var(--gut),var(--sab)) + 8px);z-index:8;display:none;--r:22px;padding:8px;overflow:auto}
+.lkmenu.s{display:block}
+.lkmg{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.lkmg button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:14px;background:rgba(255,255,255,.1);color:#fff;font-size:10px;font-weight:600;line-height:1.1;text-align:center;min-width:0}
+.lkmg button svg.i{width:20px;height:20px}.lkmg button.on{background:rgba(255,255,255,.26)}.lkmg button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.tiny .rail,html.tiny .lkchip,html.tiny .lklens,html.tiny #lktorch,html.tiny #lkflip,html.tiny #lkinv,html.tiny .lkzb:not(.edit){display:none!important}
+html.tiny #lkmore{display:grid!important}
+html.tiny .lkmenu{bottom:var(--gut);z-index:10}
+html.tiny .lkdock{grid-template-columns:auto auto auto;justify-content:center;column-gap:6px;padding:5px;width:auto;max-width:calc(100vw - 2 * var(--gut))}
+html.tiny .lkcap{padding:3px}.lkg.l,.lkg.r{gap:4px}
+html.tiny .top .pill{font-size:11px;gap:5px;padding:0 9px;height:34px;--pb:34px}html.tiny .top .pill small{display:none}html.tiny .top .tb .b{width:34px;height:34px;min-width:34px;min-height:34px}
+html.tiny .lkpo{width:calc(100% - 2 * var(--gut));padding:12px 14px 14px}
+html.tiny #lkV .sheet{top:var(--gut);bottom:var(--gut);left:var(--gut);right:var(--gut);width:auto;height:auto;transform:translateY(calc(100% + 40px))}html.tiny #lkV .sheet.open{transform:none}
+@media(max-width:340px),(max-height:300px){:root{--bs:34px}}
 #lkre{margin-top:-4px}
 #lkapp{text-decoration:none;color:#fff}
 .lkj{flex-wrap:wrap}
@@ -513,11 +529,12 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <div class="glass dock lkdock" id="lkdock">
 <div class="lkg l"><button class="b" id="lkarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkarmt"></span></button><button class="lkchip" id="lksensb" title="Sensitivity" aria-haspopup="true"><svg class="i"><use href="#i-sens"/></svg><span><small>Sensitivity</small><b id="lksensv">–</b></span></button></div>
 <div class="lkcap" id="lkcap" role="group" aria-label="Capture"><button class="b" id="lksnap" data-i="cam" title="Take a photo"></button><i></i><button class="b dim" id="lkrec" data-i="rec" title="Record a clip"></button><small id="lkrect"></small></div>
-<div class="lkg r"><div class="lklens" id="lklens" hidden></div><button class="lkchip" id="lkzoomb" title="Zoom" aria-haspopup="true"><svg class="i"><use href="#i-zoom-in"/></svg><span><small>Zoom</small><b id="lkzt">1×</b></span></button><button class="b" id="lktorch" data-i="bolt" title="Torch" hidden></button><button class="b" id="lkflip" data-i="flip" title="Switch camera"></button></div>
+<div class="lkg r"><div class="lklens" id="lklens" hidden></div><button class="lkchip" id="lkzoomb" title="Zoom" aria-haspopup="true"><svg class="i"><use href="#i-zoom-in"/></svg><span><small>Zoom</small><b id="lkzt">1×</b></span></button><button class="b" id="lktorch" data-i="bolt" title="Torch" hidden></button><button class="b" id="lkflip" data-i="flip" title="Switch camera"></button><button class="b" id="lkmore" data-i="dots" title="All tools" hidden></button></div>
 </div>
 <div class="glass lkpo" id="lkpos" role="dialog" aria-label="Sensitivity"><header><svg class="i"><use href="#i-sens"/></svg><b>Sensitivity</b><output id="lkposv">–</output></header><p class="hint">How small a movement sets off an alert. Higher notices smaller, fainter movement.</p><div class="lkpr"><button class="b" data-d="-5" data-t="lksens" data-i="minus" title="Lower"></button><input id="lksens" type="range" min="1" max="100" step="1" aria-label="Sensitivity"><button class="b" data-d="5" data-t="lksens" data-i="plus" title="Higher"></button></div><div class="lkpp" id="lkposp"><button data-v="20">Low</button><button data-v="50">Medium</button><button data-v="80">High</button><button data-v="100">Max</button></div></div>
 <div class="glass lkpo" id="lkzps" role="dialog" aria-label="Zoom"><header><svg class="i"><use href="#i-zoom-in"/></svg><b>Zoom</b><output id="lkzpv">1×</output></header><p class="hint">Steps through the lenses and then crops in. The slider is spread so every step feels the same.</p><div class="lkpr"><button class="b" data-d="-4" data-t="lkzoom" data-i="minus" title="Zoom out"></button><input id="lkzoom" type="range" min="0" max="100" step="1" aria-label="Zoom"><button class="b" data-d="4" data-t="lkzoom" data-i="plus" title="Zoom in"></button></div><div class="lkpp" id="lkzpp"></div></div>
 <div class="ov" id="lkrm"><div class="glass c2" role="alert"><b>You were removed from this room</b><small class="hint">Someone in the room removed this device. Close this tab, or open Heat again to start over.</small><button class="ghost" onclick="location.replace(location.pathname)">Start over</button></div></div>
+<div class="glass lkmenu" id="lkmenu" role="dialog" aria-label="All tools"><div class="lkmg" id="lkmg"></div></div>
 <div class="blk" id="lkblkov"><span>Tap anywhere to wake</span></div>
 <div class="ov s" id="lkov"><div class="glass c2" role="status"><div class="sp"></div><b id="lkovt">Connecting…</b><small class="hint" id="lkovh"></small><a class="ghost" id="lkopen" href="#" hidden>Open in the Heat app</a><button class="ghost" id="lkovx">Leave</button></div></div>
 </section>
@@ -784,7 +801,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-16.4'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-16.6'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -2846,6 +2863,21 @@ const LK = (() => {
     if (k && cur && cur.sess) twoTap(k, () => { cur.sess.sendControl(enc({ t: 'kick', id: k.dataset.kick })); toast('Removed'); });
   };
   setInterval(() => { if (ROOM && sel('lkhs').classList.contains('open')) paintHosts(); }, 2000);
+
+
+  /* ---------- small screens: one "more" button opens every tool as a grid ---------- */
+  {
+    const mq = window.matchMedia('(max-width:340px), (max-height:300px)');
+    const apply = () => { document.documentElement.classList.toggle('tiny', mq.matches); if (!mq.matches) sel('lkmenu').classList.remove('s'); };
+    (mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply)); apply();
+    const TOOLS = [['lkhb', 'Hosts'], ['lksensb', 'Sensitivity', 'sens'], ['lkzoomb', 'Zoom', 'zoom-in'], ['lkrec', 'Record'], ['lkgal', 'Gallery'], ['lkzone', 'Area'], ['lkblk', 'Black screen'], ['lkrst', 'Reset'], ['lkact', 'Activity'], ['lkset', 'Settings'], ['lktorch', 'Torch'], ['lkflip', 'Flip'], ['lkfs', 'Full screen'], ['lkinv', 'Invite']];
+    const build = () => {
+      sel('lkmg').innerHTML = '<button type="button" data-t="__close"><svg class="i"><use href="#i-x"/></svg><span>Close</span></button>' + TOOLS.map(([id, label, icon]) => { const b = sel(id); if (!b || (id === 'lkhb' && !ROOM) || (id === 'lktorch' && b.hidden)) return ''; const ic = icon || b.dataset.i || 'dots'; return `<button type="button" data-t="${id}" class="${b.classList.contains('on') ? 'on' : ''}"><svg class="i"><use href="#i-${ic}"/></svg><span>${label}</span></button>`; }).join('');
+    };
+    sel('lkmore').onclick = e => { e.stopPropagation(); const m = sel('lkmenu'); closePopovers(); for (const i of ['lksheet', 'lkcs', 'lkhs']) sel(i).classList.remove('open'); sheets(); if (m.classList.contains('s')) return m.classList.remove('s'); build(); m.classList.add('s'); };
+    sel('lkmg').onclick = e => { const b = e.target.closest('button'); if (!b) return; sel('lkmenu').classList.remove('s'); const t = b.dataset.t === '__close' ? null : sel(b.dataset.t); if (t) setTimeout(() => t.click(), 60); };
+    document.addEventListener('pointerdown', e => { if (sel('lkmenu').classList.contains('s') && !e.target.closest('.lkmenu,#lkmore')) sel('lkmenu').classList.remove('s'); });
+  }
 
   /* ---------- keeping the panels in step with the camera ---------- */
   function paintPanels(R, det, z, s) {

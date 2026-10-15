@@ -104,19 +104,19 @@ private fun PhoneRoot(invite: androidx.compose.runtime.MutableState<String?>) {
     fun join(code: String) {
         val h = hub ?: return
         scope.launch {
-            viewer?.let { h.relay.viewing(it.code, false) }
+            viewer?.let { h.relay.viewing(it, false) }
             val v = h.relay.viewerFor(code) ?: return@launch
-            h.relay.viewing(v.code, true)
+            h.relay.viewing(v, true)
             viewer = v
             screen = "view"
         }
     }
     fun leave() {
-        viewer?.let { v -> hub?.relay?.viewing(v.code, false) }
+        viewer?.let { v -> hub?.relay?.viewing(v, false) }
         viewer = null
         screen = "rooms"
     }
-    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewer?.let { v -> HubHolder.hub.value?.relay?.viewing(v.code, false) } } }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewer?.let { v -> HubHolder.hub.value?.relay?.viewing(v, false) } } }
     // Removed from the room being watched: this app closes, with its task.
     val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
     LaunchedEffect(viewer) { viewer?.client?.kicked?.collect { activity?.finishAndRemoveTask() } }
@@ -141,9 +141,13 @@ private fun PhoneRoot(invite: androidx.compose.runtime.MutableState<String?>) {
             }
 
             h == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { HeatText("Starting camera…", color = Heat.TextDim) }
-            screen == "settings" -> SettingsScreen(h, glass) { screen = "live" }
+            screen == "settings" -> SettingsScreen(h, glass, onBack = { screen = "live" })
             screen == "rooms" -> RoomsScreen(h, onBack = { screen = "live" }, onJoin = { join(it) })
-            screen == "view" && viewer != null -> RoomViewerScreen(viewer!!, onClose = { leave() })
+            screen == "view" && viewer != null -> RoomViewerScreen(
+                viewer!!, h, glass,
+                onSwitch = { nv -> viewer?.let { old -> h.relay.viewing(old, false) }; h.relay.viewing(nv, true); viewer = nv },
+                onClose = { leave() }
+            )
             screen == "gallery" -> app.heat.phone.ui.GalleryScreen(h, onBack = { screen = "live" })
             else -> LiveScreen(h, onRooms = { screen = "rooms" }, onSettings = { screen = "settings" }, onGallery = { screen = "gallery" })
         }

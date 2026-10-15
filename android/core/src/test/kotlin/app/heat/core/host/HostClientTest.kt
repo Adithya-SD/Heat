@@ -403,6 +403,34 @@ class HostClientTest {
     }
 
     @Test
+    fun the_hub_receiver_edits_and_sees_the_relayed_hosts_settings_while_others_keep_this_cameras() = runTest {
+        val r = Rig(this)
+        val hubClient = CameraClient(camera, "Watch", DeviceId.random(), group, r.scope.backgroundScope, r.clock, role = app.heat.core.model.Role.HUB)
+        hubClient.link.setDialer(CarrierKind.LAN, FakeDialer(r.acceptor)); hubClient.start()
+        val (plain, _) = r.client()
+        r.settle()
+        var remote = CameraConfig().let { it.copy(label = "Garage", detect = it.detect.copy(sensitivity = 77)) }
+        val applied = CopyOnWriteArrayList<kotlinx.serialization.json.JsonObject>()
+        r.host.configProxy = object : CameraHost.ConfigProxy {
+            override fun apply(patch: kotlinx.serialization.json.JsonObject) { applied += patch; remote = app.heat.core.model.ConfigPatch.apply(remote, patch) ?: remote }
+            override fun current() = remote
+        }
+        r.host.refreshConfig()
+        r.settle()
+        assertEquals("Garage", hubClient.config.value?.label)
+        assertEquals(CameraConfig().label, plain.config.value?.label)
+        hubClient.edit { it.copy(detect = it.detect.copy(sensitivity = 33)) }
+        r.settle()
+        assertEquals(1, applied.size)
+        assertEquals(33, hubClient.config.value?.detect?.sensitivity)
+        assertEquals("this camera's own settings are untouched", CameraConfig().detect.sensitivity, r.host.config.value.detect.sensitivity)
+        plain.edit { it.copy(detect = it.detect.copy(sensitivity = 12)) }
+        r.settle()
+        assertEquals("a browser still edits this camera", 12, r.host.config.value.detect.sensitivity)
+        assertEquals(1, applied.size)
+    }
+
+    @Test
     fun removing_a_host_calls_the_platform() = runTest {
         val r = Rig(this)
         val (a, _) = r.client()

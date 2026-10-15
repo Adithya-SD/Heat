@@ -134,6 +134,27 @@ class CameraHost(
     /** Arm/disarm for the host on screen. Return true to say it was handled elsewhere (a relayed host), false to arm this camera. */
     @Volatile var armHook: ((armed: Boolean, delaySec: Int?) -> Boolean)? = null
 
+    /**
+     * While a hub relays another host, its receiver (the watch) edits and sees THAT host's settings, not this phone's:
+     * edits go through [apply], and the config it is shown is [current].
+     */
+    interface ConfigProxy {
+        fun apply(patch: kotlinx.serialization.json.JsonObject)
+        fun current(): CameraConfig?
+    }
+
+    @Volatile var configProxy: ConfigProxy? = null
+    private var proxyRev = 0L
+
+    /** The relayed host's settings changed (or another host came on screen): tell the hub's receiver. */
+    fun refreshConfig() = synchronized(lock) { proxyRev++; markConfigDirty() }
+
+    private fun configStateFor(v: Viewer): Msg.ConfigState {
+        val p = configProxy
+        if (p != null && v.role == Role.HUB) p.current()?.let { return Msg.ConfigState(proxyRev, v.lastSeq, it) }
+        return configHost.state(v.lastSeq)
+    }
+
     /** A viewer asked to remove a host this camera relays (the hub's own hosts); [key] as named in [Msg.Hosts]. */
     @Volatile var onKickHost: ((key: String) -> Unit)? = null
 
@@ -319,7 +340,7 @@ class CameraHost(
         }
         conv.send(MsgCodec.encode(Msg.Hello(name(), Role.CAMERA, appVersion, listOf("h264", "cfg-patch", "alerts"))))
         synchronized(lock) {
-            conv.send(MsgCodec.encode(configHost.state(v.lastSeq)))
+            conv.send(MsgCodec.encode(configStateFor(v)))
             conv.send(MsgCodec.encode(currentStatus(v)))
         }
         replayAlerts(conv)
@@ -333,7 +354,12 @@ class CameraHost(
         val msg = MsgCodec.decode(data, offset, length) ?: return
         synchronized(lock) {
             when (msg) {
-                is Msg.SetConfig -> {
+                is Msg.SetConfig -> if (v.role == Role.HUB && configProxy != null) {
+                    v.lastSeq = msg.seq
+                    configProxy?.apply(msg.patch)
+                    proxyRev++
+                    markConfigDirty()
+                } else {
                     v.lastSeq = msg.seq
                     onViewerPatch?.invoke(v.id.short, msg.patch.toString())
                     val old = configHost.config
@@ -389,7 +415,7 @@ class CameraHost(
         val toSend: List<Pair<DeviceId, ByteArray>> = synchronized(lock) {
             if (!configDirty) return
             configDirty = false
-            viewers.values.map { it.id to MsgCodec.encode(configHost.state(it.lastSeq)) }
+            viewers.values.map { it.id to MsgCodec.encode(configStateFor(it)) }
         }
         for ((id, bytes) in toSend) registry.existing(id)?.send(bytes, reliable = true)
     }

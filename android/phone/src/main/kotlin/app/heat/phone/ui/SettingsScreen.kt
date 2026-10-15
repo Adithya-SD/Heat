@@ -79,11 +79,16 @@ import kotlinx.coroutines.launch
  * glass for the rows.
  */
 @Composable
-fun SettingsScreen(hub: CameraHub, glass: GlassState, onBack: () -> Unit) {
-    val config by hub.host.config.collectAsState()
+fun SettingsScreen(hub: CameraHub, glass: GlassState, onBack: () -> Unit, client: app.heat.core.host.CameraClient? = null) {
+    // With a [client] these are another host's settings (a camera in a room this phone is watching), edited the same way.
+    val localConfig by hub.host.config.collectAsState()
+    val remoteConfig by (client?.config ?: remember { kotlinx.coroutines.flow.MutableStateFlow<CameraConfig?>(null) }).collectAsState()
+    val remoteStatus by (client?.status ?: remember { kotlinx.coroutines.flow.MutableStateFlow<app.heat.core.model.Msg.Status?>(null) }).collectAsState()
+    val config = if (client != null) remoteConfig ?: CameraConfig() else localConfig
     val hubState by hub.state.collectAsState()
-    val caps = Capabilities(hubState.hasTorch, hubState.manualFocus, hubState.manualExposure, hubState.lensStrategy)
-    val edit: ((CameraConfig) -> CameraConfig) -> Unit = { hub.host.editLocally(it) }
+    val caps = if (client != null) Capabilities(remoteStatus?.hasTorch ?: false, remoteStatus?.manualFocus ?: false, remoteStatus?.manualExposure ?: false)
+        else Capabilities(hubState.hasTorch, hubState.manualFocus, hubState.manualExposure, hubState.lensStrategy)
+    val edit: ((CameraConfig) -> CameraConfig) -> Unit = if (client != null) { f -> client.edit(f) } else { f -> hub.host.editLocally(f) }
 
     var query by rememberSaveable { mutableStateOf("") }
     val focus = LocalFocusManager.current

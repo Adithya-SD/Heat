@@ -193,3 +193,10 @@ One app, three jobs. Every phone is a **host** (its own camera and detection, on
 - **Website.** The Heat tab asks first: Host a camera or Receive. The receiver page has the watch's controls (sensitivity, zoom, full settings, detection area, photo/clip gallery, black screen, reset stream).
 - **Downloads.** Signed APKs are on the GitHub release (`Heat-phone.apk`, `Heat-watch.apk`); the site links `releases/latest/download/…`. Rebuild with `-PheatDist`.
 - **Anywhere.** Rooms use WebRTC; behind strict NATs they need a TURN relay. Set `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN` on the Vercel project (`api/ice.js`) and both the site and the app use it.
+
+## Rooms with several hosts, and removing people (2026-10-16)
+
+- **A room is shared.** One code, up to 8 hosts: slot 0 is the room id itself (every older code is unchanged), slots 1-7 are `id-1`..`id-7` (`RoomCode.slotId`). A host takes the first free slot (`RoomSlotHost`; on the web, `claim`), and may enter an existing room's code to join it ("Host here" in the app, "Host in a room" on the site). Receivers look for hosts with a signaling-only probe (`probeRoom` / `probeSlots`: a stub offer to every slot id; an empty slot answers EXPIRE at once) every 15 s and join each one found. The phone hub treats every host slot like any other host.
+- **Everyone has full access.** Any receiver can change any host's settings, arm it, and remove people. The watch edits whichever host is on screen through the hub (`CameraHost.ConfigProxy`).
+- **Removing.** Every host tells its viewers who is connected (`Msg.Roster`). Anyone can remove a viewer (`Msg.Kick(id)`) or a whole host (`Msg.Kick("")`, or `host:<key>` through the hub). The removed device is told (`Msg.Kicked`), its link stops and its app closes (web tab closes, Android task finishes; a removed host stops hosting and the phone app ends). A removed viewer is turned away if it comes back until that host restarts; a new code locks out everyone. Removing is two taps in every UI.
+- **Fixed:** the app's room host never released finished connection attempts, so after eight in a room's life it refused every new viewer until restarted.

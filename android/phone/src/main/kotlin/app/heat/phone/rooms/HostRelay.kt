@@ -78,6 +78,7 @@ class HostRelay(
     fun shutdown() {
         host.onPick = null
         host.onKickHost = null
+        host.configProxy = null
         host.armHook = null
         host.statusOverride = null
         for (e in entries.values) stop(e)
@@ -134,6 +135,7 @@ class HostRelay(
         v.start(video = false)
         val c = v.client
         e.jobs += scope.launch { c.alerts.collect { onAlert(e, it) } }
+        e.jobs += scope.launch { c.config.collect { if (shown == key) host.refreshConfig() } }
         e.jobs += scope.launch { c.kicked.collect { Log.i(TAG, "hub: removed from ${e.code.take(4)}… by ${it}"); forgetEntry(e) } }
         e.jobs += scope.launch { c.linkState.collect { e.live = it.phase == LinkState.Phase.UP; publish() } }
         e.jobs += scope.launch {
@@ -213,6 +215,15 @@ class HostRelay(
             prefs.edit().putString(KEY_SHOWN, shown).apply()
             val now = entries[shown]
             host.statusOverride = if (now == null) null else { own -> overlay(own, now) }
+            host.configProxy = now?.let { e ->
+                object : CameraHost.ConfigProxy {
+                    override fun apply(patch: kotlinx.serialization.json.JsonObject) {
+                        e.viewer.client.edit { c -> app.heat.core.model.ConfigPatch.apply(c, patch) ?: c }
+                    }
+                    override fun current() = e.viewer.client.config.value
+                }
+            }
+            host.refreshConfig()
             old?.let { interest(it) }
             if (now == null) localKeyframe() else interest(now, forceKey = true)
         }
@@ -226,7 +237,7 @@ class HostRelay(
         return own.copy(
             armed = s.armed, armingIn = s.armingIn, streaming = s.streaming, stream = s.stream,
             lenses = s.lenses, activeLens = s.activeLens, lensLabel = s.lensLabel, digitalZoom = s.digitalZoom,
-            hasTorch = false, manualFocus = false, manualExposure = false, error = s.error,
+            hasTorch = s.hasTorch, manualFocus = s.manualFocus, manualExposure = s.manualExposure, error = s.error,
             battery = if (s.battery >= 0) s.battery else own.battery, charging = s.charging
         )
     }
@@ -273,7 +284,22 @@ class HostRelay(
         return null
     }
 
+    /** Every host this phone is joined to in the room [code], by slot: for switching between them on the phone's screen. */
+    fun siblings(code: String): List<RoomViewer> = entries.values.filter { it.code == code }.sortedBy { it.slot }.map { it.viewer }
+
+    /** Removes the host [viewer] looks at from its room, and from this phone's list. */
+    fun removeHost(viewer: RoomViewer) {
+        entries.values.firstOrNull { it.viewer === viewer }?.let { viewer.client.removeHost(); forgetEntry(it) }
+    }
+
     /** The phone's screen is, or is no longer, showing this host. */
+    fun viewing(v: RoomViewer, on: Boolean) {
+        val e = entries.values.firstOrNull { it.viewer === v } ?: return
+        e.uiViewing = on
+        e.viewer.decoding = on
+        interest(e, forceKey = on)
+    }
+
     fun viewing(code: String, on: Boolean) {
         val e = entries[code] ?: return
         e.uiViewing = on

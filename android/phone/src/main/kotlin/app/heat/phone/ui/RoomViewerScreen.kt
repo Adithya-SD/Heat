@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,8 +61,17 @@ import kotlin.math.min
  * (arm, sensitivity, zoom, torch, flip), each one only a message to that camera.
  */
 @Composable
-fun RoomViewerScreen(viewer: RoomViewer, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
+fun RoomViewerScreen(
+    viewer: RoomViewer,
+    hub: app.heat.phone.service.CameraHub,
+    glass: app.heat.glass.GlassState,
+    onSwitch: (RoomViewer) -> Unit,
+    onClose: () -> Unit
+) {
+    // 0: the picture, 1: this host's full settings, 2: who is here and which hosts are in the room
+    var panel by remember { mutableStateOf(0) }
+    BackHandler(enabled = panel != 0) { panel = 0 }
+    BackHandler(enabled = panel == 0, onBack = onClose)
     val client = viewer.client
     val config by client.config.collectAsState()
     val status by client.status.collectAsState()
@@ -156,6 +166,10 @@ fun RoomViewerScreen(viewer: RoomViewer, onClose: () -> Unit) {
                         HeatText("$it%", size = 13, color = if (it <= 20) Heat.Amber else Heat.TextDim)
                     }
                 }
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.size(42.dp).matte(CircleShape).tappable({ panel = 2 }), contentAlignment = Alignment.Center) { HeatIconView(HeatIcon.List, Heat.Text, 20.dp) }
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.size(42.dp).matte(CircleShape).tappable({ panel = 1 }), contentAlignment = Alignment.Center) { HeatIconView(HeatIcon.Gear, Heat.Text, 20.dp) }
             }
 
             Spacer(Modifier.weight(1f))
@@ -223,7 +237,10 @@ fun RoomViewerScreen(viewer: RoomViewer, onClose: () -> Unit) {
             }
         }
 
-        if (!isLive) {
+        if (panel == 1) SettingsScreen(hub, glass, onBack = { panel = 0 }, client = client)
+        if (panel == 2) PeoplePanel(viewer, hub, onSwitch, onClose = { panel = 0 }, onLeave = onClose)
+
+        if (!isLive && panel == 0) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                     HeatText(
@@ -242,6 +259,64 @@ fun RoomViewerScreen(viewer: RoomViewer, onClose: () -> Unit) {
             }
         }
     }
+}
+
+/** Who is connected to this host (anyone may remove anyone), and the other hosts in the room (switch to one, or remove it). */
+@Composable
+private fun PeoplePanel(viewer: RoomViewer, hub: app.heat.phone.service.CameraHub, onSwitch: (RoomViewer) -> Unit, onClose: () -> Unit, onLeave: () -> Unit) {
+    val roster by viewer.client.roster.collectAsState()
+    val selfHex = hub.deviceId.hex
+    val siblings = remember(roster) { hub.relay.siblings(viewer.code) }
+    Column(Modifier.fillMaxSize().background(Heat.Ink).windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(42.dp).matte(CircleShape).tappable(onClose), contentAlignment = Alignment.Center) { HeatIconView(HeatIcon.Back, Heat.Text, 20.dp) }
+            Spacer(Modifier.width(14.dp))
+            HeatText("This room", size = 22, weight = FontWeight.Bold)
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HeatText("HOSTS", size = 11, weight = FontWeight.SemiBold, color = Heat.TextFaint)
+            for (v in siblings) {
+                val cfg by v.client.config.collectAsState()
+                val link by v.client.linkState.collectAsState()
+                val here = v === viewer
+                Row(
+                    Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), if (here) Heat.Ember0 else Heat.MatteHi).tappable({ if (!here) onSwitch(v) }).padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(9.dp).background(if (link.phase == LinkState.Phase.UP) Heat.Green else Heat.Amber, CircleShape))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        HeatText(cfg?.label ?: "Camera ${v.slot + 1}", size = 15, weight = FontWeight.SemiBold, maxLines = 1)
+                        HeatText(if (here) "Showing" else if (link.phase == LinkState.Phase.UP) "Tap to show" else "Offline", size = 12, color = if (here) Color.White else Heat.TextDim)
+                    }
+                    TwoTapRemove { hub.relay.removeHost(v); if (here) onLeave() }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            HeatText("PEOPLE HERE", size = 11, weight = FontWeight.SemiBold, color = Heat.TextFaint)
+            for (m in roster) {
+                Row(Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), Heat.MatteHi).padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        HeatText(m.name + if (m.id == selfHex) " (you)" else "", size = 15, weight = FontWeight.SemiBold, maxLines = 1)
+                        HeatText(if (m.hub) "Hub" else "Viewer", size = 12, color = Heat.TextDim)
+                    }
+                    if (m.id != selfHex) TwoTapRemove { viewer.client.kick(m.id) }
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+/** Removing someone is two taps: the first turns the button red and says "Remove?", the second does it. */
+@Composable
+private fun TwoTapRemove(onConfirmed: () -> Unit) {
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) { if (armed) { kotlinx.coroutines.delay(3_000); armed = false } }
+    Box(
+        Modifier.matte(CircleShape, if (armed) Heat.Red else Heat.MatteHi).tappable({ if (armed) { armed = false; onConfirmed() } else armed = true }).padding(horizontal = 14.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center
+    ) { HeatText(if (armed) "Remove?" else "\u2715", size = 13, weight = FontWeight.Bold, color = if (armed) Color.White else Heat.Red) }
 }
 
 @Composable
