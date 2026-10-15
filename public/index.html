@@ -382,7 +382,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <section class="scr" id="home" aria-label="Start or join"><main class="col">
 <h1>Heat</h1>
 <p class="sub">Private video calls and motion cameras,<br>device to device. No accounts.</p>
-<div class="glass seg" id="seg" role="group" aria-label="What to start"><button data-m="call" aria-pressed="true">Video call</button><button data-m="watch" aria-pressed="false">Motion camera</button><button data-m="link" aria-pressed="false">Heat app</button></div>
+<div class="glass seg" id="seg" role="group" aria-label="What to start"><button data-m="call" aria-pressed="true">Video call</button><button data-m="link" aria-pressed="false">Motion camera</button></div>
 <button class="glass card" id="bh"><span class="ico" data-i="video" aria-hidden="true"></span><span class="tx"><b id="bht"></b><small id="bhs"></small></span></button>
 <label class="glass card lockrow" id="lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
 <div class="glass card" id="jc"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
@@ -715,8 +715,8 @@ document.addEventListener('pointermove',e=>{const g=e.target.closest?.('.glass')
 function toast(t,img,ms=3500){const e=$('#tt'),i=$('img',e);$('span',e).textContent=t;if(img){i.src=img;i.style.display='block'}else{i.removeAttribute('src');i.style.display='none'}e.classList.add('s');clearTimeout(tto);tto=setTimeout(()=>e.classList.remove('s'),ms)}
 
 /* home: choose what to start (video call is the default) */
-const KINDS={call:['Start a video call','Create a room, then share the code'],watch:['Start a motion camera','This device watches for movement'],link:['Share this camera','The Heat app and other browsers can watch it']};
-let pick=['watch','link'].includes(ls('km'))?ls('km'):'call';
+const KINDS={call:['Start a video call','Create a room, then share the code'],watch:['Start a motion camera','This device watches for movement'],link:['Start a motion camera','This device watches for movement; the Heat app, the watch and other browsers can view it']};
+let pick=['watch','link'].includes(ls('km'))?'link':'call';   /* the old PeerJS motion camera became a Heat room, so 'watch' now means 'link' */
 function applyPick(){$$('#seg button').forEach(b=>{b.classList.toggle('on',b.dataset.m===pick);b.setAttribute('aria-pressed',String(b.dataset.m===pick))});$('#bht').textContent=KINDS[pick][0];$('#bhs').textContent=KINDS[pick][1];
  const lk=pick==='link';$('#jc').hidden=lk;$('#lkjoin').hidden=!lk;$('#lockrow').hidden=lk;$('#lkapp').hidden=!(lk&&apkSize)}
 let apkSize=0;   /* bytes of download/Heat.apk when this site serves one, else 0 and the card stays away */
@@ -1278,7 +1278,7 @@ addEventListener('keydown',e=>{
 /* a Heat Link invite: https://…/#link=CODE, heat://link/CODE, or the bare code (8 symbols; older codes 12) */
 const linkCodeIn=t=>{t=String(t||'').trim();const m=/(?:link=|heat:\/\/link\/)([A-Za-z2-9-]{8,16})/i.exec(t),c=HL.norm(m?m[1]:/^[A-Za-z2-9 -]{12,16}$/.test(t)?t:'');return c.length===8||c.length===12?c:''};
 $('#ci').addEventListener('paste',e=>{
- const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)||(HL.norm(lt).length===8||HL.norm(lt).length===12)?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
+ const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
  const t=lt.trim(),m=/join=([A-Z2-9]{8})/i.exec(t),km=/[#&]k=([A-Z2-9]{12})/i.exec(t);
  const c=m?m[1].toUpperCase():/^[A-Za-z0-9 -]{8,12}$/.test(t)?norm(t):'';
  if(c.length===8){e.preventDefault();$('#ci').value=fmt(c);$('#ci').blur();viewStart(c,km?km[1].toUpperCase():'')}});
