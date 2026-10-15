@@ -40,6 +40,41 @@ three clicks steps three times). The phone and the watch word every value identi
 is, the bezel makes it bigger or smaller, and the camera follows live. The **Back button** moves on to the next
 control and brings the buttons back.
 
+## Heat Link (rooms over the internet)
+
+The phone's **link** button (top right of the camera view) opens Heat Link.
+
+- **Share this camera.** Switch it on and the phone gets a room code, a QR code and a share link. Anyone with the code can
+  watch from the Heat app or from the Heat page in a browser and can change the same settings the watch can (arm, sensitivity,
+  zoom, torch, flip). The code is made once and **kept until you choose New code**: it survives restarts, the room reopens by
+  itself when the app starts, and people who have it never need it again. (Uninstalling the app forgets it; updating keeps it.)
+- **Join a room.** Type or paste a code or link, or open `heat://link/CODE`; recent rooms are remembered. The viewer screen shows
+  the picture and the controls, and any alert pictures.
+- **How it connects.** Rooms are a fifth carrier (`CarrierKind.WEBRTC`) under the same session protocol as Wi-Fi and
+  Bluetooth, so everything above the carrier (handshake, encryption, reliable control, keyframe gating, the bitrate
+  governor, which treats the internet as a 2.5 Mbps road) is unchanged and already tested. The carrier is a WebRTC data
+  channel (libwebrtc, used for nothing else) found through the PeerJS signaling server, with STUN/TURN from
+  `api/ice` or the page's built-in list. Module `:rooms`; the phone's side is `phone/.../rooms` and `ui/Rooms*.kt`.
+- **R8.** libwebrtc reaches Java from native code through `org.jni_zero`; `rooms/consumer-rules.pro` keeps it. Without
+  that rule a release build crashes the first time a viewer connects, and a debug build never shows it.
+
+## Following motion on the watch
+
+With several cameras, the watch jumps to whichever one detects movement (**Cameras → Follow motion**, on by default). The
+decision is `core/.../FollowMotion.kt` (tested): movement alerts only, not the camera already on screen, not within 2.5 s of
+the last jump. The new camera is asked for video in the same instant the alert arrives, so its first keyframe is waiting in the
+decoder's feed; its picture is built underneath the current one and fades in when its first frame is drawn, and the old camera
+keeps streaming until then (`WatchHub.select` / `release`). The view never goes blank. Other cameras send nothing but
+control messages until one of them is shown. The watch's **Activity** page lists recent alerts from every camera with their pictures.
+
+## Distribution
+
+`./gradlew :phone:assembleRelease :wear:assembleRelease -PheatDist` signs with a private key kept outside the repository
+(`~/.heat/release.properties`: `storeFile`, `storePassword`, `keyAlias`, `keyPassword`; **back it up, it cannot be recreated**).
+Phone and watch must use the same key. Without `-PheatDist` the shared debug key is used, so a development device keeps updating
+in place; the two keys cannot update each other (uninstall first). Output: `phone/build/outputs/apk/release/phone-release.apk`
+(about 23 MB: arm64 and 32-bit ARM, libwebrtc included) and the watch's 2.4 MB one.
+
 ## Modules
 
 | Module | What it is |
@@ -48,8 +83,9 @@ control and brings the buttons back.
 | `:platform` | Android glue: Keystore vault, direct Bluetooth (RFCOMM) and Wear Data Layer carriers, Wi-Fi binding, hints, known cameras. |
 | `:glass` | Liquid glass: one AGSL shader (`res/raw/liquid_glass.agsl`), Compose host and surfaces, flat fallback, frame-time governor. |
 | `:glass-preview` | Desktop tool that renders the real shader through Skia to PNG, to judge refraction without a device. |
+| `:rooms` | Heat Link: PeerJS signaling client and a libwebrtc data channel as a session carrier. Phone only (libwebrtc is large). |
 | `:phone` | Camera service (Camera2 -> preview, motion analysis, hardware H.264 encoder), live screen, searchable settings. |
-| `:wear` | Watch hub, decoder, camera screen with bezel control, cameras list, settings. |
+| `:wear` | Watch hub, camera screen (bezel control, ring of buttons, cross-fade between cameras), cameras list, activity list, settings. |
 
 ## How the connection works
 

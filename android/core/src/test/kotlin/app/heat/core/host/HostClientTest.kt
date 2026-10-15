@@ -95,6 +95,25 @@ class HostClientTest {
     }
 
     @Test
+    fun a_room_viewer_does_not_know_the_cameras_id_and_still_connects() = runTest {
+        val r = Rig(this)
+        val d = FakeDialer(r.acceptor)
+        // the id given here is only a local name: nothing like the camera's real one
+        val c = CameraClient(DeviceId.random(), "Browser", DeviceId.random(), group, r.scope.backgroundScope, r.clock, pin = false)
+        c.link.setDialer(CarrierKind.LAN, d)
+        c.start()
+        r.settle()
+        assertEquals(LinkState.Phase.UP, c.linkState.value.phase)
+        assertEquals("Porch", c.hello.value?.name)
+        // while a client held to a different id is refused
+        val strict = CameraClient(DeviceId.random(), "Other", DeviceId.random(), group, r.scope.backgroundScope, r.clock)
+        strict.link.setDialer(CarrierKind.LAN, FakeDialer(r.acceptor))
+        strict.start()
+        r.settle()
+        assertFalse(strict.linkState.value.phase == LinkState.Phase.UP)
+    }
+
+    @Test
     fun an_edit_reaches_the_camera_its_backend_and_storage_then_settles() = runTest {
         val r = Rig(this)
         val (c, _) = r.client()

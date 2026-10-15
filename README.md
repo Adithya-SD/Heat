@@ -13,6 +13,33 @@ One standalone page, [`public/index.html`](public/index.html). No accounts, no v
 | **Settings** | Name, camera, microphone and speaker pickers, video quality (Auto / High 1080p / Data saver 360p), noise suppression, alert sounds, glass level. |
 | **Everywhere** | Layouts for a watch-sized screen up to a 4K monitor, landscape phones included. Installable as an app (PWA); the shell loads offline. |
 
+## Heat Link: rooms shared with the Android app
+
+The **Heat app** segment on the home screen opens a room that the Heat Android app and other browsers can join with a
+12-symbol code (`ABCD-EFGH-JKMN`), a link (`#link=CODE`) or a QR code. A room is one camera and any number of viewers, and
+either end can be the phone or a browser: the phone shares its camera and a page watches it, a page shares its camera and
+the phone watches it, or two pages watch each other.
+
+- **Share this camera** turns this device into the camera: it encodes H.264 with WebCodecs, runs frame-difference motion
+  detection (the tracker box, sensitivity and arm all work) and sends an alert with a picture. The code is kept in
+  `localStorage` and stays the same until you press **New code** in the invite sheet (two taps, because it locks everyone
+  out). Anyone you gave the code to can come back any time without being sent it again.
+- **Join a Heat room** takes the code (or a pasted link). The viewer decodes the phone's H.264 with WebCodecs and has the
+  phone's own controls: arm (with the arming countdown), sensitivity, zoom and lens buttons, torch, flip, saving a picture, and
+  an activity list with the alert pictures.
+- **Privacy.** The room code is the only secret. The signaling server (the same PeerJS server the rest of the page uses) sees
+  only `hl-` plus a hash of the code, never the code. A 150,000-round key derived from the code authenticates both ends
+  and encrypts everything (AES-256-GCM, per-session keys), so a stranger who learns the room id cannot join or watch. In an
+  invite link the code travels in the `#fragment`, which browsers do not send anywhere.
+- **Where the code lives.** `HL` in `index.html` (between the `link:protocol` markers) is the whole session protocol, pinned
+  to the Kotlin implementation by shared vectors (`tests/hl-test.js`, `RoomCodeTest`) and a live interop test
+  (`JsInteropTest` runs this page's protocol against the phone's real `CameraHost` over a TCP socket). `LK` (between the
+  `link:rooms` markers) is the PeerJS carrier, the decoder, the camera and both screens. Needs WebCodecs H.264 (Chrome, Edge,
+  Safari 16.4+); where it is missing the page says so instead of failing.
+- **Android app.** If the file `download/Heat.apk` is served, the home screen shows a *Heat for Android* card. Build it with
+  `./gradlew :phone:assembleRelease :wear:assembleRelease -PheatDist` in `android/` (signed with the private key in
+  `~/.heat/release.properties`) and copy `android/dist/Heat-phone.apk` to `public/download/Heat.apk`.
+
 ## Security model, plainly
 
 - **Always on:** WebRTC encrypts media and data between the two devices (DTLS-SRTP). The signaling server never sees video, audio or chat.

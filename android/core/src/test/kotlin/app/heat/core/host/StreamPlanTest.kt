@@ -19,6 +19,17 @@ class StreamPlanTest {
     }
 
     @Test
+    fun an_internet_viewer_is_offered_what_a_home_uplink_can_carry_not_what_a_lan_can() {
+        assertEquals(StreamPlan.INTERNET_MAX_BPS, StreamPlan.ceiling(wifi, Tier.MAX, StreamQuality.AUTO, 0, 0, CarrierKind.WEBRTC))
+        assertTrue(StreamPlan.INTERNET_MAX_BPS < wifi.maxBps)
+        assertEquals(wifi.maxBps, StreamPlan.ceiling(wifi, Tier.MAX, StreamQuality.AUTO, 0, 0, CarrierKind.LAN))
+        // the slowest road decides when viewers are on several
+        val roads = listOf(CarrierKind.LAN, CarrierKind.WEBRTC, CarrierKind.BT_DIRECT)
+        assertEquals(CarrierKind.BT_DIRECT, roads.minByOrNull { StreamPlan.carrierCap(it) })
+        assertEquals(CarrierKind.WEBRTC, roads.dropLast(1).minByOrNull { StreamPlan.carrierCap(it) })
+    }
+
+    @Test
     fun the_ceiling_follows_the_most_modest_of_viewer_and_setting() {
         val max = StreamPlan.ceiling(wifi, Tier.MAX, StreamQuality.AUTO, 0, 0)
         assertEquals(wifi.maxBps, max)

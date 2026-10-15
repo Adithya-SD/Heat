@@ -47,7 +47,7 @@ object Heat {
 
 enum class HeatIcon {
     Bolt, Flip, Gear, Shield, Back, Close, Check, Eye, Plus, Minus, Camera, Alert, Wifi, Bluetooth, Aim, List, Chevron,
-    Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search, Link, Share, Copy
+    Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search, Link, Share, Copy, Power, Rooms, Pictures, EyeOff
 }
 
 /**
@@ -149,6 +149,27 @@ private fun DrawScope.drawIcon(icon: HeatIcon, c: Color, u: Float) {
             drawCircle(c, 2.6f * u, p(6f, 12f), style = stroke)
             drawCircle(c, 2.6f * u, p(18f, 18.5f), style = stroke)
             poly(8.3f to 10.8f, 15.7f to 6.7f); poly(8.3f to 13.2f, 15.7f to 17.3f)
+        }
+        HeatIcon.Power -> {
+            // the standard mark: a ring open at the top, a stroke dropping into the gap
+            drawArc(c, -60f, 300f, false, p(4.5f, 5.5f), Size(15f * u, 15f * u), style = stroke)
+            poly(12f to 3f, 12f to 11.5f)
+        }
+        HeatIcon.Rooms -> {
+            // four rooms, the current one filled
+            drawRoundRect(c, p(3.5f, 3.5f), Size(7f * u, 7f * u), CornerRadius(2.2f * u), style = Fill)
+            drawRoundRect(c, p(13.5f, 3.5f), Size(7f * u, 7f * u), CornerRadius(2.2f * u), style = stroke)
+            drawRoundRect(c, p(3.5f, 13.5f), Size(7f * u, 7f * u), CornerRadius(2.2f * u), style = stroke)
+            drawRoundRect(c, p(13.5f, 13.5f), Size(7f * u, 7f * u), CornerRadius(2.2f * u), style = stroke)
+        }
+        HeatIcon.Pictures -> {
+            drawRoundRect(c, p(3.5f, 4.5f), Size(17f * u, 15f * u), CornerRadius(3f * u), style = stroke)
+            drawCircle(c, 1.7f * u, p(8.6f, 9.6f), style = Fill)
+            poly(4f to 17f, 9.2f to 12.6f, 13f to 16f, 15.4f to 13.8f, 20f to 17.6f)
+        }
+        HeatIcon.EyeOff -> {
+            drawIcon(HeatIcon.Eye, c, u)
+            poly(4.5f to 4.5f, 19.5f to 19.5f)
         }
         HeatIcon.Copy -> {
             drawRoundRect(c, p(8.5f, 8.5f), Size(12f * u, 12f * u), CornerRadius(2.5f * u), style = stroke)

@@ -88,6 +88,15 @@ Scenarios: `call join watch relay slowanswer qol rotate rotatewatch zoom diag un
 - `privacy.html` and `terms.html` are templates, not legal advice.
 - The public PeerJS cloud signaling server has no uptime promise (README explains self-hosting).
 
+## 8b. Heat Link (added 2026-10-15)
+
+Rooms shared between this page and the Android app: see README "Heat Link" and `android/README.md`. In this file: `HL` (session
+protocol, between `link:protocol` markers), `AVC` (H.264 helpers, `link:media`), `LK` (rooms, `link:rooms`), the `#lkV` / `#lkC` screens
+and a third "Heat app" segment on the home screen. Tests: `node tests/hl-test.js`; the cross-language one runs from the Android
+side (`cd android && ./gradlew :core:cleanTest :core:test --tests "app.heat.core.link.JsInteropTest"`; Gradle does not know the page
+is an input, so `cleanTest` is needed). `public/download/` holds the built APKs when someone has put them there (the home card
+only shows when `download/Heat.apk` exists); they are not committed by default because they are ~25 MB each.
+
 ## 9. Open question from the last conversation
 
 The owner asked where "the phone and watch app" is and suggested it might be in a **"zcode" project**. Findings from the cloud session: no such directory exists in the cloud container, none of their five GitHub repos (`dynamic`, `Heat`, `moderdb`, `mdlab`, `GIT`) is named that, the other Heat branches contain only the web app, and a Drive search for "zcode" was empty. The cloud session cannot see the owner's computer. If a local session in their zcode folder finds a separate native/watch app, the next step is to look at how it relates to Heat (does it wrap `public/index.html` in a WebView? does it speak the same PeerJS protocol and `PV=2`?) before changing anything. If nothing exists, the answer is simply: the Heat phone and watch UI is `public/index.html`.

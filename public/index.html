@@ -276,6 +276,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 #lktorch.on{background:rgba(255,214,10,.5)}#lkflip.on{background:rgba(255,255,255,.26)}
 #lkC .stage video{object-fit:contain}
 #lkre{margin-top:-4px}
+#lkapp{text-decoration:none;color:#fff}
 .lkj{flex-wrap:wrap}
 #lki{flex:1 0 100%;order:3;height:44px;min-width:0;border-radius:14px;background:rgba(255,255,255,.14);text-align:center;font:600 19px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;cursor:text}
 #lki::placeholder{color:rgba(255,255,255,.34)}
@@ -386,6 +387,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <label class="glass card lockrow" id="lockrow" for="lockc"><span class="ico v" data-i="lock" aria-hidden="true"></span><span class="tx"><b>End-to-end lock</b><small id="lks"></small></span><input type="checkbox" class="sw" id="lockc" role="switch"></label>
 <div class="glass card" id="jc"><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a room</b><small>Enter the code</small></span><input id="ci" aria-label="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-1234"></div>
 <div class="glass card lkj" id="lkjoin" hidden><span class="ico g" data-i="eye" aria-hidden="true"></span><span class="tx"><b>Join a Heat room</b><small>Enter the code from the app</small></span><input id="lki" aria-label="Heat room code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH-JKMN"></div>
+<a class="glass card" id="lkapp" href="download/Heat.apk" download hidden><span class="ico v" data-i="down" aria-hidden="true"></span><span class="tx"><b>Heat for Android</b><small id="lkapps">The camera app. Install it, open a room, share the code.</small></span></a>
 <button class="glass chip" id="rc" hidden></button><button class="glass chip" id="lkre" hidden></button>
 <p class="ft">Video and audio go straight between devices.<br><button class="lk" id="dgo">Check connection</button> · <button class="lk" id="hset">Settings</button> · <span id="bid"></span><span id="fxw"> · <button class="lk" id="fxb"></button></span></p>
 <p class="ft legal"><a href="privacy">Privacy</a> · <a href="terms">Terms</a> · <button class="lk" id="inst" hidden>Install app</button><button class="lk" id="kbo">Shortcuts</button></p>
@@ -428,7 +430,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <div class="top"><div class="glass pill" role="status"><i class="dot" id="lkd"></i><span id="lkst">Connecting…</span><small id="lkms"></small><small id="lkbat"></small></div><div class="tb"><button class="glass b" id="lkinv" data-i="share" title="Invite"></button><button class="glass b" id="lkfs" data-i="max" title="Full screen"></button><button class="glass b" id="lkact" data-i="list" title="Activity"><span class="bd" id="lkbd"></span></button><button class="glass b red" id="lkx" data-i="x" title="Leave"></button></div></div>
 <aside class="glass sheet" id="lksheet" aria-label="Activity"><button class="sx" data-i="x" title="Close"></button><h3>Activity</h3><div id="lkev"></div></aside>
 <div class="glass dock lkdock" id="lkdock"><button class="b" id="lkarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkarmt"></span></button><div class="sl"><input id="lksens" type="range" min="1" max="100" step="1" title="Sensitivity" aria-label="Sensitivity"></div><div class="lklens" id="lklens" hidden></div><div class="sl"><input id="lkzoom" type="range" min="0" max="100" step="1" title="Zoom" aria-label="Zoom"></div><small class="lkzt" id="lkzt"></small><button class="b" id="lktorch" data-i="bolt" title="Torch" hidden></button><button class="b" id="lkflip" data-i="flip" title="Switch camera"></button><button class="b" id="lksnap" data-i="cam" title="Save a picture"></button></div>
-<div class="ov s" id="lkov"><div class="glass c2" role="status"><div class="sp"></div><b id="lkovt">Connecting…</b><small class="hint" id="lkovh"></small><button class="ghost" id="lkovx">Leave</button></div></div>
+<div class="ov s" id="lkov"><div class="glass c2" role="status"><div class="sp"></div><b id="lkovt">Connecting…</b><small class="hint" id="lkovh"></small><a class="ghost" id="lkopen" href="#" hidden>Open in the Heat app</a><button class="ghost" id="lkovx">Leave</button></div></div>
 </section>
 
 <!-- Heat Link: this page is the camera, and the Heat app or other browsers watch it -->
@@ -692,7 +694,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-03.1'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-15.1'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -716,7 +718,9 @@ function toast(t,img,ms=3500){const e=$('#tt'),i=$('img',e);$('span',e).textCont
 const KINDS={call:['Start a video call','Create a room, then share the code'],watch:['Start a motion camera','This device watches for movement'],link:['Share this camera','The Heat app and other browsers can watch it']};
 let pick=['watch','link'].includes(ls('km'))?ls('km'):'call';
 function applyPick(){$$('#seg button').forEach(b=>{b.classList.toggle('on',b.dataset.m===pick);b.setAttribute('aria-pressed',String(b.dataset.m===pick))});$('#bht').textContent=KINDS[pick][0];$('#bhs').textContent=KINDS[pick][1];
- const lk=pick==='link';$('#jc').hidden=lk;$('#lkjoin').hidden=!lk;$('#lockrow').hidden=lk}
+ const lk=pick==='link';$('#jc').hidden=lk;$('#lkjoin').hidden=!lk;$('#lockrow').hidden=lk;$('#lkapp').hidden=!(lk&&apkSize)}
+let apkSize=0;   /* bytes of download/Heat.apk when this site serves one, else 0 and the card stays away */
+if(/^https?:/.test(location.protocol))fetch('download/Heat.apk',{method:'HEAD',cache:'no-store'}).then(r=>{const n=+r.headers.get('content-length');if(r.ok&&n>1e6){apkSize=n;$('#lkapps').textContent='Free · '+(n/1048576).toFixed(0)+' MB · camera, rooms and the watch link. Allow “install unknown apps” for your browser once.';applyPick()}}).catch(()=>{})
 $$('#seg button').forEach(b=>b.onclick=()=>{pick=b.dataset.m;ls('km',pick);applyPick()});
 
 /* stage fitting + ROI */
@@ -1902,6 +1906,7 @@ const LK = (() => {
       pend: [], seq: 0, evs: [], unread: 0, live: false, drag: false, state: 'Connecting…', since: performance.now(), keyAt: 0, timers: [], thumbs: []
     };
     go('lkview');
+    { const o = $e('lkopen'); o.hidden = !/Android/i.test(navigator.userAgent); o.href = 'heat://link/' + code; }
     $e('lkev').innerHTML = ''; $e('lksheet').classList.remove('open'); badge(R);
     $e('lkdock').dataset.on = ''; paint(R); ov(R, true);
     if (!VDec.supported()) { ov(R, true, 'This browser can’t play Heat video', 'Open this room in Chrome, Edge or Safari 16.4 or newer, or in the Heat app.'); return; }

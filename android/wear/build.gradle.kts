@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -8,6 +10,14 @@ plugins {
 // that share both. A suffixed or differently-signed debug build installs fine and is then invisible to the phone.
 val sharedKeystore = file(System.getProperty("user.home") + "/.android/debug.keystore")
 
+// Builds for other people (-PheatDist) are signed with a private key kept outside the repository, in
+// ~/.heat/release.properties (storeFile, storePassword, keyAlias, keyPassword). The phone and the watch must use the
+// same one. Everything else, including plain release builds, uses the shared debug key so a development device keeps
+// updating in place.
+val distProps = Properties().apply {
+    file(System.getProperty("user.home") + "/.heat/release.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 android {
     namespace = "app.heat.wear"
     compileSdk = 37
@@ -17,8 +27,8 @@ android {
         applicationId = "app.heat.camera"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     signingConfigs {
@@ -28,6 +38,12 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        if (distProps.isNotEmpty()) create("dist") {
+            storeFile = file(distProps.getProperty("storeFile"))
+            storePassword = distProps.getProperty("storePassword")
+            keyAlias = distProps.getProperty("keyAlias")
+            keyPassword = distProps.getProperty("keyPassword")
+        }
     }
 
     buildTypes {
@@ -35,7 +51,7 @@ android {
             signingConfig = signingConfigs.getByName("heat")
         }
         release {
-            signingConfig = signingConfigs.getByName("heat")
+            signingConfig = if (project.hasProperty("heatDist") && distProps.isNotEmpty()) signingConfigs.getByName("dist") else signingConfigs.getByName("heat")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

@@ -1,6 +1,7 @@
 package app.heat.wear.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,6 +38,7 @@ import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import app.heat.core.host.CameraClient
 import app.heat.core.link.LinkState
+import app.heat.core.model.AlertKind
 import app.heat.core.model.AntiFlicker
 import app.heat.core.model.CameraConfig
 import app.heat.core.model.CameraSteps
@@ -55,9 +60,12 @@ import app.heat.glass.HeatIconView
 import app.heat.glass.HeatText
 import app.heat.platform.fingerprint
 import app.heat.wear.WatchHub
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.jsonObject
 
-private enum class Screen { Camera, Cameras, Settings }
+private enum class Screen { Camera, Cameras, Settings, Activity }
 
 @Composable
 fun WatchRoot(hub: WatchHub) {
@@ -67,17 +75,47 @@ fun WatchRoot(hub: WatchHub) {
     val pairing by hub.pairing.collectAsState()
     val cameras by hub.cameras.collectAsState()
     val selectedId by hub.selectedId.collectAsState()
+    val visible by hub.visible.collectAsState()
     var screen by rememberSaveable { mutableStateOf(Screen.Camera) }
     BackHandler(enabled = screen != Screen.Camera) { screen = Screen.Camera }
 
-    val client = cameras.firstOrNull { it.cameraId == selectedId } ?: cameras.firstOrNull()
+    val target = cameras.firstOrNull { it.cameraId == selectedId } ?: cameras.firstOrNull()
+
+    // The camera on screen follows the selection by a cross-fade: the new one is built underneath while the old one
+    // keeps playing, and fades in over it when its first frame is drawn. A switch (picked by hand, or because a camera
+    // saw movement) therefore never shows a blank or a spinner. Off screen or in a menu there is nobody to see a fade.
+    var shown by remember { mutableStateOf<CameraClient?>(null) }
+    var incoming by remember { mutableStateOf<CameraClient?>(null) }
+    LaunchedEffect(target?.cameraId, cameras.size, visible, screen) {
+        val t = target
+        val s = shown
+        when {
+            t == null -> { shown = null; incoming = null }
+            s == null || cameras.none { it.cameraId == s.cameraId } -> { shown = t; incoming = null }
+            s.cameraId == t.cameraId -> incoming = null
+            !visible || screen != Screen.Camera -> { shown = t; incoming = null; hub.release(s.cameraId) }
+            else -> {
+                incoming = t
+                withTimeoutOrNull(2_500) { hub.decoder(t).rendered.first { it > 0 } }
+                delay(300)                                  // the fade itself
+                shown = t
+                incoming = null
+                hub.release(s.cameraId)
+            }
+        }
+    }
+    val client = shown ?: target
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when {
             client == null -> Waiting(paired = pairing != null)
             screen == Screen.Cameras -> CamerasScreen(hub, cameras, client) { screen = Screen.Camera }
             screen == Screen.Settings -> SettingsScreen(client, cameras, hub) { screen = Screen.Camera }
-            else -> CameraScreen(client, hub, glass, onCameras = { screen = Screen.Cameras }, onSettings = { screen = Screen.Settings })
+            screen == Screen.Activity -> ActivityScreen(hub) { screen = Screen.Camera }
+            else -> CameraScreen(
+                client, incoming, hub, glass,
+                onCameras = { screen = Screen.Cameras }, onActivity = { screen = Screen.Activity }, onSettings = { screen = Screen.Settings }
+            )
         }
     }
 }
@@ -99,8 +137,10 @@ private fun Waiting(paired: Boolean) {
 @Composable
 private fun CamerasScreen(hub: WatchHub, cameras: List<CameraClient>, current: CameraClient, back: () -> Unit) {
     val list = rememberScalingLazyListState()
+    val follow by hub.followMotion.collectAsState()
     ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item { HeatText("Cameras", size = 15, weight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp)) }
+        item { Toggle("Follow motion", follow) { hub.setFollowMotion(it) } }
         for (c in cameras) item(key = c.cameraId.hex) { CameraRow(c, selected = c === current) { hub.select(c.cameraId); back() } }
         item { Spacer(Modifier.height(24.dp)) }
     }
@@ -127,6 +167,51 @@ private fun CameraRow(c: CameraClient, selected: Boolean, onClick: () -> Unit) {
                     else -> "Connecting…"
                 },
                 size = 11, color = Heat.TextDim
+            )
+        }
+    }
+}
+
+// ── activity ─────────────────────────────────────────────────────────
+
+@Composable
+private fun ActivityScreen(hub: WatchHub, back: () -> Unit) {
+    val entries by hub.activity.collectAsState()
+    val list = rememberScalingLazyListState()
+    ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        item { HeatText("Activity", size = 15, weight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp)) }
+        if (entries.isEmpty()) item { HeatText("Nothing yet. Alerts from every camera appear here with their picture.", size = 12, color = Heat.TextDim, align = TextAlign.Center, modifier = Modifier.fillMaxWidth(0.8f)) }
+        for (e in entries) item(key = "${e.camera.hex}-${e.atMs}") {
+            ActivityRow(e) { hub.select(e.camera); back() }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun ActivityRow(e: WatchHub.ActivityEntry, onClick: () -> Unit) {
+    val time = remember(e.atMs) { java.text.DateFormat.getTimeInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(e.atMs)) }
+    Row(
+        Modifier.fillMaxWidth(0.88f).clip(RoundedCornerShape(20.dp)).background(Color(0x26FFFFFF)).clickable(onClick = onClick).padding(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val pic = e.picture
+        Box(Modifier.size(width = 54.dp, height = 40.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
+            if (pic != null) Image(pic.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            else HeatIconView(HeatIcon.Pictures, Heat.TextFaint, 18.dp)
+        }
+        Spacer(Modifier.width(9.dp))
+        Column(Modifier.weight(1f)) {
+            HeatText(e.cameraName, size = 13, weight = FontWeight.SemiBold, maxLines = 1)
+            HeatText(
+                when (e.kind) {
+                    AlertKind.MOTION -> "Motion"
+                    AlertKind.TAMPER -> "Moved"
+                    AlertKind.LOW_BATTERY -> "Low battery"
+                    AlertKind.OVERHEAT -> "Hot"
+                    AlertKind.CAMERA_ERROR -> "Camera problem"
+                } + " · " + time,
+                size = 10, color = Heat.TextDim, maxLines = 1
             )
         }
     }

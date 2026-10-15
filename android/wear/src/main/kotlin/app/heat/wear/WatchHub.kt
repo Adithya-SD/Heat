@@ -3,6 +3,7 @@ package app.heat.wear
 import android.content.Context
 import android.util.Log
 import app.heat.core.host.CameraClient
+import app.heat.core.host.FollowMotion
 import app.heat.core.host.VideoSink
 import app.heat.core.link.Beacon
 import app.heat.core.link.CarrierKind
@@ -11,6 +12,7 @@ import app.heat.core.link.GroupKey
 import app.heat.core.link.MediaFlags
 import app.heat.core.link.RetryPolicy
 import app.heat.core.link.TcpDialer
+import app.heat.core.model.AlertKind
 import app.heat.core.model.HapticProfile
 import app.heat.core.model.Msg
 import app.heat.core.util.Clock
@@ -38,6 +40,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -96,9 +100,47 @@ class WatchHub(context: Context) {
     private val _lastAlert = MutableStateFlow<AlertEvent?>(null)
     val lastAlert: StateFlow<AlertEvent?> = _lastAlert.asStateFlow()
 
+    /** One line of the activity list: which camera, what, when, and the picture that came with it if there was one. */
+    class ActivityEntry(val camera: DeviceId, val cameraName: String, val kind: AlertKind, val atMs: Long, @Volatile var picture: Bitmap? = null)
+
+    private val _activity = MutableStateFlow<List<ActivityEntry>>(emptyList())
+
+    /** The newest alerts from every camera, newest first. */
+    val activity: StateFlow<List<ActivityEntry>> = _activity.asStateFlow()
+
+    private val prefs = appContext.getSharedPreferences("heat-watch", Context.MODE_PRIVATE)
+    private val _follow = MutableStateFlow(prefs.getBoolean("followMotion", true))
+
+    /** When on, a camera that detects motion is put on screen at once. On by default: it is the point of having several. */
+    val followMotion: StateFlow<Boolean> = _follow.asStateFlow()
+
+    fun setFollowMotion(on: Boolean) {
+        _follow.value = on
+        prefs.edit().putBoolean("followMotion", on).apply()
+    }
+
+    private val follow = FollowMotion(FOLLOW_DWELL_MS)
+
+    /**
+     * A camera has seen movement. If the one on screen is a different one, it becomes the one on screen. Its video is
+     * asked for in the same instant, so by the time the screen has built the new picture the camera's first keyframe
+     * is already waiting in the decoder's feed. The camera that was showing keeps streaming until the new picture
+     * is up (see [select]), so the view never goes blank between the two.
+     */
+    private fun followMotion(c: CameraClient, alert: Msg.Alert) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!follow.shouldSwitch(_follow.value, _selected.value, c.cameraId, alert.kind, now)) return
+        Log.i(TAG, "motion on ${c.cameraId.short}: showing it")
+        select(c.cameraId, byUser = false)
+    }
+
     private val bluetoothPolicy = RetryPolicy(dialTimeoutMs = 8_000, maxMs = 8_000)
 
     @Volatile private var foreground = false
+    private val _visible = MutableStateFlow(false)
+
+    /** Whether the watch is being looked at. The screen only builds a cross-fade when someone is there to see it. */
+    val visible: StateFlow<Boolean> = _visible.asStateFlow()
 
     /** Whether someone is looking at the watch now, and when they last were: the warm link service reads these. */
     val isForeground: Boolean get() = foreground
@@ -131,9 +173,30 @@ class WatchHub(context: Context) {
         DataLayerHooks.onPairing = null
     }
 
-    fun select(id: DeviceId) {
+    fun select(id: DeviceId, byUser: Boolean = true) {
+        if (byUser) follow.noteManualSwitch(android.os.SystemClock.elapsedRealtime())
+        val previous = _selected.value
         _selected.value = id
         runCatching { selectionFile.writeText(id.hex) }
+        // The camera being left keeps sending until the screen says the new picture is up (or a few seconds pass),
+        // so switching is a cross-fade, never a black gap.
+        if (previous != null && previous != id) hold(previous)
+        applyInterest()
+    }
+
+    private val holds = ConcurrentHashMap<DeviceId, Job>()
+
+    private fun hold(id: DeviceId) {
+        holds.put(id, scope.launch {
+            delay(HOLD_MS)
+            holds.remove(id)
+            applyInterest()
+        })?.cancel()
+    }
+
+    /** The screen has the new picture on show: the camera it replaced can stop encoding for us. */
+    fun release(id: DeviceId) {
+        holds.remove(id)?.cancel()
         applyInterest()
     }
 
@@ -148,6 +211,7 @@ class WatchHub(context: Context) {
     fun setForeground(visible: Boolean) {
         if (foreground == visible) return
         foreground = visible
+        _visible.value = visible
         lastForegroundMs = android.os.SystemClock.elapsedRealtime()
         if (visible) {
             wifiReleaseJob?.cancel()
@@ -297,6 +361,19 @@ class WatchHub(context: Context) {
                         val profile = c.config.value?.alerts?.watchHaptics ?: HapticProfile.NORMAL
                         haptics.alert(profile, a)
                         _lastAlert.value = AlertEvent(c.cameraId, a)
+                        val entry = ActivityEntry(c.cameraId, c.hello.value?.name ?: name, a.kind, System.currentTimeMillis())
+                        lastEntry[c.cameraId] = entry
+                        _activity.value = (listOf(entry) + _activity.value).take(ACTIVITY_MAX)
+                        followMotion(c, a)
+                    }
+                }
+                // The picture that comes with an alert is attached to it, for the activity list.
+                c.thumbnailSink = { jpeg ->
+                    val e = lastEntry[id]
+                    if (e != null && e.picture == null && System.currentTimeMillis() - e.atMs < 8_000) {
+                        val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+                        e.picture = runCatching { BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, opts) }.getOrNull()
+                        _activity.value = _activity.value.toList()      // tell the list the entry changed
                     }
                 }
                 _all.value = _all.value + c
@@ -308,7 +385,7 @@ class WatchHub(context: Context) {
     private fun applyInterest() {
         val sel = selected
         for (c in clients.values) {
-            val want = foreground && c === sel
+            val want = foreground && (c === sel || holds.containsKey(c.cameraId))
             if (watching.put(c.cameraId, want) != want) c.watch(video = want)
         }
     }
@@ -364,6 +441,7 @@ class WatchHub(context: Context) {
     }
 
     private val lanEndpoints = ConcurrentHashMap<DeviceId, String>()
+    private val lastEntry = ConcurrentHashMap<DeviceId, ActivityEntry>()
 
     private fun setLan(c: CameraClient, host: String, port: Int) {
         val ep = "$host:$port"
@@ -375,5 +453,8 @@ class WatchHub(context: Context) {
     private companion object {
         const val TAG = "HeatWatchHub"
         const val WIFI_GRACE_MS = 20_000L
+        const val HOLD_MS = 3_500L
+        const val FOLLOW_DWELL_MS = 2_500L
+        const val ACTIVITY_MAX = 12
     }
 }
