@@ -275,6 +275,59 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 #lkarm.on,#lkcarm.on{background:rgba(48,209,88,.55);box-shadow:inset 0 1px 1px rgba(255,255,255,.6)}
 #lktorch.on{background:rgba(255,214,10,.5)}#lkflip.on{background:rgba(255,255,255,.26)}
 #lkC .stage video{object-fit:contain}
+
+/* ---- receiver: picture tools on the left, panels on the right, one dock that is the same either side of the capture buttons ---- */
+.rail{position:absolute;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px;padding:6px;--r:calc(var(--bs) / 2 + 8px);z-index:3;transition:right .5s var(--e)}
+.rail.l{left:calc(var(--gut) + var(--sal))}.rail.r{right:calc(var(--gut) + var(--sar))}
+@media(min-width:700px){#lkV.so .rail.r{right:calc(var(--gut) + var(--sar) + 392px)}}
+.rail .b.on{background:rgba(255,255,255,.26);box-shadow:inset 0 1px 1px rgba(255,255,255,.6)}
+.rail .bd,#lkgbd{position:absolute;top:1px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--rd);font-size:10px;font-weight:700;display:none;place-items:center}
+.lkdock{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:14px;width:min(940px,calc(100vw - 2 * var(--gut) - var(--sal) - var(--sar)));padding:8px 12px;justify-content:stretch;flex-wrap:nowrap}
+.lkg{display:flex;align-items:center;gap:6px;min-width:0}.lkg.l{justify-content:flex-end}.lkg.r{justify-content:flex-start}
+.lkchip{display:flex;align-items:center;gap:8px;height:calc(var(--bs) * .9);padding:0 12px 0 11px;border-radius:calc(var(--bs) * .45);background:rgba(255,255,255,.12);text-align:left;white-space:nowrap;color:#fff;transition:background .25s}
+.lkchip svg.i{width:20px;height:20px;flex:none}
+.lkchip small{display:block;font-size:10.5px;line-height:1.1;color:var(--t2);font-weight:600;letter-spacing:.03em}
+.lkchip b{display:block;font-size:14px;line-height:1.2;font-variant-numeric:tabular-nums;min-width:34px}
+.lkchip::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-top:2px solid currentColor;transform:rotate(-45deg) translateY(1px);opacity:.7;margin-left:2px;flex:none}
+.lkchip.on,.lkchip:hover{background:rgba(255,255,255,.24)}
+.lkcap{display:flex;align-items:center;gap:2px;padding:4px;border-radius:calc(var(--bs) * .7);background:rgba(255,255,255,.14);position:relative}
+.lkcap .b{width:calc(var(--bs) * 1.2);height:calc(var(--bs) * .95);border-radius:calc(var(--bs) * .5)}
+.lkcap i{width:1px;height:55%;background:rgba(255,255,255,.3)}
+.lkcap .dim{opacity:.5}.lkcap #lkrec.on{background:rgba(255,69,58,.9);opacity:1;color:#fff}
+.lkcap small{position:absolute;left:50%;top:-18px;transform:translateX(-50%);font-size:12px;font-weight:700;color:#ff8a80;font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:700px){.lkdock{grid-template-columns:1fr 1fr;row-gap:6px;column-gap:8px;padding:8px}.lkcap{grid-column:1/-1;grid-row:1;justify-self:center}.lkg.l{justify-content:flex-start}.lkg.r{justify-content:flex-end}.lkchip small{display:none}.lkchip{padding:0 10px}.lkdock .lklens{display:none}}
+.lkpo{position:absolute;bottom:calc(var(--dock-h) + max(var(--gut),var(--sab)) + 12px);left:50%;transform:translateX(-50%);width:min(340px,calc(100% - 2 * var(--gut)));padding:16px 18px 18px;--r:26px;z-index:6;display:none;flex-direction:column;gap:12px}
+.lkpo.s{display:flex}
+.lkpo header{display:flex;align-items:center;gap:10px}.lkpo header svg.i{width:22px;height:22px}.lkpo header b{font-size:16px;flex:1}
+.lkpo output{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.lkpo .hint{max-width:none;text-align:left;margin:-4px 0 0;font-size:12.5px}
+.lkpr{display:flex;align-items:center;gap:12px}.lkpr .b{width:40px;height:40px;background:rgba(255,255,255,.14);flex:none}
+.lkpr input[type=range],input.lkr[type=range]{-webkit-appearance:none;appearance:none;flex:1;width:100%;height:34px;background:transparent;cursor:pointer;margin:0;min-width:0}
+.lkpr input[type=range]::-webkit-slider-runnable-track,input.lkr[type=range]::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:linear-gradient(90deg,#fff var(--p,50%),rgba(255,255,255,.24) var(--p,50%))}
+.lkpr input[type=range]::-webkit-slider-thumb,input.lkr[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;margin-top:-9px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+.lkpr input[type=range]::-moz-range-track,input.lkr[type=range]::-moz-range-track{height:10px;border-radius:5px;background:rgba(255,255,255,.24)}
+.lkpr input[type=range]::-moz-range-progress,input.lkr[type=range]::-moz-range-progress{height:10px;border-radius:5px;background:#fff}
+.lkpr input[type=range]::-moz-range-thumb,input.lkr[type=range]::-moz-range-thumb{width:28px;height:28px;border:0;border-radius:50%;background:#fff}
+.lkpp{display:flex;gap:6px;flex-wrap:wrap}.lkpp button{flex:1;min-width:48px;height:36px;border-radius:18px;background:rgba(255,255,255,.14);font-weight:600;font-size:13px;color:#fff}.lkpp button.on{background:rgba(255,255,255,.3);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
+.blk{position:absolute;inset:0;background:#000;z-index:7;display:none;place-items:center;color:rgba(255,255,255,.28);font-size:14px;cursor:pointer}.blk.s{display:grid}.blk span{animation:blkh 6s forwards}@keyframes blkh{0%,60%{opacity:1}100%{opacity:0}}
+.lkset{width:min(380px,calc(100% - 2 * var(--gut)));padding:16px 14px 10px}
+.lksq{height:40px;border-radius:14px;background:rgba(255,255,255,.14);color:#fff;padding:0 14px;margin:2px 0 4px;font-weight:500;width:100%;min-width:0}.lksq::placeholder{color:rgba(255,255,255,.5)}
+#lksl{overflow:auto;flex:1;min-height:0;margin:4px -6px 0;padding:0 6px 8px}
+.sh{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--t2);margin:16px 0 2px;font-weight:700}
+.sr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 2px;border-top:1px solid rgba(255,255,255,.12)}
+.sr>span{min-width:0;flex:1}.sr b{display:block;font-weight:600;font-size:14px}.sr small{display:block;color:var(--t2);font-size:12px;margin-top:1px}
+.sr em{font-style:normal;color:var(--t2);font-size:13px;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.sr.col{flex-direction:column;align-items:stretch;gap:8px}.sr .st{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.sr output{font-variant-numeric:tabular-nums;font-weight:700;font-size:14px}
+.sg{display:flex;gap:3px;background:rgba(255,255,255,.1);border-radius:14px;padding:3px}.sg button{flex:1;height:32px;border-radius:11px;font-size:13px;font-weight:600;color:var(--t2);min-width:0;padding:0 4px}.sg button.on{background:rgba(255,255,255,.26);color:#fff;box-shadow:inset 0 1px 1px rgba(255,255,255,.4)}
+.stp{display:flex;align-items:center;gap:6px;flex:none}.stp button{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.16);display:grid;place-items:center;color:#fff}.stp button svg.i{width:16px;height:16px}.stp output{min-width:62px;text-align:center}
+.sr select,.sr input[type=text]{height:36px;padding:0 12px;border-radius:12px;background:rgba(255,255,255,.14);color:#fff;font-weight:500;min-width:0;max-width:170px;width:170px;-webkit-appearance:none;appearance:none}
+.sr select{cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,#fff 50%),linear-gradient(135deg,#fff 50%,transparent 50%);background-position:calc(100% - 17px) 15px,calc(100% - 12px) 15px;background-size:5px 5px;background-repeat:no-repeat;padding-right:30px}.sr select option{color:#000;background:#fff}
+.gal{align-items:stretch;text-align:left;width:min(780px,100%);max-width:100%;gap:14px;padding:20px 22px}.gal header{display:flex;align-items:center;gap:10px}.gal header b{font-size:18px}.gal header small{flex:1;color:var(--t2)}
+.gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;overflow:auto;max-height:68vh}.gg .none{grid-column:1/-1;text-align:center;color:var(--t2);padding:30px 0}
+.gc{position:relative;border-radius:16px;overflow:hidden;background:#111;aspect-ratio:4/3;cursor:pointer;display:block;padding:0}.gc img{width:100%;height:100%;object-fit:cover;display:block}
+.gc .kd{position:absolute;left:8px;top:8px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;background:rgba(0,0,0,.55)}
+.gc .ft2{position:absolute;left:0;right:0;bottom:0;padding:20px 10px 8px;background:linear-gradient(transparent,rgba(0,0,0,.72));font-size:12px;display:flex;justify-content:space-between;gap:6px;color:#fff;text-align:left}
+.glv{display:flex;flex-direction:column;gap:12px;min-height:0;align-items:center}.glv[hidden]{display:none}.gm{max-height:60vh;max-width:100%;border-radius:18px;background:#000}.gm[hidden]{display:none}.glv .row{justify-content:center}
 #lkre{margin-top:-4px}
 #lkapp{text-decoration:none;color:#fff}
 .lkj{flex-wrap:wrap}
@@ -375,6 +428,13 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></symbol>
 <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
 <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+<symbol id="i-sens" viewBox="0 0 24 24"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h11M21 18h-1"/><circle cx="15" cy="6" r="2.4"/><circle cx="9" cy="12" r="2.4"/><circle cx="17.5" cy="18" r="2.4"/></symbol>
+<symbol id="i-gallery" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="9" cy="9" r="1.8"/><path d="M21 15.5l-5-5L5 21"/></symbol>
+<symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A9.4 9.4 0 0 1 12 6c5 0 9 6 9 6a15 15 0 0 1-3.2 3.8M6.5 6.9C4 8.6 3 12 3 12s4 6 9 6c1.2 0 2.3-.3 3.3-.7M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+<symbol id="i-reset" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+<symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 </svg>
 <div class="bg" aria-hidden="true"></div>
 <div class="glass banner" id="net" role="status" hidden><svg class="i"><use href="#i-info"/></svg><span id="nett"></span><button class="lk" id="netx">Dismiss</button></div>
@@ -427,11 +487,22 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 <!-- Heat Link: watch a room made by the Heat app (or by another browser) -->
 <section class="scr" id="lkV" aria-label="Heat Link viewer">
 <div class="stage"><canvas id="lkc" aria-label="Live picture"></canvas></div>
-<div class="top"><div class="glass pill" role="status"><i class="dot" id="lkd"></i><span id="lkst">Connecting…</span><small id="lkms"></small><small id="lkbat"></small></div><div class="tb"><button class="glass b" id="lkinv" data-i="share" title="Invite"></button><button class="glass b" id="lkfs" data-i="max" title="Full screen"></button><button class="glass b" id="lkact" data-i="list" title="Activity"><span class="bd" id="lkbd"></span></button><button class="glass b red" id="lkx" data-i="x" title="Leave"></button></div></div>
+<div class="top"><div class="glass pill" role="status"><i class="dot" id="lkd"></i><span id="lkst">Connecting…</span><small id="lkms"></small><small id="lkbat"></small></div><div class="tb"><button class="glass b" id="lkinv" data-i="share" title="Invite"></button><button class="glass b red" id="lkx" data-i="x" title="Leave"></button></div></div>
+<nav class="glass rail l" aria-label="Picture"><button class="b" id="lkgal" data-i="gallery" title="Gallery"><span class="bd" id="lkgbd"></span></button><button class="b" id="lkblk" data-i="eyeoff" title="Black screen: let this screen rest"></button><button class="b" id="lkrst" data-i="reset" title="Reset the stream"></button></nav>
+<nav class="glass rail r" aria-label="Panels"><button class="b" id="lkact" data-i="list" title="Activity"><span class="bd" id="lkbd"></span></button><button class="b" id="lkset" data-i="gear" title="Settings"></button><button class="b" id="lkfs" data-i="max" title="Full screen"></button></nav>
 <aside class="glass sheet" id="lksheet" aria-label="Activity"><button class="sx" data-i="x" title="Close"></button><h3>Activity</h3><div id="lkev"></div></aside>
-<div class="glass dock lkdock" id="lkdock"><button class="b" id="lkarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkarmt"></span></button><div class="sl"><input id="lksens" type="range" min="1" max="100" step="1" title="Sensitivity" aria-label="Sensitivity"></div><div class="lklens" id="lklens" hidden></div><div class="sl"><input id="lkzoom" type="range" min="0" max="100" step="1" title="Zoom" aria-label="Zoom"></div><small class="lkzt" id="lkzt"></small><button class="b" id="lktorch" data-i="bolt" title="Torch" hidden></button><button class="b" id="lkflip" data-i="flip" title="Switch camera"></button><button class="b" id="lksnap" data-i="cam" title="Save a picture"></button></div>
+<aside class="glass sheet lkset" id="lkcs" aria-label="Settings"><button class="sx" data-i="x" title="Close"></button><h3>Settings</h3><input class="lksq" id="lkq" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off"><div id="lksl"></div></aside>
+<div class="glass dock lkdock" id="lkdock">
+<div class="lkg l"><button class="b" id="lkarm" data-i="shield" title="Motion alerts"><span class="lkbt" id="lkarmt"></span></button><button class="lkchip" id="lksensb" title="Sensitivity" aria-haspopup="true"><svg class="i"><use href="#i-sens"/></svg><span><small>Sensitivity</small><b id="lksensv">–</b></span></button></div>
+<div class="lkcap" id="lkcap" role="group" aria-label="Capture"><button class="b" id="lksnap" data-i="cam" title="Take a photo"></button><i></i><button class="b dim" id="lkrec" data-i="rec" title="Record a clip"></button><small id="lkrect"></small></div>
+<div class="lkg r"><div class="lklens" id="lklens" hidden></div><button class="lkchip" id="lkzoomb" title="Zoom" aria-haspopup="true"><svg class="i"><use href="#i-zoom-in"/></svg><span><small>Zoom</small><b id="lkzt">1×</b></span></button><button class="b" id="lktorch" data-i="bolt" title="Torch" hidden></button><button class="b" id="lkflip" data-i="flip" title="Switch camera"></button></div>
+</div>
+<div class="glass lkpo" id="lkpos" role="dialog" aria-label="Sensitivity"><header><svg class="i"><use href="#i-sens"/></svg><b>Sensitivity</b><output id="lkposv">–</output></header><p class="hint">How small a movement sets off an alert. Higher notices smaller, fainter movement.</p><div class="lkpr"><button class="b" data-d="-5" data-t="lksens" data-i="minus" title="Lower"></button><input id="lksens" type="range" min="1" max="100" step="1" aria-label="Sensitivity"><button class="b" data-d="5" data-t="lksens" data-i="plus" title="Higher"></button></div><div class="lkpp" id="lkposp"><button data-v="20">Low</button><button data-v="50">Medium</button><button data-v="80">High</button><button data-v="100">Max</button></div></div>
+<div class="glass lkpo" id="lkzps" role="dialog" aria-label="Zoom"><header><svg class="i"><use href="#i-zoom-in"/></svg><b>Zoom</b><output id="lkzpv">1×</output></header><p class="hint">Steps through the lenses and then crops in. The slider is spread so every step feels the same.</p><div class="lkpr"><button class="b" data-d="-4" data-t="lkzoom" data-i="minus" title="Zoom out"></button><input id="lkzoom" type="range" min="0" max="100" step="1" aria-label="Zoom"><button class="b" data-d="4" data-t="lkzoom" data-i="plus" title="Zoom in"></button></div><div class="lkpp" id="lkzpp"></div></div>
+<div class="blk" id="lkblkov"><span>Tap anywhere to wake</span></div>
 <div class="ov s" id="lkov"><div class="glass c2" role="status"><div class="sp"></div><b id="lkovt">Connecting…</b><small class="hint" id="lkovh"></small><a class="ghost" id="lkopen" href="#" hidden>Open in the Heat app</a><button class="ghost" id="lkovx">Leave</button></div></div>
 </section>
+<div class="pop" id="galp" role="dialog" aria-modal="true" aria-label="Gallery"><div class="glass c2 gal"><header><b>Gallery</b><small id="galn"></small><button class="glass b" id="galx" data-i="x" title="Close"></button></header><div class="gg" id="galg"></div><div class="glv" id="galv" hidden><img class="gm" id="galmi" alt=""><video class="gm" id="galmv" controls playsinline></video><small class="hint" id="galmt"></small><div class="row"><button class="ghost" id="galb">Back</button><button class="ghost pri" id="gals">Save</button><button class="ghost" id="gald">Delete</button></div></div></div></div>
 
 <!-- Heat Link: this page is the camera, and the Heat app or other browsers watch it -->
 <section class="scr" id="lkC" aria-label="Heat Link camera">
@@ -694,7 +765,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-15.5'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-15.6'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -1960,7 +2031,7 @@ const LK = (() => {
     });
     s.start();
     s.sendControl(enc({ t: 'hello', name: (myName() || 'Browser').slice(0, 24), role: 'VIEWER', app: 'web-' + BUILD, features: ['h264'] }));
-    s.sendControl(enc({ t: 'watch', video: true, audio: false, tier: 'MAX' }));
+    s.sendControl(enc({ t: 'watch', video: !R.blk, audio: false, tier: 'MAX' }));
     for (const p of R.pend) s.sendControl(enc({ t: 'set', seq: p.seq, patch: p.patch }));   /* edits the camera never acknowledged go again */
     R.state = 'Waiting for the picture…'; ui(R);
   }
@@ -2032,6 +2103,7 @@ const LK = (() => {
     for (const b of lens.children) b.classList.toggle('on', Math.abs(+b.dataset.z - z) < 0.12);
     const zs = $e('lkzoom'); if (!R.drag) { zs.value = Math.round(Math.log(clamp(z, 0.5, 10) / 0.5) / Math.log(20) * 100); rangeFill(zs); }
     $e('lkzt').textContent = (Math.round(z * 10) / 10) + '×' + (s.digitalZoom ? ' digital' : '');
+    paintPanels(R, det, z, s);
   }
 
   function addAlert(R, m) {
@@ -2040,12 +2112,14 @@ const LK = (() => {
     R.lastAlert = { e, at: performance.now() };
     if (!$e('lksheet').classList.contains('open')) { R.unread++; badge(R); }
     toast((kindName[m.kind] || 'Alert') + ' · ' + tm(e.ts));
+    if ((m.kind === 'MOTION' || m.kind === 'TAMPER') && R.blk) setBlackout(R, false);
     if (m.kind === 'MOTION' || m.kind === 'TAMPER') { chime(); !muted && navigator.vibrate && navigator.vibrate([120, 60, 120]); }
     if (document.hidden && window.Notification && Notification.permission === 'granted') { try { new Notification(kindName[m.kind] || 'Alert', { body: tm(e.ts) }); } catch {} }
     drawEvents(R);
   }
   function addThumb(R, data) {                                     /* the picture that goes with the newest alert */
     const url = URL.createObjectURL(new Blob([data], { type: 'image/jpeg' }));
+    keepAlertPicture(R, data);
     const a = R.lastAlert && performance.now() - R.lastAlert.at < 6000 && !R.lastAlert.e.img ? R.lastAlert.e : null;
     if (a) { a.img = url; R.thumbs.push(url); drawEvents(R); toast((kindName[a.kind] || 'Alert') + ' · ' + tm(a.ts), url); }
     else { R.evs.unshift({ id: 0, kind: 'MOTION', ts: Date.now(), pct: 0, img: url }); R.thumbs.push(url); drawEvents(R); }
@@ -2271,6 +2345,7 @@ const LK = (() => {
     const R = cur; cur = null;
     if (R) {
       R.stopped = true; R.timers.forEach(clearInterval); clearTimeout(R.flush); clearTimeout(R.sensT);
+      if (R.role === 'view') { stopClip(R, true); closePopovers(); $e('lkblkov').classList.remove('s'); $e('lkcs').classList.remove('open'); $e('lkV').classList.remove('so'); }
       try { R.net && R.net.stop(); } catch {}
       if (R.sess) { try { R.sess.bye(); } catch {} }
       for (const v of (R.viewers ? R.viewers.values() : [])) { try { v.sess && v.sess.bye(); } catch {} }
@@ -2311,8 +2386,11 @@ const LK = (() => {
   sel('lkx').onclick = () => leave(); sel('lkcx').onclick = () => leave();
   sel('lkinv').onclick = invite; sel('lkcinv').onclick = invite;
   sel('lkfs').onclick = () => fs();
-  sel('lkact').onclick = () => { const R = cur; if (!R) return; const s = sel('lksheet'); s.classList.toggle('open'); if (s.classList.contains('open')) { R.unread = 0; badge(R); } };
-  $('#lksheet .sx').onclick = () => sel('lksheet').classList.remove('open');
+  const sheets = () => sel('lkV').classList.toggle('so', sel('lksheet').classList.contains('open') || sel('lkcs').classList.contains('open'));
+  sel('lkact').onclick = () => { const R = cur; if (!R) return; const s = sel('lksheet'); sel('lkcs').classList.remove('open'); s.classList.toggle('open'); if (s.classList.contains('open')) { R.unread = 0; badge(R); } closePopovers(); sheets(); };
+  $('#lksheet .sx').onclick = () => { sel('lksheet').classList.remove('open'); sheets(); };
+  sel('lkset').onclick = () => { const R = cur; if (!R) return; const s = sel('lkcs'); sel('lksheet').classList.remove('open'); s.classList.toggle('open'); closePopovers(); if (s.classList.contains('open')) buildSettings(R, true); sheets(); };
+  $('#lkcs .sx').onclick = () => { sel('lkcs').classList.remove('open'); sheets(); };
   sel('lkarm').onclick = () => { const R = cur; if (!R || R.role !== 'view' || !R.sess) return; R.sess.sendControl(enc({ t: 'arm', armed: !(R.st && (R.st.armed || R.st.armingIn > 0)), delaySec: null })); };
   sel('lkcarm').onclick = () => { const R = cur; if (R && R.role === 'cam') setArmed(R, !R.armed, 0); };
   sel('lksens').oninput = e => {
@@ -2337,10 +2415,6 @@ const LK = (() => {
     else { R.facing = R.facing === 'user' ? 'environment' : 'user'; startCapture(R).then(() => { R.rev++; pushAll(R); }).catch(() => toast('Couldn’t switch cameras')); }
   };
   sel('lkcflip').onclick = sel('lkflip').onclick;
-  sel('lksnap').onclick = () => {
-    const c = sel('lkc'); if (!c.width) return;
-    c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'heat-' + Date.now() + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Picture saved'); }, 'image/png');
-  };
   sel('lkev').onclick = e => {
     const R = cur, r = e.target.closest('.ev'), x = R && r && R.evs[+r.dataset.i];
     if (x && x.img) { const a = document.createElement('a'); a.href = x.img; a.download = 'heat-alert-' + x.ts + '.jpg'; a.click(); }
@@ -2348,6 +2422,330 @@ const LK = (() => {
   sel('lkovx').onclick = () => leave();
   addEventListener('beforeunload', e => { if (cur && cur.role === 'cam' && cur.viewers.size) { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('visibilitychange', () => { const R = cur; if (R && R.role === 'view' && !document.hidden) needKey(R); });
+
+
+  /* ======================================================================================================
+     RECEIVER CONTROLS: everything the watch can do, on a big screen.
+     Sensitivity and zoom open a labelled drop-up; every camera setting is in one searchable panel; pictures and clips
+     go to a gallery that is kept on this device (2 days, 20 items, by default; Save keeps one for good).
+     ====================================================================================================== */
+  const nest = (path, v) => path.split('.').reduceRight((acc, k) => ({ [k]: acc }), v);
+  const getp = (o, path) => path.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const clock = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+
+  /* what the user chose to keep on this device, remembered */
+  const PREF = (() => {
+    let o = {}; try { o = JSON.parse(ls('hl.cap') || '{}') || {}; } catch {}
+    const d = { clipping: false, clipSec: 5, maxItems: 20, expireDays: 2 };
+    const P = { ...d, ...o };
+    P.save = () => ls('hl.cap', JSON.stringify({ clipping: P.clipping, clipSec: P.clipSec, maxItems: P.maxItems, expireDays: P.expireDays }));
+    return P;
+  })();
+
+  /* ---------- the catalogue: the same entries, names and ranges as the phone and the watch ---------- */
+  const FOCUS = [[-1, 'Auto'], ...Array.from({ length: 21 }, (_, i) => [i * 5, i === 0 ? 'Far' : i === 20 ? 'Near' : i * 5 + '%'])];
+  const SETS = [
+    ['Camera', [
+      { k: 'camera.night', t: 'Night handling', ty: 'seg', o: [['AUTO', 'Auto'], ['DAY', 'Day'], ['NIGHT', 'Night']], h: 'Auto switches by itself as the room darkens', kw: 'dark low light evening' },
+      { k: 'camera.exposure', t: 'Exposure', ty: 'range', a: -12, z: 12, s: 1, f: v => v > 0 ? '+' + v : '' + v, kw: 'brightness bright ev' },
+      { k: 'camera.torch', t: 'Flashlight', ty: 'tog', ok: s => s.hasTorch, kw: 'torch flash lamp' },
+      { k: 'camera.lockExposure', t: 'Lock exposure', ty: 'tog', h: 'Stops auto-exposure steps being read as movement', kw: 'freeze fixed' },
+      { k: 'camera.whiteBalance', t: 'White balance', ty: 'sel', o: [['AUTO', 'Auto'], ['DAYLIGHT', 'Daylight'], ['CLOUDY', 'Cloudy'], ['TUNGSTEN', 'Tungsten'], ['FLUORESCENT', 'Fluorescent']], kw: 'colour color tint warm cool' },
+      { k: 'camera.focus', t: 'Focus', ty: 'sel', o: FOCUS, h: 'Auto follows what moves; Far to Near fixes it', ok: s => s.manualFocus, kw: 'sharp blur' },
+      { k: 'camera.iso', t: 'ISO', ty: 'sel', o: [[0, 'Auto'], ...[100, 200, 400, 800, 1600, 3200].map(v => [v, '' + v])], h: 'Setting ISO or shutter takes exposure into manual', ok: s => s.manualExposure, kw: 'grain noise gain' },
+      { k: 'camera.shutterDenom', t: 'Shutter speed', ty: 'sel', o: [[0, 'Auto'], ...[8, 15, 30, 60, 125, 250, 500, 1000, 2000].map(v => [v, '1/' + v])], ok: s => s.manualExposure, kw: 'motion blur' },
+      { k: 'camera.antiFlicker', t: 'Anti-flicker', ty: 'seg', o: [['AUTO', 'Auto'], ['HZ50', '50 Hz'], ['HZ60', '60 Hz'], ['OFF', 'Off']], h: 'Match your mains frequency if you see banding', kw: 'banding stripes mains' },
+      { k: 'camera.blendLenses', t: 'Blend lenses', ty: 'tog', h: 'Cross-fade between lenses while zooming', ok: s => (s.lenses || []).length > 1, kw: 'transition smooth' }
+    ]],
+    ['Detection', [
+      { k: 'detect.sensitivity', t: 'Sensitivity', ty: 'range', a: 1, z: 100, s: 1, f: v => v + '%', h: 'Higher notices smaller, fainter movement', kw: 'threshold motion trigger' },
+      { k: 'detect.cooldownSec', t: 'Quiet time between alerts', ty: 'step', a: 0, z: 600, s: 5, f: v => v + 's', kw: 'cooldown repeat gap spam' },
+      { k: 'detect.persistence', t: 'Frames to confirm', ty: 'step', a: 1, z: 10, s: 1, f: v => '' + v, h: 'Higher means fewer false alarms, a little slower', kw: 'false alarm debounce' },
+      { k: 'detect.rejectLightChanges', t: 'Ignore lighting changes', ty: 'tog', h: 'Headlights and light switches', kw: 'headlights shadow' },
+      { k: 'detect.armDelaySec', t: 'Arm delay', ty: 'step', a: 0, z: 60, s: 5, f: v => v + 's', h: 'Time to leave the room', kw: 'countdown timer' },
+      { k: 'detect.tamper', t: 'Tamper alert', ty: 'tog', h: 'Tell me if the camera is moved or knocked', kw: 'knock theft shake' }
+    ]],
+    ['Video', [
+      { k: 'stream.quality', t: 'Quality', ty: 'seg', o: [['AUTO', 'Auto'], ['LOW', 'Low'], ['BALANCED', 'Med'], ['HIGH', 'High'], ['MAX', 'Max']], h: 'Auto follows the connection', kw: 'resolution bitrate sharpness' },
+      { k: 'stream.muddiness', t: 'Muddiness', ty: 'range', a: 0, z: 100, s: 5, f: v => '' + v, h: 'Softer picture, smoother motion on a weak link', kw: 'soft blur lag stutter' },
+      { k: 'stream.allowAudio', t: 'Allow microphone', ty: 'tog', kw: 'mic sound audio listen' }
+    ]],
+    ['Alerts', [
+      { k: 'alerts.phoneSound', t: 'Sound on the camera phone', ty: 'tog', kw: 'alarm ring beep siren' },
+      { k: 'alerts.watchHaptics', t: 'Watch haptics', ty: 'seg', o: [['OFF', 'Off'], ['SOFT', 'Soft'], ['NORMAL', 'Normal'], ['STRONG', 'Strong']], kw: 'vibrate buzz wrist' },
+      { k: 'alerts.quiet', t: 'Quiet hours', ty: 'tog', h: 'Motion alerts are muted between the times below', kw: 'night sleep mute silence schedule',
+        get: c => getp(c, 'alerts.quietFromMin') != null, put: on => ({ alerts: { quietFromMin: on ? 22 * 60 : null, quietToMin: on ? 7 * 60 : null } }), has: c => getp(c, 'alerts') !== undefined },
+      { k: 'alerts.quietFromMin', t: 'Quiet from', ty: 'step', a: 0, z: 1425, s: 30, f: clock, ok: (s, c) => getp(c, 'alerts.quietFromMin') != null },
+      { k: 'alerts.quietToMin', t: 'Quiet until', ty: 'step', a: 0, z: 1425, s: 30, f: clock, ok: (s, c) => getp(c, 'alerts.quietFromMin') != null }
+    ]],
+    ['Power', [
+      { k: 'power.blackoutWhileArmed', t: 'Black screen while armed', ty: 'tog', h: 'Saves battery and heat on the camera phone', kw: 'screen off oled dim display' },
+      { k: 'power.lowBatteryStopPercent', t: 'Stop below battery', ty: 'step', a: 0, z: 50, s: 5, f: v => v ? v + '%' : 'Never', kw: 'disarm shut off low battery' },
+      { k: 'power.lowBatteryWarnPercent', t: 'Warn below battery', ty: 'step', a: 0, z: 80, s: 5, f: v => v ? v + '%' : 'Never', kw: 'reminder charge' }
+    ]],
+    ['Pictures and clips', [
+      { k: 'local.clipping', t: 'Clipping', ty: 'tog', h: 'Off until you turn it on. Then the record button saves a short clip', kw: 'video record', loc: true },
+      { k: 'local.clipSec', t: 'Clip length', ty: 'step', a: 0, z: 120, s: 1, f: v => v ? v + 's' : 'until stopped', loc: true },
+      { k: 'local.maxItems', t: 'Keep at most', ty: 'step', a: 1, z: 200, s: 1, f: v => v + ' items', loc: true },
+      { k: 'local.expireDays', t: 'Delete after', ty: 'step', a: 0, z: 30, s: 1, f: v => v ? v + ' day' + (v === 1 ? '' : 's') : 'never', h: 'Anything you have not saved. Save keeps a picture for good', loc: true }
+    ]],
+    ['This camera', [
+      { k: 'label', t: 'Name', ty: 'text', h: 'Shown on the watch', kw: 'rename label title room' },
+      { id: 'i-stream', t: 'Stream', ty: 'info', v: R => { const x = (R.st || {}).stream; return x && x.width ? x.width + '×' + x.height + ' · ' + x.fps + ' fps · ' + (x.bitrate >= 1e6 ? (x.bitrate / 1e6).toFixed(1) + ' Mbps' : Math.round(x.bitrate / 1000) + ' kbps') : '–'; } },
+      { id: 'i-lens', t: 'Lens', ty: 'info', v: R => (R.st || {}).lensLabel || '–' },
+      { id: 'i-bat', t: 'Battery', ty: 'info', v: R => { const x = R.st || {}; return x.battery >= 0 ? x.battery + '%' + (x.charging ? ' · charging' : '') : '–'; } },
+      { id: 'i-rtt', t: 'Round trip', ty: 'info', v: R => R.sess && R.sess.rtt >= 0 ? R.sess.rtt + ' ms' : '–' },
+      { id: 'i-app', t: 'Camera app', ty: 'info', v: R => (R.hello && R.hello.app) || '–' },
+      { id: 'i-code', t: 'Room code', ty: 'info', v: R => HL.fmt(R.code) }
+    ]]
+  ];
+  const optIdx = (o, v) => Math.max(0, o.findIndex(x => String(x[0]) === String(v)));
+  const readv = (R, d, eff) => d.loc ? PREF[d.k.slice(6)] : d.get ? d.get(eff) : getp(eff, d.k);
+  const visibleRows = (R, q) => {
+    const eff = effective(R), st = R.st || {}, need = q.trim().toLowerCase();
+    return SETS.map(([name, rows]) => [name, rows.filter(d => {
+      if (d.ty === 'info') return !need || (d.t + ' ' + name).toLowerCase().includes(need);
+      if (!d.loc && (d.has ? !d.has(eff) : getp(eff, d.k) === undefined && !d.get)) return false;
+      if (d.ok && !d.ok(st, eff)) return false;
+      return !need || (d.t + ' ' + name + ' ' + (d.kw || '') + ' ' + (d.h || '')).toLowerCase().includes(need);
+    })]).filter(([, r]) => r.length);
+  };
+  const rowHtml = d => {
+    const id = d.k || d.id, t = esc(d.t), h = d.h ? `<small>${esc(d.h)}</small>` : '';
+    const ic = n => `<svg class="i"><use href="#i-${n}"/></svg>`;
+    switch (d.ty) {
+      case 'tog': return `<label class="sr"><span><b>${t}</b>${h}</span><input type="checkbox" class="sw" role="switch" data-r="${id}"></label>`;
+      case 'seg': return `<div class="sr col"><div class="st"><b>${t}</b></div><div class="sg" data-r="${id}">${d.o.map((x, i) => `<button type="button" data-i="${i}">${esc(x[1])}</button>`).join('')}</div>${h}</div>`;
+      case 'sel': return `<label class="sr"><span><b>${t}</b>${h}</span><select data-r="${id}">${d.o.map((x, i) => `<option value="${i}">${esc(x[1])}</option>`).join('')}</select></label>`;
+      case 'range': return `<div class="sr col"><div class="st"><b>${t}</b><output data-o="${id}"></output></div><input type="range" class="lkr" data-r="${id}" min="${d.a}" max="${d.z}" step="${d.s}" aria-label="${t}">${h}</div>`;
+      case 'step': return `<div class="sr"><span><b>${t}</b>${h}</span><div class="stp" data-r="${id}"><button type="button" data-d="-1" aria-label="Less">${ic('minus')}</button><output data-o="${id}"></output><button type="button" data-d="1" aria-label="More">${ic('plus')}</button></div></div>`;
+      case 'text': return `<label class="sr"><span><b>${t}</b>${h}</span><input type="text" maxlength="24" data-r="${id}"></label>`;
+      default: return `<div class="sr"><span><b>${t}</b></span><em data-n="${id}"></em></div>`;
+    }
+  };
+  let setKey = '';
+  function buildSettings(R, force) {
+    const root = $e('lksl'), q = $e('lkq').value, secs = visibleRows(R, q);
+    const key = q + '|' + secs.map(([n, r]) => n + ':' + r.map(d => d.k || d.id).join(',')).join(';');
+    if (!force && key === setKey) return syncSettings(R);
+    setKey = key;
+    root.innerHTML = secs.length ? secs.map(([n, r]) => `<h4 class="sh">${esc(n)}</h4>` + r.map(rowHtml).join('')).join('') : '<p class="none" style="text-align:center;color:var(--t2);padding:30px 0">No setting matches that.</p>';
+    syncSettings(R);
+  }
+  function syncSettings(R) {
+    const eff = effective(R), root = $e('lksl');
+    for (const [, rows] of SETS) for (const d of rows) {
+      const id = d.k || d.id;
+      if (d.ty === 'info') { const n = root.querySelector(`[data-n="${id}"]`); if (n) n.textContent = d.v(R); continue; }
+      const el = root.querySelector(`[data-r="${id}"]`); if (!el) continue;
+      const v = readv(R, d, eff);
+      if (d.ty === 'tog') el.checked = !!v;
+      else if (d.ty === 'seg') { const i = optIdx(d.o, v); [...el.children].forEach((b, j) => b.classList.toggle('on', j === i)); }
+      else if (d.ty === 'sel') el.value = optIdx(d.o, v);
+      else if (d.ty === 'range') { if (!R.setDrag) { el.value = v; rangeFill(el); } const o = root.querySelector(`[data-o="${id}"]`); if (o) o.textContent = d.f(+v); }
+      else if (d.ty === 'step') { const o = el.querySelector('output'); if (o) o.textContent = d.f(+v); }
+      else if (d.ty === 'text') { if (document.activeElement !== el) el.value = v == null ? '' : v; }
+    }
+  }
+  const findDef = id => { for (const [, rows] of SETS) for (const d of rows) if ((d.k || d.id) === id) return d; };
+  function applyRow(R, d, v) {
+    if (d.loc) { PREF[d.k.slice(6)] = v; PREF.save(); syncSettings(R); paintPanels(R); return; }
+    sendSet(R, d.put ? d.put(v) : nest(d.k, v));
+  }
+  {
+    const root = sel('lksl');
+    root.addEventListener('change', e => {
+      const R = cur, el = e.target.closest('[data-r]'); if (!R || R.role !== 'view' || !el) return;
+      const d = findDef(el.dataset.r); if (!d) return;
+      if (d.ty === 'tog') applyRow(R, d, el.checked);
+      else if (d.ty === 'sel') applyRow(R, d, d.o[+el.value][0]);
+      else if (d.ty === 'text') applyRow(R, d, el.value.trim().slice(0, 24) || 'Camera');
+      else if (d.ty === 'range') { R.setDrag = false; applyRow(R, d, +el.value); }
+    });
+    root.addEventListener('input', e => {
+      const R = cur, el = e.target.closest('input[type=range][data-r]'); if (!R || R.role !== 'view' || !el) return;
+      const d = findDef(el.dataset.r); if (!d) return;
+      R.setDrag = true; rangeFill(el);
+      const o = root.querySelector(`[data-o="${d.k}"]`); if (o) o.textContent = d.f(+el.value);
+      clearTimeout(R.setT); R.setT = setTimeout(() => applyRow(R, d, +el.value), 70);
+    });
+    root.addEventListener('click', e => {
+      const R = cur; if (!R || R.role !== 'view') return;
+      const sg = e.target.closest('.sg button'), stp = e.target.closest('.stp button');
+      if (sg) { const d = findDef(sg.parentNode.dataset.r); if (d) applyRow(R, d, d.o[+sg.dataset.i][0]); }
+      else if (stp) {
+        const d = findDef(stp.parentNode.dataset.r); if (!d) return;
+        const cur0 = +readv(R, d, effective(R)) || 0, nv = clamp(cur0 + (+stp.dataset.d) * d.s, d.a, d.z);
+        applyRow(R, d, nv);
+      }
+    });
+    sel('lkq').addEventListener('input', () => { const R = cur; if (R && R.role === 'view') buildSettings(R, true); });
+  }
+
+  /* ---------- sensitivity and zoom: a labelled drop-up, not a bare slider ---------- */
+  const POPS = { lksensb: 'lkpos', lkzoomb: 'lkzps' };
+  function closePopovers() { for (const [b, p] of Object.entries(POPS)) { sel(p).classList.remove('s'); sel(b).classList.remove('on'); } }
+  function openPopover(btn) {
+    const R = cur; if (!R || R.role !== 'view') return;
+    const pid = POPS[btn], pop = sel(pid), was = pop.classList.contains('s');
+    closePopovers(); sel('lkcs').classList.remove('open'); sel('lksheet').classList.remove('open'); sel('lkV').classList.remove('so');
+    if (was) return;
+    pop.classList.add('s'); sel(btn).classList.add('on');
+    const host = sel('lkV').getBoundingClientRect(), r = sel(btn).getBoundingClientRect(), w = pop.offsetWidth || 340;
+    const cx = clamp(r.left + r.width / 2 - host.left, w / 2 + 10, host.width - w / 2 - 10);
+    pop.style.left = cx + 'px';
+    paint(R);
+  }
+  for (const b of Object.keys(POPS)) sel(b).onclick = e => { e.stopPropagation(); openPopover(b); };
+  document.addEventListener('pointerdown', e => {
+    if (!sel('lkV').contains(e.target) || e.target.closest('.lkpo,.lkchip')) return;
+    closePopovers();
+  });
+  addEventListener('keydown', e => { if (e.key === 'Escape') closePopovers(); });
+  for (const pop of [sel('lkpos'), sel('lkzps')]) pop.addEventListener('click', e => {
+    const R = cur, b = e.target.closest('button'); if (!R || !b) return;
+    if (b.dataset.d) {                                               /* the - and + beside the slider */
+      const t = sel(b.dataset.t); t.value = clamp(+t.value + +b.dataset.d, +t.min, +t.max); t.dispatchEvent(new Event('input')); t.dispatchEvent(new Event('change'));
+    } else if (b.dataset.v && pop.id === 'lkpos') sendSet(R, { detect: { sensitivity: +b.dataset.v } });
+    else if (b.dataset.z) sendSet(R, { camera: { zoom: +b.dataset.z } });
+  });
+
+  /* ---------- keeping the panels in step with the camera ---------- */
+  function paintPanels(R, det, z, s) {
+    if (!R || R.role !== 'view') return;
+    const eff = effective(R); det = det || eff.detect || {}; s = s || R.st || {}; z = z || (eff.camera || {}).zoom || 1;
+    const sv = det.sensitivity;
+    sel('lksensv').textContent = sv == null ? '–' : sv + '%'; sel('lkposv').textContent = sv == null ? '–' : sv + '%';
+    sel('lkposp').querySelectorAll('button').forEach(b => b.classList.toggle('on', sv != null && Math.abs(+b.dataset.v - sv) <= 5));
+    sel('lkzpv').textContent = (Math.round(z * 10) / 10) + '×';
+    const lenses = (s.lenses || []).filter(l => l && l.ratio > 0).sort((a, b) => a.ratio - b.ratio);
+    const steps = lenses.length ? lenses.map(l => [l.ratio, l.label || l.ratio + '×']) : [[0.5, '0.5×'], [1, '1×'], [2, '2×'], [5, '5×'], [10, '10×']];
+    const key = steps.map(x => x[0] + x[1]).join('|'), zp = sel('lkzpp');
+    if (zp.dataset.key !== key) { zp.dataset.key = key; zp.innerHTML = steps.map(x => `<button type="button" data-z="${x[0]}">${esc(x[1])}</button>`).join(''); }
+    [...zp.children].forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.z - z) < 0.12));
+    const rec = sel('lkrec'); rec.classList.toggle('dim', !PREF.clipping && !R.rec); rec.classList.toggle('on', !!R.rec);
+    rec.title = R.rec ? 'Stop recording' : PREF.clipping ? 'Record a clip' : 'Record a clip (turns clipping on first)';
+    sel('lkblk').classList.toggle('on', !!R.blk);
+    if (sel('lkcs').classList.contains('open')) buildSettings(R);
+  }
+  /* the slider inside the drop-up shows its fill like the others */
+  for (const id of ['lksens', 'lkzoom']) sel(id).addEventListener('input', () => {
+    const R = cur; if (!R) return; rangeFill(sel(id));
+    if (id === 'lksens') { sel('lkposv').textContent = sel(id).value + '%'; sel('lksensv').textContent = sel(id).value + '%'; }
+    else sel('lkzpv').textContent = (Math.round(0.5 * Math.pow(20, +sel(id).value / 100) * 10) / 10) + '×';
+  });
+
+  /* ---------- the gallery: IndexedDB, expiry and a cap, Save keeps for good ---------- */
+  const GAL = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('heat-gallery', 1); r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+    const run = async (mode, f) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('items', mode), q = f(t.objectStore('items')); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
+    return {
+      all: () => run('readonly', st => st.getAll()).then(a => a || []).catch(() => []),
+      put: o => run('readwrite', st => st.put(o)),
+      del: id => run('readwrite', st => st.delete(id)),
+      async prune() {
+        const all = await this.all(), now = Date.now(), live = [];
+        for (const it of all) { if (!it.kept && PREF.expireDays > 0 && now - it.at > PREF.expireDays * 864e5) await this.del(it.id).catch(() => {}); else live.push(it); }
+        const loose = live.filter(i => !i.kept).sort((a, b) => a.at - b.at);
+        while (loose.length > PREF.maxItems) await this.del(loose.shift().id).catch(() => {});
+      }
+    };
+  })();
+  const tinyThumb = canvas => { const c = document.createElement('canvas'), w = 320, h = Math.max(1, Math.round(w * canvas.height / canvas.width)); c.width = w; c.height = h; c.getContext('2d').drawImage(canvas, 0, 0, w, h); return c.toDataURL('image/jpeg', 0.7); };
+  const nameOf = R => (R.cfg && R.cfg.label) || (R.hello && R.hello.name) || 'Camera';
+  async function keep(item) {
+    try { await GAL.put(item); await GAL.prune(); countGallery(); return true; }
+    catch { toast('This browser can’t keep pictures. Allow site storage, or use Save.', undefined, 6000); return false; }
+  }
+  function takePhoto() {
+    const R = cur, c = sel('lkc'); if (!R || R.role !== 'view' || !c.width) return;
+    if (!R.live) return toast('No live picture to take');
+    c.toBlob(b => { if (!b) return; const at = Date.now(); keep({ id: 'p' + at + Math.random().toString(36).slice(2, 6), kind: 'photo', at, host: nameOf(R), blob: b, thumb: tinyThumb(c), type: 'image/jpeg' }).then(ok => ok && toast('Picture kept in the gallery')); }, 'image/jpeg', 0.92);
+  }
+  function keepAlertPicture(R, jpeg) {
+    try { const at = Date.now(), blob = new Blob([jpeg], { type: 'image/jpeg' }); const im = new Image(); const u = URL.createObjectURL(blob);
+      im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); URL.revokeObjectURL(u); keep({ id: 'a' + at + Math.random().toString(36).slice(2, 6), kind: 'alert', at, host: nameOf(R), blob, thumb: tinyThumb(c), type: 'image/jpeg' }); };
+      im.src = u; } catch {}
+  }
+
+  /* ---------- clips: the live picture recorded for a few seconds ---------- */
+  const clipMime = () => ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+  function startClip(R) {
+    const c = sel('lkc'); if (!c.width || !window.MediaRecorder || !c.captureStream) return toast('This browser can’t record clips');
+    if (!R.live) return toast('No live picture to record');
+    const mime = clipMime(); let rec;
+    try { rec = new MediaRecorder(c.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 2500000 } : undefined); } catch { return toast('This browser can’t record clips'); }
+    const chunks = [], at = Date.now(), thumb = tinyThumb(c), host = nameOf(R);
+    rec.ondataavailable = e => e.data && e.data.size && chunks.push(e.data);
+    rec.onstop = () => { const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' }); if (blob.size) keep({ id: 'v' + at + Math.random().toString(36).slice(2, 6), kind: 'clip', at, host, blob, thumb, type: blob.type, sec: Math.round((Date.now() - at) / 1000) }).then(ok => ok && toast('Clip kept in the gallery')); };
+    rec.start(500);
+    R.rec = { rec, at, auto: PREF.clipSec > 0 ? setTimeout(() => stopClip(R), PREF.clipSec * 1000) : 0, tick: setInterval(() => { const n = Math.round((Date.now() - at) / 1000); sel('lkrect').textContent = '● ' + Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0'); }, 250) };
+    sel('lkrect').textContent = '● 0:00'; paintPanels(R);
+  }
+  function stopClip(R, quiet) {
+    const x = R && R.rec; if (!x) return;
+    R.rec = null; clearTimeout(x.auto); clearInterval(x.tick); sel('lkrect').textContent = '';
+    try { x.rec.state !== 'inactive' && x.rec.stop(); } catch {}
+    if (!quiet) paintPanels(R);
+  }
+  sel('lksnap').onclick = takePhoto;
+  sel('lkrec').onclick = () => {
+    const R = cur; if (!R || R.role !== 'view') return;
+    if (R.rec) return stopClip(R);
+    if (!PREF.clipping) { PREF.clipping = true; PREF.save(); toast('Clipping is on. Change it in Settings, Pictures and clips'); }
+    startClip(R);
+  };
+
+  /* ---------- gallery screen ---------- */
+  let galItems = [], galOpen = null;
+  async function countGallery() { const n = (await GAL.all()).length; sel('lkgbd').textContent = n; sel('lkgbd').style.display = n ? 'grid' : 'none'; sel('galn').textContent = n + (n === 1 ? ' item' : ' items'); }
+  const daysLeft = it => it.kept || !PREF.expireDays ? 'kept' : Math.max(0, Math.ceil((PREF.expireDays * 864e5 - (Date.now() - it.at)) / 864e5)) + ' d left';
+  async function drawGallery() {
+    await GAL.prune(); galItems = (await GAL.all()).sort((a, b) => b.at - a.at);
+    const g = sel('galg');
+    g.innerHTML = galItems.length ? galItems.map((it, i) => `<button class="gc" data-i="${i}" aria-label="${it.kind} from ${esc(it.host)}"><img src="${it.thumb}" alt=""><span class="kd">${it.kind === 'clip' ? '▶ ' + (it.sec || 0) + 's' : it.kind === 'alert' ? 'Alert' : 'Photo'}</span><span class="ft2"><span>${esc(it.host)}</span><span>${new Date(it.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${daysLeft(it)}</span></span></button>`).join('') : '<p class="none">Nothing here yet. Pictures, clips and alert pictures you take appear here.</p>';
+    sel('galn').textContent = galItems.length + (galItems.length === 1 ? ' item' : ' items'); sel('lkgbd').textContent = galItems.length; sel('lkgbd').style.display = galItems.length ? 'grid' : 'none';
+  }
+  function showItem(it) {
+    galOpen = it; const u = URL.createObjectURL(it.blob); sel('galv')._u && URL.revokeObjectURL(sel('galv')._u); sel('galv')._u = u;
+    const vid = it.kind === 'clip'; sel('galmv').hidden = !vid; sel('galmi').hidden = vid;
+    if (vid) { sel('galmv').src = u; sel('galmv').play().catch(() => {}); } else sel('galmi').src = u;
+    sel('galmt').textContent = it.host + ' · ' + new Date(it.at).toLocaleString() + ' · ' + kb(it.blob.size) + ' · ' + daysLeft(it);
+    sel('gals').textContent = it.kept ? 'Saved again' : 'Save'; sel('galg').hidden = true; sel('galv').hidden = false;
+  }
+  function backToGrid() { try { sel('galmv').pause(); } catch {} sel('galmv').removeAttribute('src'); galOpen = null; sel('galv').hidden = true; sel('galg').hidden = false; drawGallery(); }
+  function closeGallery() { try { sel('galmv').pause(); } catch {} galOpen = null; sel('galv').hidden = true; sel('galg').hidden = false; $('#galp').classList.remove('s'); }
+  sel('lkgal').onclick = () => { closePopovers(); $('#galp').classList.add('s'); backToGrid(); };
+  sel('galx').onclick = closeGallery; sel('galb').onclick = backToGrid;
+  $('#galp').addEventListener('click', e => { if (e.target === $('#galp')) closeGallery(); });
+  sel('galg').addEventListener('click', e => { const c = e.target.closest('.gc'); if (c) showItem(galItems[+c.dataset.i]); });
+  sel('gals').onclick = async () => {
+    const it = galOpen; if (!it) return;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(it.blob); a.download = 'heat-' + it.kind + '-' + it.at + (it.kind === 'clip' ? (/mp4/.test(it.type) ? '.mp4' : '.webm') : '.jpg'); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    it.kept = true; await GAL.put(it).catch(() => {}); sel('gals').textContent = 'Saved'; toast('Saved to your downloads. It stays in the gallery');
+  };
+  sel('gald').onclick = async () => { const it = galOpen; if (!it) return; await GAL.del(it.id).catch(() => {}); backToGrid(); toast('Deleted'); };
+  countGallery();
+
+  /* ---------- rest the screen, and start the stream over ---------- */
+  function setBlackout(R, on) {
+    R.blk = !!on; sel('lkblkov').classList.toggle('s', R.blk);
+    if (R.blk) { stopClip(R); closePopovers(); }
+    if (R.sess) R.sess.sendControl(enc({ t: 'watch', video: !R.blk, audio: false, tier: 'MAX' }));
+    if (!R.blk) { R.keyAt = 0; needKey(R); }
+    paintPanels(R);
+  }
+  sel('lkblk').onclick = () => { const R = cur; if (R && R.role === 'view') setBlackout(R, true); };
+  sel('lkblkov').onclick = () => { const R = cur; if (R && R.role === 'view') setBlackout(R, false); };
+  sel('lkrst').onclick = () => {
+    const R = cur; if (!R || R.role !== 'view') return;
+    try { R.dec && R.dec.reset(); } catch {}
+    if (R.sess) { R.sess.sendControl(enc({ t: 'watch', video: false, audio: false, tier: 'MAX' })); setTimeout(() => { if (cur === R && R.sess && !R.blk) { R.sess.sendControl(enc({ t: 'watch', video: true, audio: false, tier: 'MAX' })); R.keyAt = 0; needKey(R); } }, 200); }
+    R.live = false; ui(R); toast('Starting the stream over');
+  };
 
   return {
     view, host, leave, invite, refreshRejoin,
