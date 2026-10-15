@@ -35,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +63,7 @@ import app.heat.glass.HeatText
 import app.heat.phone.rooms.RoomManager
 import app.heat.phone.service.CameraHub
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import app.heat.rooms.RoomHost
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -80,6 +82,8 @@ fun RoomsScreen(hub: CameraHub, onBack: () -> Unit, onJoin: (String) -> Unit) {
     val recent by rooms.recent.collectAsState()
     val viewers by hub.host.viewerCount.collectAsState()
     val ctx = LocalContext.current
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
 
     Column(Modifier.fillMaxSize().background(Heat.Ink).windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -90,7 +94,7 @@ fun RoomsScreen(hub: CameraHub, onBack: () -> Unit, onJoin: (String) -> Unit) {
             HeatText("Heat Link", size = 24, weight = FontWeight.Bold)
         }
 
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // ── share this camera ──
             Column(Modifier.fillMaxWidth().matte(RoundedCornerShape(24.dp)).padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -106,6 +110,10 @@ fun RoomsScreen(hub: CameraHub, onBack: () -> Unit, onJoin: (String) -> Unit) {
                 if (hosting.open && hosting.code.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
                     CodeCard(hosting.code, hosting.phase, viewers)
+                    if (hosting.slot > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        HeatText("You are host ${hosting.slot + 1} in this room, alongside the host who made it.", size = 13, color = Heat.Ember1)
+                    }
                     Spacer(Modifier.height(14.dp))
                     QrCard(RoomManager.inviteLink(hosting.code))
                     Spacer(Modifier.height(14.dp))
@@ -134,7 +142,16 @@ fun RoomsScreen(hub: CameraHub, onBack: () -> Unit, onJoin: (String) -> Unit) {
             var asking by remember { mutableStateOf<String?>(null) }
             JoinCard(recent, onJoin = { asking = it }, onForget = { rooms.forget(it) })
             asking?.let { code ->
-                RolePrompt(code, onReceive = { asking = null; rooms.remember(code); onJoin(code) }, onHost = { asking = null; rooms.hostIn(code) }, onCancel = { asking = null })
+                RolePrompt(
+                    code,
+                    onReceive = { asking = null; rooms.remember(code); onJoin(code) },
+                    onHost = {
+                        asking = null; rooms.hostIn(code)
+                        android.widget.Toast.makeText(ctx, "Hosting in room ${RoomCode.format(code)}", android.widget.Toast.LENGTH_LONG).show()
+                        scope.launch { scroll.animateScrollTo(0) }
+                    },
+                    onCancel = { asking = null }
+                )
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -251,7 +268,7 @@ private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onForget: (
         Spacer(Modifier.height(10.dp))
         Box(
             Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), if (complete) Heat.Ember0 else Heat.MatteHi)
-                .tappable({ if (complete) onJoin(RoomCode.normalize(field.text)) }).padding(vertical = 13.dp),
+                .tappable({ if (complete) { onJoin(RoomCode.normalize(field.text)); field = TextFieldValue("") } }).padding(vertical = 13.dp),
             contentAlignment = Alignment.Center
         ) { HeatText("Join", size = 15, weight = FontWeight.SemiBold, color = if (complete) Color.White else Heat.TextFaint) }
         if (recent.isNotEmpty()) {

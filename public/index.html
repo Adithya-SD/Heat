@@ -799,7 +799,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-16.7'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-16.8'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -818,6 +818,7 @@ const setIcon=(el,n)=>$('use',el).setAttribute('href','#i-'+n);
 $$('[data-i]').forEach(e=>e.insertAdjacentHTML('afterbegin',`<svg class="i"><use href="#i-${e.dataset.i}"/></svg>`));
 document.addEventListener('pointermove',e=>{const g=e.target.closest?.('.glass');if(g){const r=g.getBoundingClientRect();g.style.setProperty('--mx',e.clientX-r.left+'px');g.style.setProperty('--my',e.clientY-r.top+'px')}});
 
+function camBlocked(){toast('Can\u2019t use the camera. Allow camera access for this site in your browser, then choose Host again. (Camera access needs a secure page.)',undefined,10000)}
 function toast(t,img,ms=3500){const e=$('#tt'),i=$('img',e);$('span',e).textContent=t;if(img){i.src=img;i.style.display='block'}else{i.removeAttribute('src');i.style.display='none'}e.classList.add('s');clearTimeout(tto);tto=setTimeout(()=>e.classList.remove('s'),ms)}
 
 /* a code was entered or opened: ask whether this device receives from the room or hosts in it */
@@ -1104,7 +1105,7 @@ async function hostStart(){
  if(isCall){cstat('Starting camera…',0,1)}else{$('#hst').textContent='Starting…';$('#hd').className='dot';$('#hcode span').textContent=fmt(code)}
  let s;
  try{s=await getMedia(isCall)}
- catch{if(id===sid){mode=0;kind=null;go('home');toast('Camera unavailable — allow access (https needed on phones)')}return}
+ catch{if(id===sid){mode=0;kind=null;go('home');camBlocked()}return}
  if(id!==sid){s.getTracks().forEach(t=>t.stop());return}
  stream=s;camCheck();
  try{vTrack().contentHint=isCall?'detail':'motion'}catch{}
@@ -1169,7 +1170,7 @@ function ensureLocal(){
  return lp=getMedia(true).then(s=>{
    if(id!==sid){s.getTracks().forEach(t=>t.stop());return null}
    stream=s;camCheck();try{vTrack().contentHint='detail'}catch{}attachLocal();return s})
-  .catch(()=>{if(id===sid){toast('Camera unavailable — joining without video');stream=null;attachLocal()}return null})
+  .catch(()=>{if(id===sid){camBlocked();stream=null;attachLocal()}return null})
   .finally(()=>{lpBusy=0;if(id===sid&&!liveOn)stat(waitingAdmit?'Waiting for the host to let you in…':'Connecting video…',0)})}
 function playRemote(v){v.muted=false;v.play().catch(()=>{v.muted=true;v.play().catch(()=>{});toast('Tap anywhere to turn sound on');addEventListener('pointerdown',()=>{v.muted=false},{once:true})})}
 function remoteStream(s,c){
@@ -2275,7 +2276,7 @@ const LK = (() => {
     let d;
     try { d = await HL.derive(code); } catch { toast('Couldn’t set up the room'); return leave(); }
     if (R.stopped) return;
-    try { await startCapture(R); } catch { if (!R.stopped) { toast('Camera unavailable — allow access (https needed on phones)'); leave(); } return; }
+    try { await startCapture(R); } catch { if (!R.stopped) { camBlocked(); leave(); } return; }
     if (R.stopped) return;
     const ok = await startEncoder(R);
     if (!ok || R.stopped) return;

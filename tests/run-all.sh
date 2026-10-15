@@ -5,6 +5,7 @@
 cd "$(dirname "$0")"
 LIST=("$@"); [ ${#LIST[@]} -eq 0 ] && LIST=(static pwa call join watch relay slowanswer qol rotate rotatewatch zoom diag unavail noroute blackhole fx lock admit settings extras contrast layout call:LOCK=1 join:LOCK=1 watch:LOCK=1 relay:LOCK=1 slowanswer:LOCK=1)
 for u in api e2ee-basic e2ee perf; do node $u.js | tail -1 | sed "s/^/[$u] /"; done
+node rooms.js 2>&1 | grep -E "FAIL|ROOMS" | sed "s/^/[rooms] /"
 FAIL=0
 for sc in "${LIST[@]}"; do
   name=${sc%%:*}; envs=""; [[ "$sc" == *:* ]] && envs=${sc#*:}
