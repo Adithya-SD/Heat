@@ -55,6 +55,8 @@ class RfcommDialer(context: Context, private val hints: Hints) : Dialer {
     override val kind = CarrierKind.BT_DIRECT
     private val appContext = context.applicationContext
 
+    @Volatile private var failuresInARow = 0
+
     override suspend fun dial(): ByteDuplex {
         if (!hasBluetoothConnect(appContext)) throw IOException("Bluetooth permission not granted")
         val adapter = appContext.getSystemService(BluetoothManager::class.java)?.adapter ?: throw IOException("no Bluetooth")
@@ -63,17 +65,26 @@ class RfcommDialer(context: Context, private val hints: Hints) : Dialer {
         val bonded = adapter.bondedDevices.orEmpty().toList()
         val hinted = hints.btAddress?.let { a -> bonded.firstOrNull { it.address == a } }
         val phones = bonded.filter { it.bluetoothClass?.majorDeviceClass == BluetoothClass.Device.Major.PHONE }
-        val order = (listOfNotNull(hinted) + phones + bonded).distinctBy { it.address }.take(MAX_TRIES)
+        // Once the phone's address is known it is the only device worth dialing: every other paired device (headphones, a
+        // car) hangs for the full connect timeout before failing, so trying them after a refused dial turned one failed
+        // attempt into eight seconds. The others are only a fallback when there is no known phone, or it keeps failing.
+        val others = (phones + bonded).distinctBy { it.address }.filter { it.address != hinted?.address }
+        val order = when {
+            hinted == null -> others.take(MAX_TRIES)
+            failuresInARow >= FALLBACK_AFTER -> (listOf(hinted) + others).take(MAX_TRIES)
+            else -> listOf(hinted)
+        }
         if (order.isEmpty()) throw IOException("no paired devices")
 
         var failure: IOException? = null
         for (device in order) {
             try {
-                return connect(adapter, device)
+                return connect(adapter, device).also { failuresInARow = 0 }
             } catch (e: IOException) {
                 failure = e
             }
         }
+        failuresInARow++
         throw failure ?: IOException("no paired phone answered")
     }
 
@@ -108,6 +119,7 @@ class RfcommDialer(context: Context, private val hints: Hints) : Dialer {
     private companion object {
         const val TAG = "HeatRfcomm"
         const val MAX_TRIES = 3
+        const val FALLBACK_AFTER = 4
         const val CONNECT_TIMEOUT_MS = 4_000L
     }
 }

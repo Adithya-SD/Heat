@@ -125,7 +125,9 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
 
     private var watchRequestedAt = 0L
     private var info: CameraEngine.Info? = null
-    private var profile: StreamProfile = StreamPlan.WIFI
+    // Starts small: the first viewer is often a watch on Bluetooth, and a picture the link cannot carry costs seconds of
+    // freezing before the encoder is restarted smaller. A Wi-Fi viewer lifts it to the wide profile the moment it connects.
+    private var profile: StreamProfile = StreamPlan.BLUETOOTH
 
     // The frame rate asked of the camera: 60 when the road is clear, fewer frames as it narrows (see FrameRateGovernor).
     private val fpsGov = app.heat.core.host.FrameRateGovernor()
@@ -248,7 +250,8 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         }
 
         // The encoder runs for the life of the service so a viewer attaching costs a keyframe, not a session rebuild.
-        startEncoder(StreamPlan.WIFI)
+        governor.reset((StreamPlan.BLUETOOTH.maxBps * 0.7).toInt())
+        startEncoder(StreamPlan.BLUETOOTH)
         engine.analysisIntervalMs = 100L
         engine.analysisEnabled = motion.isEnabled()
         engine.start(desiredFrom(host.config.value))
@@ -540,7 +543,8 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         if (charging || level > (power.lowBatteryWarnPercent + 5)) warnedLow = false
 
         if (++tickCount % 5 == 0) {
-            Log.i(TAG, "alive: encoder frames=${encoder.framesOut} ${encoder.bitrate / 1000}kbps ${_state.value.encoderLabel} viewers=${host.viewerCount.value} via=$slowestCarrier cam=${_state.value.cameraReady} armed=${host.armed.value}")
+            Log.i(TAG, "ceiling ${ceiling()} bps: tier=${streaming.third} quality=${host.config.value.stream.quality} muddiness=${host.config.value.stream.muddiness} thermal=$thermal carrier=$slowestCarrier profile=${profile.width}x${profile.height}")
+            Log.i(TAG, "alive: sent=${accumulatedOffered} dropped=${accumulatedDropped} encoder frames=${encoder.framesOut} ${encoder.bitrate / 1000}kbps ${_state.value.encoderLabel} viewers=${host.viewerCount.value} via=$slowestCarrier cam=${_state.value.cameraReady} armed=${host.armed.value}")
         }
         _state.value = _state.value.copy(battery = level, thermal = thermal, streamKbps = encoder.bitrate / 1000, carrier = slowestCarrier)
         host.updateStatus { it.copy(battery = level, charging = charging, thermal = thermal) }
@@ -605,6 +609,6 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
     private companion object {
         const val TAG = "HeatHub"
         const val SAVE_DEBOUNCE_MS = 400L
-        const val BT_SETTLE_MS = 10_000L
+        const val BT_SETTLE_MS = 3_000L
     }
 }

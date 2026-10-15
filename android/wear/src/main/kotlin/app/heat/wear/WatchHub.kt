@@ -154,7 +154,9 @@ class WatchHub(context: Context) {
         select(c.cameraId, byUser = false)
     }
 
-    private val bluetoothPolicy = RetryPolicy(dialTimeoutMs = 8_000, maxMs = 8_000)
+    // A direct Bluetooth dial that fails (the phone is still starting its camera) is cheap and the dial itself takes about
+    // half a second once the phone listens, so retry quickly: with the old 8 s ceiling the first connection took 10 s.
+    private val bluetoothPolicy = RetryPolicy(minMs = 200, maxMs = 2_000, dialTimeoutMs = 4_000)
 
     @Volatile private var foreground = false
     private val _visible = MutableStateFlow(false)
@@ -497,7 +499,9 @@ class WatchHub(context: Context) {
         }
     }
 
-    private val directPolicy = RetryPolicy(minMs = 400, maxMs = 6_000, dialTimeoutMs = 6_000)
+    // Retries stay quick (1.5 s at most): while the phone is still starting its camera every try fails, and a doubling delay
+    // (up to 6 s) is what made the direct link take about 10 s to come up.
+    private val directPolicy = RetryPolicy(minMs = 300, maxMs = 1_500, dialTimeoutMs = 5_000)
 
     /** The user just allowed Bluetooth: start using the direct route now instead of at the next launch. */
     fun bluetoothPermissionGranted() {

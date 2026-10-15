@@ -44,8 +44,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Someone looking at a camera does not want the screen to doze mid-glance.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        hub = (application as HeatWearApp).hub
+        // Tell the phone first: its camera takes a few seconds to come up, and the hub below can wait for that time.
         app.heat.platform.PeerLauncher.announce(this, intent.getBooleanExtra(app.heat.platform.PeerLauncher.EXTRA_FROM_PEER, false))
+        hub = (application as HeatWearApp).hub
         setContent { WatchRoot(hub) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
