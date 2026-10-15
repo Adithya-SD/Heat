@@ -69,6 +69,7 @@ class CameraClient(
     /** Who the camera says it is (its name). */
     val hello: StateFlow<Msg.Hello?> = _hello.asStateFlow()
 
+    private val seenAlerts = LinkedHashSet<String>()
     private val _alerts = MutableSharedFlow<Msg.Alert>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /** Each alert once, in order, including ones raised while this viewer was briefly disconnected. */
@@ -133,7 +134,10 @@ class CameraClient(
 
             is Msg.Status -> _status.value = msg
             is Msg.Hello -> _hello.value = msg
-            is Msg.Alert -> _alerts.tryEmit(msg)
+            is Msg.Alert -> if (seenAlerts.add("${msg.id}@${msg.atMs}")) {
+                if (seenAlerts.size > 64) seenAlerts.remove(seenAlerts.first())
+                _alerts.tryEmit(msg)
+            }
             else -> Unit
         }
     }

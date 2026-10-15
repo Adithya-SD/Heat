@@ -313,6 +313,24 @@ class HostClientTest {
         job.cancel()
     }
 
+    @Test
+    fun a_viewer_that_joins_after_an_alert_still_hears_about_it_once() = runTest {
+        val r = Rig(this)
+        r.host.raiseAlert(AlertKind.MOTION, 30f)           // nobody is connected yet
+        r.settle()
+        val (c, d) = r.client()
+        val got = CopyOnWriteArrayList<Long>()
+        val job = backgroundScope.launch(Dispatchers.Unconfined) { c.alerts.collect { got += it.id } }
+        r.settle(5_000)
+        assertEquals("the alert from before it joined", 1, got.size)
+
+        // A carrier change brings the session up again; the same alert must not be delivered a second time.
+        d.links.last().cut()
+        r.settle(8_000)
+        assertEquals("still once", 1, got.size)
+        job.cancel()
+    }
+
     // ── robustness ───────────────────────────────────────────────────
 
     @Test

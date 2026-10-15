@@ -180,8 +180,24 @@ class CameraHost(
      */
     fun raiseAlert(kind: AlertKind, changedPct: Float = 0f, escalation: Int = 0) {
         val alert = Msg.Alert(alertIds.incrementAndGet(), kind, System.currentTimeMillis(), changedPct, escalation)
+        synchronized(recentAlerts) {
+            recentAlerts.addLast(alert)
+            while (recentAlerts.size > RECENT_ALERTS) recentAlerts.removeFirst()
+        }
         val bytes = MsgCodec.encode(alert)
         for (v in viewers.values) registry.existing(v.id)?.send(bytes, reliable = true)
+    }
+
+    /**
+     * The last few alerts, kept so a viewer that was out of reach when one was raised (walked out of range, link
+     * down, app just started) still hears about it the moment it is back. Viewers drop what they have already seen.
+     */
+    private val recentAlerts = java.util.ArrayDeque<Msg.Alert>()
+
+    private fun replayAlerts(conv: app.heat.core.link.Conversation) {
+        val now = System.currentTimeMillis()
+        val missed = synchronized(recentAlerts) { recentAlerts.filter { now - it.atMs < RECENT_ALERT_MS } }
+        for (a in missed) conv.send(MsgCodec.encode(a), reliable = true)
     }
 
     /**
@@ -232,6 +248,7 @@ class CameraHost(
             conv.send(MsgCodec.encode(configHost.state(v.lastSeq)))
             conv.send(MsgCodec.encode(currentStatus()))
         }
+        replayAlerts(conv)
         _viewerCount.value = viewers.values.count { registry.existing(it.id)?.isUp == true }
         reevaluateInterest()
     }
@@ -397,6 +414,8 @@ class CameraHost(
     }
 
     private companion object {
+        const val RECENT_ALERTS = 10
+        const val RECENT_ALERT_MS = 5 * 60_000L
         const val CONFIG_FLUSH_MS = 80L
         const val KEYFRAME_MIN_GAP_MS = 300L
     }

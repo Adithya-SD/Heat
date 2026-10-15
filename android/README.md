@@ -75,6 +75,24 @@ Phone and watch must use the same key. Without `-PheatDist` the shared debug key
 in place; the two keys cannot update each other (uninstall first). Output: `phone/build/outputs/apk/release/phone-release.apk`
 (about 23 MB: arm64 and 32-bit ARM, libwebrtc included) and the watch's 2.4 MB one.
 
+## Frame rate, alerts, pictures (added 2026-10-15)
+
+- **Adaptive frame rate.** `FrameRateGovernor` (core, tested) turns the bitrate the loss-driven `BitrateGovernor` allows into a frame
+  rate: it picks the highest of 5/10/15/20/30/45/60 fps that still gives about 0.07 bits per pixel per frame, drops at once when the
+  road narrows and climbs one tier at a time after 4 s of clear road. The camera is asked for the rate directly (the AE target range,
+  no encoder restart); if the phone cannot really deliver it, the measured rate caps it. Order of degradation: frames first, then
+  the bitrate floor. Bluetooth profile is 320x240 up to 30 fps / 500 kbps.
+- **Alerts, bulletproof.** Alerts travel on the reliable channel, the host keeps the last 10 (5 min) and replays them to any viewer
+  that connects later; viewers drop duplicates. With the watch app open an alert is a white flash, a strong buzz and a red ring plus
+  tag that a tap clears (it also ends blackout); with the app closed the watch posts one notification; the phone posts its own only
+  when no viewer is connected. No cooldowns.
+- **Pictures and clips** (`platform/Gallery.kt`, both devices). Capture takes a picture; clipping is off until switched on, then a
+  record button appears and a clip ends by itself after the clip length (default 5 s). At most 20 items (oldest uncollected first),
+  uncollected items deleted after 2 days; Save copies to the device's own gallery and keeps the item. All four are settings.
+- **Quiet start.** The watch app's ping makes the phone start its camera service in the background (`QuietStart`); nothing is shown and
+  the screen is not woken. If Android refuses, a silent notification offers a tap-to-start. The app's own screen reads the same hub.
+- **Safety rule.** A viewer never shows a stale frame: no new frame for 1.5 s and the picture goes black with "No live picture".
+
 ## Modules
 
 | Module | What it is |
