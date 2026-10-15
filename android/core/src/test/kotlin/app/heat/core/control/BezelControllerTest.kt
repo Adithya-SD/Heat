@@ -1,6 +1,7 @@
 package app.heat.core.control
 
 import app.heat.core.model.CameraConfig
+import app.heat.core.model.CameraSteps
 import app.heat.core.model.ConfigHost
 import app.heat.core.model.ConfigSync
 import app.heat.core.model.Facing
@@ -277,6 +278,26 @@ class BezelControllerTest {
         assertEquals(0.5f, BezelController.fraction(BezelMode.EXPOSURE, c), 0.001f)
         assertEquals(0f, BezelController.fraction(BezelMode.ZOOM, c.copy(camera = c.camera.copy(zoom = 0.5f))), 0.001f)
         assertEquals(1f, BezelController.fraction(BezelMode.ZOOM, c.copy(camera = c.camera.copy(zoom = 10f))), 0.001f)
+    }
+
+    @Test
+    fun the_edge_line_is_empty_on_the_first_step_and_a_full_circle_on_the_last() {
+        val c = CameraConfig()
+        fun cam(f: (app.heat.core.model.CameraSettings) -> app.heat.core.model.CameraSettings) = c.copy(camera = f(c.camera))
+        fun at(mode: BezelMode, cfg: CameraConfig) = BezelController.fraction(mode, cfg)
+
+        assertEquals(0f, at(BezelMode.SENSITIVITY, c.copy(detect = c.detect.copy(sensitivity = 1))), 0.0001f)
+        assertEquals(1f, at(BezelMode.SENSITIVITY, c.copy(detect = c.detect.copy(sensitivity = 100))), 0.0001f)
+        assertEquals(0f, at(BezelMode.EXPOSURE, cam { it.copy(exposure = -12) }), 0.0001f)
+        assertEquals(1f, at(BezelMode.EXPOSURE, cam { it.copy(exposure = 12) }), 0.0001f)
+        assertEquals(0f, at(BezelMode.ISO, cam { it.copy(iso = CameraSteps.ISO.first()) }), 0.0001f)
+        assertEquals(1f, at(BezelMode.ISO, cam { it.copy(iso = CameraSteps.ISO.last()) }), 0.0001f)
+        assertEquals(0f, at(BezelMode.FLASH, cam { it.copy(torch = false) }), 0.0001f)
+        assertEquals(1f, at(BezelMode.FLASH, cam { it.copy(torch = true) }), 0.0001f)
+        // Halfway through a setting with an odd number of steps is the middle step, not an approximation of it.
+        val list = CameraSteps.SHUTTER
+        val mid = list.lastIndex / 2
+        assertEquals(mid.toFloat() / list.lastIndex, at(BezelMode.SHUTTER, cam { it.copy(shutterDenom = list[mid]) }), 0.0001f)
     }
 
     @Test

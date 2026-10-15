@@ -173,6 +173,16 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
     val accent = if (armed) Heat.Green else Heat.Orange
     val fraction = cfg?.let { BezelController.fraction(mode, it) } ?: 0f
 
+    // The line shows for a moment after the bezel moves or the mode changes (not on first open), and stays while placing.
+    var lineShown by remember { mutableStateOf(false) }
+    var lineReady by remember { mutableStateOf(false) }
+    LaunchedEffect(mode, fraction) {
+        if (!lineReady) { lineReady = true; return@LaunchedEffect }
+        lineShown = true
+        delay(LINE_LINGER_MS)
+        lineShown = false
+    }
+
     val waited = rememberWaitSeconds(link.phase == LinkState.Phase.UP)
 
     GlassHost(
@@ -242,9 +252,9 @@ fun CameraScreen(client: CameraClient, hub: WatchHub, glass: GlassState, onCamer
                 }
             }
         ) {
-            // The bezel itself, as glass; its gauge shows what the real bezel is currently adjusting.
-            GlassSurface(glass, Modifier.fillMaxSize(), shape = GlassShape.Ring(13f), bezel = 6.dp, tint = 0.02f, scrim = 0.06f) {}
-            Gauge(fraction, accent, Modifier.fillMaxSize())
+            // What the real bezel is adjusting, as a hairline along the screen edge: it fades in while you turn,
+            // grows round the rim one step at a time, closes into a full circle on the last step, and fades away.
+            BezelLine(fraction, accent, visible = placing || lineShown, Modifier.fillMaxSize())
 
             // The menu.
             GlassSurface(
@@ -364,17 +374,27 @@ private fun iconFor(mode: BezelMode): HeatIcon = when (mode) {
     BezelMode.CAMERA -> HeatIcon.Flip
 }
 
-/** A 240-degree gauge hugging the bezel, from the lower left round to the lower right. */
+private const val LINE_LINGER_MS = 1_600L
+
+/**
+ * A thin line riding the very edge of the round screen, starting at twelve o'clock and running clockwise. It is
+ * nothing at the first step and a complete circle at the last, so its length is how far through the setting's own
+ * steps the bezel is. Plain colour, no glass; when it is faded out nothing is drawn at all.
+ */
 @Composable
-private fun Gauge(fraction: Float, color: Color, modifier: Modifier) {
+private fun BezelLine(fraction: Float, color: Color, visible: Boolean, modifier: Modifier) {
+    val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(if (visible) 160 else 650), label = "bezelLineAlpha")
+    val sweep by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(130), label = "bezelLineSweep")
+    if (alpha < 0.01f) return
     Canvas(modifier) {
-        val stroke = 3.dp.toPx()
-        val inset = 6.5.dp.toPx() + stroke / 2
+        if (sweep < 0.002f) return@Canvas
+        val stroke = 1.5.dp.toPx()
+        val inset = 1.dp.toPx() + stroke / 2
         val d = size.minDimension - inset * 2
-        val topLeft = Offset(inset, inset)
-        val arcSize = Size(d, d)
-        drawArc(Color(0x33FFFFFF), 150f, 240f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-        if (fraction > 0.003f) drawArc(color, 150f, 240f * fraction, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        drawArc(
+            color.copy(alpha = alpha), -90f, 360f * sweep, false,
+            Offset(inset, inset), Size(d, d), style = Stroke(stroke, cap = StrokeCap.Round)
+        )
     }
 }
 

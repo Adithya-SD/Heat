@@ -323,7 +323,7 @@ class BezelController(
             BezelMode.CAMERA -> if (c.camera.facing == Facing.FRONT) "Front" else "Rear"
         }
 
-        /** Where the mode's value sits in its range, 0..1, for the gauge round the bezel. */
+        /** How far through the mode's own steps the value is: 0 at the first, 1 at the last. Drives the line round the watch's edge. */
         fun fraction(mode: BezelMode, c: CameraConfig): Float {
             fun index(list: List<Int>, v: Int) = CameraSteps.nearest(list, v).toFloat() / list.lastIndex
             return when (mode) {
@@ -332,7 +332,7 @@ class BezelController(
                     ((ln(c.camera.zoom.toDouble()) - lo) / (hi - lo)).toFloat()
                 }
                 BezelMode.TRACKER -> (c.detect.zone.width - Zone.MIN_SIZE) / (MAX_TRACKER - Zone.MIN_SIZE)
-                BezelMode.SENSITIVITY -> c.detect.sensitivity / 100f
+                BezelMode.SENSITIVITY -> (c.detect.sensitivity - 1) / 99f
                 BezelMode.MUDDINESS -> c.stream.muddiness / 100f
                 BezelMode.EXPOSURE -> (c.camera.exposure + 12) / 24f
                 BezelMode.FLASH -> if (c.camera.torch) 1f else 0f
