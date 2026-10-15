@@ -1,4 +1,4 @@
-# Vigil — video calls and motion cameras, device to device
+# Heat — video calls and motion cameras, device to device
 
 One static page (`public/index.html`), no accounts and no video server. Media goes straight between the two devices over WebRTC; a PeerJS signaling relay only helps them find each other.
 
