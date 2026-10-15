@@ -39,8 +39,9 @@ import kotlin.random.Random
  * 0x02 | ackEpoch u32 | ack u64                                  acknowledgement only
  * ```
  *
- * Thread-safe. Callbacks run under the internal lock, so they must be quick
- * and must not block (hand work to another thread).
+ * Thread-safe. [transmit] runs under the internal lock, so it must be quick and must not block. [deliver] runs
+ * outside it (one message at a time, in order), so the application may take its own locks there and call [send]
+ * from inside it or from under those locks without a lock-order inversion.
  */
 class ReliableChannel(
     private val clock: Clock,
@@ -74,6 +75,14 @@ class ReliableChannel(
     private class Out(val id: Long, val payload: ByteArray, var lastSentMs: Long)
 
     private val lock = Any()
+
+    /** Serialises delivery so order holds across threads. Never taken while [lock] is held. */
+    private val deliverLock = Any()
+
+    private class Delivery(val data: ByteArray, val offset: Int, val length: Int)
+
+    /** Messages ready for the application, collected under [lock] and handed over outside it. */
+    private var inbox: ArrayList<Delivery>? = null
 
     // sender
     private val outbox = ArrayDeque<Out>()
@@ -122,10 +131,20 @@ class ReliableChannel(
 
     // ── receiving ────────────────────────────────────────────────────
 
-    fun onRaw(data: ByteArray, offset: Int, length: Int): Unit = synchronized(lock) {
+    fun onRaw(data: ByteArray, offset: Int, length: Int) {
+        synchronized(deliverLock) {
+            val ready = synchronized(lock) {
+                receive(data, offset, length)
+                inbox.also { inbox = null }
+            }
+            if (ready != null) for (d in ready) deliver(d.data, d.offset, d.length)
+        }
+    }
+
+    private fun receive(data: ByteArray, offset: Int, length: Int) {
         if (length < 1) return
         when (data[offset].toInt()) {
-            FLAG_UNRELIABLE -> deliver(data, offset + 1, length - 1)
+            FLAG_UNRELIABLE -> queue(data, offset + 1, length - 1)
 
             FLAG_RELIABLE -> {
                 if (length < RELIABLE_HEAD) return
@@ -191,7 +210,7 @@ class ReliableChannel(
 
             id == highest + 1 -> {
                 highest = id
-                deliver(data, offset, length)
+                queue(data, offset, length)
                 drainHeld()
             }
 
@@ -201,6 +220,11 @@ class ReliableChannel(
                 while (held.size > config.maxReorder) held.pollLastEntry()
             }
         }
+    }
+
+    private fun queue(data: ByteArray, offset: Int, length: Int) {
+        val list = inbox ?: ArrayList<Delivery>(2).also { inbox = it }
+        list += Delivery(data, offset, length)
     }
 
     private fun drainHeld() {
@@ -214,7 +238,7 @@ class ReliableChannel(
             held.remove(next.key)
             highest = next.key
             val payload = next.value
-            deliver(payload, 0, payload.size)
+            queue(payload, 0, payload.size)
         }
     }
 

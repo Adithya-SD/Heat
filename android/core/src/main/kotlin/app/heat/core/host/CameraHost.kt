@@ -81,6 +81,7 @@ class CameraHost(
         override fun onMessage(data: ByteArray, offset: Int, length: Int) = host.onMessage(this, data, offset, length)
         override fun onMediaDropped(stream: Int) = if (stream == Stream.VIDEO) host.keyframeFor(this) else Unit
         override fun onBestChanged(kind: CarrierKind?) = host.reevaluateInterest()
+        override fun onDown(kind: CarrierKind, reason: app.heat.core.link.CloseReason, detail: String?) { host.lastClose = "$kind $reason ${detail.orEmpty()}" }
         override fun onError(error: Throwable) = host.onError(error)
     }
 
@@ -111,6 +112,10 @@ class CameraHost(
     private var configDirty = false
     private var flushJob: Job? = null
     private var keyTrailing: Job? = null
+
+    /** How the most recent session with any viewer ended, for diagnostics ("LAN PEER_GONE", "BT_DIRECT TIMEOUT no data for 6500 ms"). */
+    @Volatile var lastClose: String? = null
+        private set
 
     /** Errors thrown by application callbacks; never fatal. Collected for diagnostics. */
     @Volatile var lastError: Throwable? = null

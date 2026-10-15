@@ -1347,6 +1347,278 @@ $('#fxw').hidden=!fxCap;fxLabel();on('#fxb',()=>setFx(FXN[(FXN.indexOf(fxMode)+1
  setInterval(()=>{if(document.hidden)return;const L=sceneLum(),want=L==null?1:Math.max(.5,Math.min(1,1.08-1.05*L));
   if(Math.abs(want-bk)>.03){bk+= (want-bk)*.6;document.documentElement.style.setProperty('--bk',bk.toFixed(3));if(fxCap&&fxMode!=='off')$$('.glass').forEach(e=>{if(e._k)tint(e)})}},700)}
 
+/* ===== link:protocol:begin ===== */
+/* Heat Link: the session protocol the Heat phone app speaks, in the browser.
+   One protocol, any carrier: LAN, Bluetooth and the Wear Data Layer carry it in the app; here it rides a WebRTC data
+   channel (a "link" is a PeerJS data connection in raw mode, so the same public signaling server finds it).
+   Everything below mirrors android/core/.../link/{Identity,Records,Handshake,Session,ReliableChannel}.kt byte for byte
+   and is pinned to the Kotlin side by shared test vectors (tests/hl-vectors.js) and a live interop test.
+
+   Layers, bottom up:
+    1. derive(secret): the 12-character room code -> room id (what signaling sees) and group key (what authenticates).
+    2. handshake: both ends prove they hold the key, with fresh nonces, then derive per-session AES-GCM keys.
+    3. records: [u32 length][AES-GCM(type | payload)], counters implicit in the stream (a replayed, dropped or
+       reordered record fails authentication).
+    4. session: control (reliable, ordered, exactly-once via Reliable), media (newest-wins, never queued), ping/pong.
+   Nothing here touches the DOM, so it also loads in Node for tests. */
+const HL = (() => {
+  'use strict';
+  const te = new TextEncoder(), td = new TextDecoder();
+  const subtle = (globalThis.crypto || {}).subtle;
+  const KA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';           /* 31 symbols: no 0/O/1/I/L (the lock's alphabet) */
+  const VERSION = 1;
+  const RT = { READY: 0, CONTROL: 1, MEDIA: 2, PING: 3, PONG: 4, BYE: 5 };
+  const MEDIA_HEAD = 10, MAX_PLAIN = 1 << 20, TAG = 16;
+  const ST = { VIDEO: 1, AUDIO: 2, THUMB: 3 };            /* media stream ids */
+  const MF_KEY = 1;                                       /* media flag: keyframe */
+
+  const norm = s => String(s || '').toUpperCase().split('').filter(c => KA.includes(c)).join('').slice(0, 12);
+  const fmt = s => (norm(s).match(/.{1,4}/g) || []).join('-');
+  const hex = u => Array.from(u, b => b.toString(16).padStart(2, '0')).join('');
+  const unhex = h => Uint8Array.from(h.match(/../g) || [], x => parseInt(x, 16));
+  const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let p = 0; for (const x of a) { o.set(x, p); p += x.length; } return o; };
+  const rnd = n => crypto.getRandomValues(new Uint8Array(n));
+  const put32 = (o, v, p = 0) => { o[p] = v >>> 24; o[p + 1] = v >>> 16; o[p + 2] = v >>> 8; o[p + 3] = v; };
+  const get32 = (b, p = 0) => ((b[p] << 24) | (b[p + 1] << 16) | (b[p + 2] << 8) | b[p + 3]) >>> 0;
+  /* 64-bit values as JS numbers: exact up to 2^53, which a counter, a timestamp or a message id never reaches */
+  const put64 = (o, v, p = 0) => { put32(o, Math.floor(v / 4294967296), p); put32(o, v >>> 0, p + 4); };
+  const get64 = (b, p = 0) => get32(b, p) * 4294967296 + get32(b, p + 4);
+  const same = (a, b) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a[i] ^ b[i]; return d === 0; };
+
+  /* ---------- crypto ---------- */
+  const sha256 = async (...p) => new Uint8Array(await subtle.digest('SHA-256', cat(...p)));
+  const hmacKey = raw => subtle.importKey('raw', raw.length ? raw : new Uint8Array(32), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const hmacWith = async (key, ...p) => new Uint8Array(await subtle.sign('HMAC', key, cat(...p)));
+  const hkdf = async (ikm, salt, info, bytes) => new Uint8Array(await subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, await subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']), bytes * 8));
+  const pbkdf2 = async (secret, salt, iterations, bytes) => new Uint8Array(await subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: te.encode(salt), iterations }, await subtle.importKey('raw', te.encode(secret), 'PBKDF2', false, ['deriveBits']), bytes * 8));
+
+  /* The key every session in a room is authenticated with. */
+  class Group {
+    static async make(raw) {
+      const g = new Group(); g.raw = raw;
+      g.tag = (await sha256(te.encode('heat/1 tag'), raw)).slice(0, 8);
+      g.auth = await hmacKey(await hkdf(raw, new Uint8Array(0), te.encode('heat/1 auth'), 32));
+      return g;
+    }
+  }
+  /* room code -> { secret, rid, group }. The same derivations as RoomCode.kt. */
+  async function derive(code) {
+    const secret = norm(code);
+    if (secret.length !== 12 || !subtle) throw new Error('bad code');
+    const [rid, master] = await Promise.all([pbkdf2(secret, 'heat-link-v1 room', 30000, 10), pbkdf2(secret, 'heat-link-v1 key', 150000, 32)]);
+    return { secret, rid: 'hl-' + hex(rid), group: await Group.make(master) };
+  }
+
+  /* One direction of an AES-256-GCM record stream: nonce = prefix(4) || counter(8), counter implicit. */
+  class Aead {
+    constructor(raw, prefix) { this.key = subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']); this.prefix = prefix; this.n = 0; }
+    nonce() { const o = new Uint8Array(12); o.set(this.prefix, 0); put64(o, this.n++, 4); return o; }   /* called synchronously, in order */
+    async seal(plain, aad) { const iv = this.nonce(); return new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad, tagLength: 128 }, await this.key, plain)); }
+    async open(cipher, aad) { const iv = this.nonce(); return new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad, tagLength: 128 }, await this.key, cipher)); }
+  }
+
+  /* ---------- bytes in, in order ---------- */
+  class Inbox {
+    constructor() { this.q = []; this.len = 0; this.w = null; this.dead = null; }
+    push(u8) { this.q.push(u8); this.len += u8.length; this.wake(); }
+    fail(e) { this.dead = e || new Error('closed'); this.wake(); }
+    wake() { const w = this.w; this.w = null; w && w(); }
+    async read(n) {                                      /* exactly n bytes, or throws once the link is gone */
+      while (this.len < n) { if (this.dead) throw this.dead; await new Promise(r => { this.w = r; }); }
+      const out = new Uint8Array(n); let p = 0;
+      while (p < n) {
+        const h = this.q[0], t = Math.min(h.length, n - p);
+        out.set(h.subarray(0, t), p); p += t;
+        if (t === h.length) this.q.shift(); else this.q[0] = h.subarray(t);
+      }
+      this.len -= n; return out;
+    }
+  }
+
+  /* ---------- handshake (Handshake.kt) ----------
+     client: HELLO(ver, tag, id, nC) -> CHALLENGE(ver, id, nS, proof) -> FINISH(proof) -> first record READY.
+     The dialer does not wait for READY: it has both keys the moment FINISH is out, so it may send at once. */
+  const T = { HELLO: 1, CHALLENGE: 2, FINISH: 3, REJECT: 4 };
+  const L_SERVER = te.encode('heat/1 server'), L_CLIENT = te.encode('heat/1 client'), L_KEYS = te.encode('heat/1 keys');
+  const frame = (type, body) => cat(Uint8Array.of(type, body.length >> 8, body.length & 255), body);
+  async function readFrame(inbox) {
+    const h = await inbox.read(3), len = (h[1] << 8) | h[2];
+    if (len > 256) throw new Error('oversized handshake frame');
+    return [h[0], len ? await inbox.read(len) : new Uint8Array(0)];
+  }
+  async function keys(group, nC, nS, hello) {
+    const okm = await hkdf(group.raw, cat(nC, nS), cat(L_KEYS, await sha256(hello)), 72);
+    return { c2s: okm.slice(0, 32), s2c: okm.slice(32, 64), c2sP: okm.slice(64, 68), s2cP: okm.slice(68, 72) };
+  }
+  /* io: { send(u8) }, inbox: Inbox. Resolves { peer, tx, rx }. */
+  async function dial(io, inbox, selfId, group, expect) {
+    const nC = rnd(16), hello = cat(Uint8Array.of(VERSION), group.tag, selfId, nC);
+    io.send(frame(T.HELLO, hello));
+    const [type, body] = await readFrame(inbox);
+    if (type === T.REJECT) throw Object.assign(new Error('peer is not in our group'), { auth: 1 });
+    if (type !== T.CHALLENGE || body.length !== 1 + 16 + 16 + 32) throw new Error('unexpected reply');
+    if (body[0] !== VERSION) throw new Error('peer speaks protocol ' + body[0]);
+    const sid = body.slice(1, 17), nS = body.slice(17, 33), proof = body.slice(33);
+    if (!same(await hmacWith(group.auth, L_SERVER, hello, sid, nS), proof)) throw Object.assign(new Error('server failed to prove the group key'), { auth: 1 });
+    if (expect && !same(expect, sid)) throw Object.assign(new Error('reached a different device'), { auth: 1 });
+    io.send(frame(T.FINISH, await hmacWith(group.auth, L_CLIENT, hello, sid, nS, proof)));
+    const k = await keys(group, nC, nS, hello);
+    return { peer: sid, tx: new Aead(k.c2s, k.c2sP), rx: new Aead(k.s2c, k.s2cP), awaitReady: true };
+  }
+  async function accept(io, inbox, selfId, group) {
+    const [type, hello] = await readFrame(inbox);
+    if (type !== T.HELLO || hello.length !== 1 + 8 + 16 + 16) throw new Error('bad HELLO');
+    if (hello[0] !== VERSION) { io.send(frame(T.REJECT, new Uint8Array(0))); throw new Error('client speaks protocol ' + hello[0]); }
+    if (!same(hello.slice(1, 9), group.tag)) { io.send(frame(T.REJECT, new Uint8Array(0))); throw Object.assign(new Error('client is not in our group'), { auth: 1 }); }
+    const cid = hello.slice(9, 25), nC = hello.slice(25), nS = rnd(16);
+    const proof = await hmacWith(group.auth, L_SERVER, hello, selfId, nS);
+    io.send(frame(T.CHALLENGE, cat(Uint8Array.of(VERSION), selfId, nS, proof)));
+    const [ft, fin] = await readFrame(inbox);
+    if (ft !== T.FINISH || fin.length !== 32) throw new Error('bad FINISH');
+    if (!same(await hmacWith(group.auth, L_CLIENT, hello, selfId, nS, proof), fin)) { io.send(frame(T.REJECT, new Uint8Array(0))); throw Object.assign(new Error('client failed to prove the group key'), { auth: 1 }); }
+    const k = await keys(group, nC, nS, hello);
+    return { peer: cid, tx: new Aead(k.s2c, k.s2cP), rx: new Aead(k.c2s, k.c2sP), awaitReady: false, sendReady: true };
+  }
+
+  /* ---------- reliable control (ReliableChannel.kt) ----------
+     0x00 payload                                         unreliable
+     0x01 epoch u32, id u64, base u64, ackEpoch u32, ack u64, payload     reliable, with a piggybacked ack
+     0x02 ackEpoch u32, ack u64                           acknowledgement only */
+  class Reliable {
+    constructor(transmit, deliver) {
+      this.transmit = transmit; this.deliver = deliver;
+      this.epoch = get32(rnd(4)) || 1; this.nextId = 1; this.out = [];
+      this.peerEpoch = 0; this.have = false; this.highest = 0; this.held = new Map(); this.dirty = false;
+    }
+    send(payload, reliable = true) {
+      if (!reliable) return this.transmit(cat(Uint8Array.of(0), payload));
+      const e = { id: this.nextId++, payload, at: 0 };
+      this.out.push(e);
+      while (this.out.length > 256) this.out.shift();
+      this.tx(e);
+    }
+    frame(e) {
+      const f = new Uint8Array(33 + e.payload.length);
+      f[0] = 1; put32(f, this.epoch, 1); put64(f, e.id, 5); put64(f, this.out.length ? this.out[0].id : e.id, 13);
+      put32(f, this.have ? this.peerEpoch : 0, 21); put64(f, this.highest, 25); f.set(e.payload, 33);
+      return f;
+    }
+    tx(e) { if (this.transmit(this.frame(e)) !== false) { e.at = Date.now(); this.dirty = false; } }
+    resendAll() { for (const e of this.out.slice(0, 48)) this.tx(e); }      /* a new link: anything unacknowledged goes again */
+    onRaw(b) {
+      if (!b.length) return;
+      if (b[0] === 0) return this.deliver(b.subarray(1));
+      if (b[0] === 2 && b.length >= 13) return this.onAck(get32(b, 1), get64(b, 5));
+      if (b[0] !== 1 || b.length < 33) return;
+      const ep = get32(b, 1), id = get64(b, 5), base = get64(b, 13);
+      this.onAck(get32(b, 21), get64(b, 25));
+      if (!this.have || ep !== this.peerEpoch) { this.have = true; this.peerEpoch = ep; this.highest = 0; this.held.clear(); }
+      this.dirty = true;
+      const data = b.slice(33);
+      if (base > this.highest + 1) { this.highest = base - 1; this.drain(); }   /* the sender no longer holds those: skip */
+      if (id <= this.highest) return;                                            /* duplicate */
+      if (id === this.highest + 1) { this.highest = id; this.deliver(data); this.drain(); }
+      else if (this.held.size < 128) this.held.set(id, data);
+    }
+    drain() {
+      for (;;) {
+        const next = this.highest + 1;
+        for (const k of this.held.keys()) if (k <= this.highest) this.held.delete(k);
+        const d = this.held.get(next);
+        if (!d) break;
+        this.held.delete(next); this.highest = next; this.deliver(d);
+      }
+    }
+    onAck(ep, ack) { if (ep !== this.epoch) return; while (this.out.length && this.out[0].id <= ack) this.out.shift(); }
+    tick() {                                          /* every ~50 ms */
+      if (this.dirty && this.have) { const f = new Uint8Array(13); f[0] = 2; put32(f, this.peerEpoch, 1); put64(f, this.highest, 5); if (this.transmit(f) !== false) this.dirty = false; }
+      const o = this.out[0]; if (o && Date.now() - o.at >= 1500) this.resendAll();
+    }
+  }
+
+  /* ---------- session (Session.kt) ---------- */
+  class Session {
+    /* io: { send(u8) }; inbox: Inbox the transport pushes into; hs: handshake result.
+       handlers: { control(u8), media(stream, flags, ptsUs, u8), closed(reason) } */
+    constructor(io, inbox, hs, h) {
+      this.io = io; this.inbox = inbox; this.hs = hs; this.h = h; this.peer = hs.peer;
+      this.wq = Promise.resolve(); this.closed = false; this.lastRx = Date.now(); this.rtt = -1;
+      this.awaitReady = hs.awaitReady; this.mediaBusy = false; this.needKey = true;
+      this.stats = { rx: 0, tx: 0, dropped: 0 };
+      this.reliable = new Reliable(b => this.control(b), u => h.control && h.control(u));
+    }
+    start() {
+      if (this.hs.sendReady) this.write(RT.READY, new Uint8Array(0));
+      this.readLoop();
+      this.timer = setInterval(() => {
+        if (this.closed) return;
+        const now = Date.now();
+        if (now - this.lastRx > 6500) return this.close('TIMEOUT');
+        if (now - (this.pingAt || 0) >= 2000) { this.pingAt = now; const t = new Uint8Array(8); put64(t, now, 0); this.write(RT.PING, t); }
+        this.reliable.tick();
+      }, 50);
+    }
+    /* serialised: records must hit the wire in the order their nonces were drawn */
+    write(type, ...parts) {
+      if (this.closed) return false;
+      const plain = cat(Uint8Array.of(type), ...parts);
+      if (plain.length > MAX_PLAIN) throw new Error('record too large');
+      const aad = new Uint8Array(4); put32(aad, plain.length + TAG);
+      const sealed = this.hs.tx.seal(plain, aad);          /* nonce drawn now, in call order */
+      this.wq = this.wq.then(async () => { try { const c = await sealed; this.stats.tx += c.length + 4; await this.io.send(cat(aad, c)); } catch (e) { this.close('IO'); } });
+      return true;
+    }
+    control(b) { return this.write(RT.CONTROL, b); }
+    sendControl(payload, reliable = true) { this.reliable.send(payload, reliable); }
+    /* Never queued behind older video: if the previous frame is still being written, this one is dropped, and deltas
+       are withheld until a keyframe (a delta built on a frame the viewer never saw is a smeared picture). */
+    sendMedia(stream, flags, ptsUs, data) {
+      if (this.closed) return false;
+      const key = (flags & MF_KEY) !== 0;
+      if (stream === ST.VIDEO) {
+        if (key) this.needKey = false;
+        else if (this.needKey) { this.stats.dropped++; return false; }
+        if (this.mediaBusy && !key) { this.needKey = true; this.stats.dropped++; this.h.needKey && this.h.needKey(); return false; }
+        this.mediaBusy = true;
+      }
+      const head = new Uint8Array(MEDIA_HEAD); head[0] = stream; head[1] = flags; put64(head, ptsUs, 2);
+      this.write(RT.MEDIA, head, data);
+      if (stream === ST.VIDEO) this.wq.then(() => { this.mediaBusy = false; });
+      return true;
+    }
+    async readLoop() {
+      try {
+        for (;;) {
+          const hdr = await this.inbox.read(4), n = get32(hdr);
+          if (n < 1 + TAG || n > MAX_PLAIN + TAG) throw new Error('bad record length');
+          const p = await this.hs.rx.open(await this.inbox.read(n), hdr);
+          this.lastRx = Date.now(); this.stats.rx += n + 4;
+          if (this.awaitReady) { if (p.length !== 1 || p[0] !== RT.READY) throw Object.assign(new Error('expected READY'), { auth: 1 }); this.awaitReady = false; continue; }
+          switch (p[0]) {
+            case RT.CONTROL: this.reliable.onRaw(p.subarray(1)); break;
+            case RT.MEDIA: if (p.length >= 1 + MEDIA_HEAD) this.h.media && this.h.media(p[1], p[2], get64(p, 3), p.subarray(1 + MEDIA_HEAD)); break;
+            case RT.PING: if (p.length === 9) this.write(RT.PONG, p.slice(1)); break;
+            case RT.PONG: if (p.length === 9) { const s = Date.now() - get64(p, 1); this.rtt = this.rtt < 0 ? s : Math.round((this.rtt * 3 + s) / 4); } break;
+            case RT.BYE: return this.close('PEER_BYE');
+            default: throw new Error('unknown record type');
+          }
+        }
+      } catch (e) { this.close(e && e.auth ? 'REJECTED' : this.closed ? 'LOCAL' : 'IO', e); }
+    }
+    close(reason = 'LOCAL', err) {
+      if (this.closed) return; this.closed = true; clearInterval(this.timer);
+      this.inbox.fail(err);
+      try { this.io.close && this.io.close(); } catch {}
+      this.h.closed && this.h.closed(reason, err);
+    }
+    bye() { if (!this.closed) { this.write(RT.BYE, new Uint8Array(0)); setTimeout(() => this.close('LOCAL'), 300); } }
+  }
+
+  const json = { enc: o => te.encode(JSON.stringify(o)), dec: u => { try { return JSON.parse(td.decode(u)); } catch { return null; } } };
+  return { KA, norm, fmt, hex, unhex, cat, rnd, derive, Group, Aead, Inbox, dial, accept, Reliable, Session, json, ST, MF_KEY, VERSION, RT };
+})();
+/* ===== link:protocol:end ===== */
+
 /* ===== extras ===== */
 /* ===== extras: menus, settings, security panel, recording, reactions, install, offline, boot ===== */
 /* accessible names for icon-only buttons (kept in sync with title changes) */

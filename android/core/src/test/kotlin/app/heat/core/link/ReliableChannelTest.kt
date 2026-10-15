@@ -4,6 +4,9 @@ import app.heat.core.util.Clock
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 class ReliableChannelTest {
@@ -220,6 +223,37 @@ class ReliableChannelTest {
             val wantA = (0 until sentB).map { "B$it" }
             assertTrue(diag("A→B", wantB, n.gotB), wantB == n.gotB)
             assertTrue(diag("B→A", wantA, n.gotA), wantA == n.gotA)
+        }
+    }
+
+    /**
+     * The application takes its own locks inside `deliver` (the camera host does), and sends from under them. If the
+     * channel held its lock while delivering, those two orders would deadlock: a viewer that sent its first message
+     * the instant it connected froze the host's receive loop for good.
+     */
+    @Test
+    fun a_slow_delivery_never_blocks_sending_on_the_same_channel() {
+        val clock = Clock { 1_000L }
+        val frames = ArrayList<ByteArray>()
+        val sender = ReliableChannel(clock, { frames += it.copyOf(); true }, { _, _, _ -> }, epoch = 5)
+        sender.send("hello".toByteArray())
+
+        val inDelivery = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val receiver = ReliableChannel(clock, { true }, { _, _, _ -> inDelivery.countDown(); release.await(10, TimeUnit.SECONDS) }, epoch = 6)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val delivering = pool.submit { receiver.onRaw(frames[0], 0, frames[0].size) }
+            assertTrue(inDelivery.await(5, TimeUnit.SECONDS))
+            // The application is busy inside deliver(); another thread must still be able to send and read state.
+            val sent = pool.submit<Boolean> { receiver.send("reply".toByteArray()) }.get(3, TimeUnit.SECONDS)
+            assertTrue(sent)
+            assertEquals(1, pool.submit<Int> { receiver.pending }.get(3, TimeUnit.SECONDS))
+            release.countDown()
+            delivering.get(3, TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
         }
     }
 }
