@@ -240,7 +240,9 @@ fun CameraScreen(
             }
 
             // Centre: a hint from the bezel, or why there is no picture yet.
+            val live = rememberLive(decoder)
             val centre = overlay ?: waitingText(link, rendered, status?.error, waited, hello?.name)
+                ?: if (!live && incoming == null) "No live picture" else null
             if (centre != null) {
                 Box(
                     Modifier.align(Alignment.Center).clip(RoundedCornerShape(14.dp)).background(Color(0x99000000)).padding(horizontal = 12.dp, vertical = 7.dp)
@@ -320,7 +322,7 @@ private fun rememberGeometry(client: CameraClient, hub: WatchHub): Geometry {
 }
 
 /**
- * One camera's picture: the live video on a surface the decoder draws to, its last still while it starts, and the
+ * One camera's picture: the live video on a surface the decoder draws to (black whenever it is not live), and the
  * tracker box. It is a layer on its own so two cameras can be on screen at once during a hand-over.
  */
 @Composable
@@ -333,24 +335,6 @@ private fun CameraPicture(client: CameraClient, hub: WatchHub, placing: Boolean,
     val rendered by decoder.rendered.collectAsState()
     var surface by remember { mutableStateOf<Surface?>(null) }
     var textureView by remember { mutableStateOf<TextureView?>(null) }
-
-    // The last picture from this camera, shown dimmed the instant the screen opens and faded out when live video starts.
-    val still by produceState<Bitmap?>(null, client) { value = withContext(Dispatchers.IO) { LastPicture.load(ctx, client.cameraId.hex) } }
-    val stillAlpha by animateFloatAsState(if (rendered > 0) 0f else 0.55f, tween(450), label = "still")
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle, client) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE && decoder.rendered.value > 0) {
-                val tv = textureView
-                if (tv != null && tv.isAvailable) {
-                    val bmp = runCatching { tv.getBitmap(192, 192) }.getOrNull()
-                    if (bmp != null) scope.launch(Dispatchers.IO) { LastPicture.save(ctx, client.cameraId.hex, bmp) }
-                }
-            }
-        }
-        lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer) }
-    }
 
     // The view's layout listener outlives this composition's values, so it reads the latest through this holder.
     val live = remember { IntArray(3) }
@@ -389,11 +373,9 @@ private fun CameraPicture(client: CameraClient, hub: WatchHub, placing: Boolean,
             update = { tv -> tv.setTransform(previewMatrix(tv.width.toFloat(), tv.height.toFloat(), g.w, g.h, g.rotation)) },
             modifier = Modifier.fillMaxSize()
         )
-        still?.let { bmp ->
-            if (stillAlpha > 0.01f) {
-                Image(bmp.asImageBitmap(), null, Modifier.fillMaxSize().alpha(stillAlpha), contentScale = ContentScale.Crop)
-            }
-        }
+        // Safety: a picture that has stopped must never pass for a live one. The moment frames stop arriving the
+        // last one is covered with black (and the screen says why), and it is never brought back.
+        if (!rememberLive(decoder)) Box(Modifier.fillMaxSize().background(Color.Black))
         ZoneOverlay(config?.detect?.zone, g.w, g.h, g.rotation, active = placing)
     }
 }
@@ -540,6 +522,33 @@ private fun LinkDot(link: LinkState) {
     val icon = if (link.carrier?.isBluetooth == true) HeatIcon.Bluetooth else HeatIcon.Wifi
     HeatIconView(icon, color, 12.dp)
 }
+
+/**
+ * True only while the decoder is putting new frames on screen: the last one arrived within [STALE_MS]. False before
+ * the first frame, after the stream stops for any reason (link lost, camera stopped, app paused and resumed), and
+ * until fresh frames come again.
+ */
+@Composable
+internal fun rememberLive(decoder: app.heat.platform.PreviewDecoder): Boolean {
+    var lastFrameAt by remember(decoder) { mutableLongStateOf(0L) }
+    var live by remember(decoder) { mutableStateOf(false) }
+    LaunchedEffect(decoder) {
+        decoder.rendered.collect { n ->
+            if (n > 0) { lastFrameAt = android.os.SystemClock.elapsedRealtime(); live = true } else live = false
+        }
+    }
+    LaunchedEffect(decoder) {
+        while (true) {
+            delay(200)
+            val fresh = lastFrameAt > 0 && android.os.SystemClock.elapsedRealtime() - lastFrameAt < STALE_MS
+            if (live != fresh) live = fresh
+        }
+    }
+    return live
+}
+
+/** No new frame for this long and the picture is treated as stopped. Covers the slowest night-mode frame rate. */
+private const val STALE_MS = 1_500L
 
 /** Seconds spent not connected, counting only while not connected; 0 once the link is up. */
 @Composable

@@ -694,7 +694,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-15.2'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-15.3'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -1901,7 +1901,7 @@ const LK = (() => {
   function view(raw) {
     leave(true);
     const code = HL.norm(raw);
-    if (code.length !== 12) return toast('That code is not complete');
+    if (!(code.length === 8 || code.length === 12)) return toast('That code is not complete');
     if (!window.Peer) return toast('The connection library didn’t load — check your internet');
     const R = cur = {
       role: 'view', code, invite: inviteOf(code), stopped: false, sess: null, net: null, dec: null, cfg: null, st: null, hello: null,
@@ -1914,10 +1914,18 @@ const LK = (() => {
     if (!VDec.supported()) { ov(R, true, 'This browser can’t play Heat video', 'Open this room in Chrome, Edge or Safari 16.4 or newer, or in the Heat app.'); return; }
     R.dec = new VDec($e('lkc'), {
       needKey: () => needKey(R),
-      frame: () => { if (!R.live) { R.live = true; ov(R, false); paint(R); } },
+      frame: () => { R.lastAt = performance.now(); if (!R.live) { R.live = true; ov(R, false); paint(R); } },
       fail: msg => ov(R, true, msg)
     });
     R.timers.push(setInterval(() => ui(R), 1000));
+    /* Safety: a picture that has stopped must never pass for a live one. No new frame for 1.5 s and the canvas is
+       wiped black and says so; the next real frame brings the picture back. */
+    R.timers.push(setInterval(() => {
+      if (!R.live || performance.now() - (R.lastAt || 0) < 1500) return;
+      R.live = false;
+      const cv = $e('lkc'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+      ov(R, true, 'No live picture', 'Waiting for the camera…'); paint(R);
+    }, 250));
     HL.derive(code).then(d => {
       if (R.stopped) return;
       ls('hl.code', code); refreshRejoin();
@@ -2054,7 +2062,7 @@ const LK = (() => {
     leave(true);
     if (!window.Peer) return toast('The connection library didn’t load — check your internet');
     if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return toast('This browser can’t send video to the Heat app. Use Chrome, Edge or Safari 16.4 or newer.', undefined, 7000);
-    let code = HL.norm(ls('hl.host') || ''); if (code.length !== 12) { code = HL.newCode(); ls('hl.host', code); }
+    let code = HL.norm(ls('hl.host') || ''); if (!(code.length === 8 || code.length === 12)) { code = HL.newCode(); ls('hl.host', code); }
     const R = cur = {
       role: 'cam', code, invite: inviteOf(code), stopped: false, net: null, stream: null, enc: null, viewers: new Map(), timers: [], state: 'Starting camera…',
       cool: 0, armed: false, armingIn: 0, armAt: 0, rev: 1, sens: 50, facing: 'environment', label: (myName() || 'Web camera').slice(0, 24), zone: { x: 0.34, y: 0.34, width: 0.32, height: 0.32 },
@@ -2285,7 +2293,7 @@ const LK = (() => {
   }
   function refreshRejoin() {
     const c = HL.norm(ls('hl.code') || ''), b = $('#lkre');
-    b.hidden = c.length !== 12;
+    b.hidden = !(c.length === 8 || c.length === 12);
     if (!b.hidden) { b.textContent = 'Rejoin ' + HL.fmt(c); b.onclick = () => view(c); }
   }
 

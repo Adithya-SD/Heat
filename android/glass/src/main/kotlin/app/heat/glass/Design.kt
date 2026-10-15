@@ -102,8 +102,9 @@ private fun DrawScope.drawIcon(icon: HeatIcon, c: Color, u: Float) {
         }
         HeatIcon.Reset -> {
             // A circle chasing its own tail: start over.
+            // A clockwise arc from one o'clock round to eleven, the head at its end pointing on, clockwise, into the gap.
             drawArc(c, -60f, 300f, false, p(4.5f, 4.5f), Size(15f * u, 15f * u), style = stroke)
-            poly(15.6f to 2.9f, 15.75f to 5.5f, 13.3f to 6.6f)
+            poly(5.75f to 4.2f, 9.55f to 4.75f, 8.15f to 8.35f)
         }
         HeatIcon.Record -> drawCircle(c, 6.2f * u, p(12f, 12f), style = Fill)
         HeatIcon.Capture -> {

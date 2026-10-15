@@ -95,7 +95,8 @@ fun RoomViewerScreen(viewer: RoomViewer, onClose: () -> Unit) {
     val armed = status?.armed == true
     val arming = status?.armingIn ?: 0
     val name = cfg?.label ?: hello?.name ?: "Camera"
-    val isLive = link.phase == LinkState.Phase.UP && rendered > 0
+    val fresh = rememberFreshFrames(viewer.decoder)
+    val isLive = link.phase == LinkState.Phase.UP && rendered > 0 && fresh
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
@@ -121,6 +122,8 @@ fun RoomViewerScreen(viewer: RoomViewer, onClose: () -> Unit) {
             update = { tv -> tv.setTransform(containMatrix(tv.width.toFloat(), tv.height.toFloat(), vw, vh, rotation)) },
             modifier = Modifier.fillMaxSize()
         )
+        // Safety: a stopped picture must never pass for a live one. No fresh frames, no picture.
+        if (!fresh) Box(Modifier.fillMaxSize().background(Color.Black))
 
         Box(Modifier.fillMaxWidth().height(140.dp).background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent))))
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(400.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000)))))
@@ -279,4 +282,24 @@ internal fun containMatrix(w: Float, h: Float, videoW: Int, videoH: Int, rotatio
     m.setScale(videoW * s / w, videoH * s / h, cx, cy)
     m.postRotate(rotation.toFloat(), cx, cy)
     return m
+}
+
+/** True only while new frames keep arriving (the last within 1.5 s); false before the first and after they stop. */
+@Composable
+internal fun rememberFreshFrames(decoder: app.heat.platform.PreviewDecoder): Boolean {
+    var lastFrameAt by remember(decoder) { mutableStateOf(0L) }
+    var fresh by remember(decoder) { mutableStateOf(false) }
+    LaunchedEffect(decoder) {
+        decoder.rendered.collect { n ->
+            if (n > 0) { lastFrameAt = android.os.SystemClock.elapsedRealtime(); fresh = true } else fresh = false
+        }
+    }
+    LaunchedEffect(decoder) {
+        while (true) {
+            kotlinx.coroutines.delay(200)
+            val f = lastFrameAt > 0 && android.os.SystemClock.elapsedRealtime() - lastFrameAt < 1_500
+            if (fresh != f) fresh = f
+        }
+    }
+    return fresh
 }
