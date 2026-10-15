@@ -34,7 +34,14 @@ object StreamPlan {
      * will probably be Wi-Fi a second later would make the picture flicker), and offering Bluetooth megabits
      * only turns every frame into a drop.
      */
-    fun carrierCap(link: CarrierKind?): Int = if (link?.isBluetooth == true) BLUETOOTH.maxBps else Int.MAX_VALUE
+    fun carrierCap(link: CarrierKind?): Int = when {
+        link?.isBluetooth == true -> BLUETOOTH.maxBps
+        link == CarrierKind.WEBRTC -> INTERNET_MAX_BPS
+        else -> Int.MAX_VALUE
+    }
+
+    /** What an internet viewer is offered at most: most home uplinks and mobile networks carry this steadily. */
+    const val INTERNET_MAX_BPS = 2_500_000
 
     fun profileFor(link: CarrierKind?): StreamProfile =
         if (link?.isBluetooth == true) BLUETOOTH else WIFI // LAN, relay, or unknown: start wide; the governor backs off fast.

@@ -14,6 +14,7 @@ import app.heat.core.link.TcpDialer
 import app.heat.core.model.HapticProfile
 import app.heat.core.model.Msg
 import app.heat.core.util.Clock
+import app.heat.platform.PreviewDecoder
 import app.heat.platform.DataLayerDialer
 import app.heat.platform.DataLayerHooks
 import app.heat.platform.DataLayerNames

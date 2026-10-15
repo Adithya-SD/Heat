@@ -79,7 +79,7 @@ import kotlinx.coroutines.delay
  * the row of chips, and the same settings, worded the same way, that the watch's menu offers.
  */
 @Composable
-fun LiveScreen(hub: CameraHub, onSettings: () -> Unit) {
+fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
     val config by hub.host.config.collectAsState()
     val armed by hub.host.armed.collectAsState()
     val viewers by hub.host.viewerCount.collectAsState()
@@ -187,7 +187,7 @@ fun LiveScreen(hub: CameraHub, onSettings: () -> Unit) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             TopBar(armed, remaining, viewers, hubState.battery, hubState.carrier?.label, onFlip = {
                 hub.host.editLocally { it.copy(camera = it.camera.copy(facing = if (it.camera.facing == Facing.REAR) Facing.FRONT else Facing.REAR)) }
-            }, onSettings = onSettings)
+            }, onRooms = onRooms, onSettings = onSettings)
 
             hubState.error?.let { err ->
                 Spacer(Modifier.height(10.dp))
@@ -273,7 +273,7 @@ fun LiveScreen(hub: CameraHub, onSettings: () -> Unit) {
 }
 
 @Composable
-private fun TopBar(armed: Boolean, remaining: Int, viewers: Int, battery: Int, carrier: String?, onFlip: () -> Unit, onSettings: () -> Unit) {
+private fun TopBar(armed: Boolean, remaining: Int, viewers: Int, battery: Int, carrier: String?, onFlip: () -> Unit, onRooms: () -> Unit, onSettings: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.matte(CircleShape).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(9.dp).background(if (armed) Heat.Green else if (remaining > 0) Heat.Amber else Heat.TextFaint, CircleShape))
@@ -286,7 +286,7 @@ private fun TopBar(armed: Boolean, remaining: Int, viewers: Int, battery: Int, c
                 HeatText("$viewers", size = 14, color = Heat.Ember1, weight = FontWeight.SemiBold)
                 if (carrier != null) {
                     Spacer(Modifier.width(8.dp))
-                    HeatIconView(if (carrier == "Wi-Fi") HeatIcon.Wifi else HeatIcon.Bluetooth, Heat.TextDim, 14.dp)
+                    HeatIconView(when (carrier) { "Wi-Fi" -> HeatIcon.Wifi; "Internet" -> HeatIcon.Link; else -> HeatIcon.Bluetooth }, Heat.TextDim, 14.dp)
                 }
             }
         }
@@ -298,6 +298,8 @@ private fun TopBar(armed: Boolean, remaining: Int, viewers: Int, battery: Int, c
             Spacer(Modifier.width(8.dp))
         }
         RoundButton(HeatIcon.Flip, onFlip)
+        Spacer(Modifier.width(8.dp))
+        RoundButton(HeatIcon.Link, onRooms)
         Spacer(Modifier.width(8.dp))
         RoundButton(HeatIcon.Gear, onSettings)
     }

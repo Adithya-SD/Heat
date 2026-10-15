@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -45,7 +47,7 @@ object Heat {
 
 enum class HeatIcon {
     Bolt, Flip, Gear, Shield, Back, Close, Check, Eye, Plus, Minus, Camera, Alert, Wifi, Bluetooth, Aim, List, Chevron,
-    Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search
+    Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search, Link, Share, Copy
 }
 
 /**
@@ -134,6 +136,23 @@ private fun DrawScope.drawIcon(icon: HeatIcon, c: Color, u: Float) {
         HeatIcon.Search -> {
             drawCircle(c, 6.2f * u, p(10.5f, 10.5f), style = stroke)
             poly(15.2f to 15.2f, 20.5f to 20.5f)
+        }
+        HeatIcon.Link -> {
+            // two chain links lying at 45 degrees, overlapping in the middle
+            rotate(-45f, p(12f, 12f)) {
+                drawRoundRect(c, p(1.2f, 8.5f), Size(11.5f * u, 7f * u), CornerRadius(3.5f * u), style = stroke)
+                drawRoundRect(c, p(11.3f, 8.5f), Size(11.5f * u, 7f * u), CornerRadius(3.5f * u), style = stroke)
+            }
+        }
+        HeatIcon.Share -> {
+            drawCircle(c, 2.6f * u, p(18f, 5.5f), style = stroke)
+            drawCircle(c, 2.6f * u, p(6f, 12f), style = stroke)
+            drawCircle(c, 2.6f * u, p(18f, 18.5f), style = stroke)
+            poly(8.3f to 10.8f, 15.7f to 6.7f); poly(8.3f to 13.2f, 15.7f to 17.3f)
+        }
+        HeatIcon.Copy -> {
+            drawRoundRect(c, p(8.5f, 8.5f), Size(12f * u, 12f * u), CornerRadius(2.5f * u), style = stroke)
+            poly(15.5f to 8.5f, 15.5f to 5f, 13f to 3.5f, 5f to 3.5f, 3.5f to 5f, 3.5f to 13f, 5f to 15.5f, 8.5f to 15.5f)
         }
         HeatIcon.Waves -> {
             poly(6f to 9f, 6f to 15f); poly(10f to 5f, 10f to 19f); poly(14f to 8f, 14f to 16f); poly(18f to 10f, 18f to 14f)

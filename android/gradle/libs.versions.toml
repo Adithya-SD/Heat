@@ -11,6 +11,9 @@ kotlinxSerialization = "1.11.0"
 coroutines = "1.11.0"
 junit = "4.13.2"
 skiko = "0.153.0"
+webrtc = "150.7871.01"
+okhttp = "5.5.0"
+zxing = "3.5.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +40,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 skiko-windows = { group = "org.jetbrains.skiko", name = "skiko-awt-runtime-windows-x64", version.ref = "skiko" }
 skiko-linux = { group = "org.jetbrains.skiko", name = "skiko-awt-runtime-linux-x64", version.ref = "skiko" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+webrtc-android = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtc" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

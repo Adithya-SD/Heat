@@ -22,7 +22,10 @@ enum class CarrierKind(val rank: Int, val label: String) {
     BLUETOOTH(2, "Bluetooth"),
 
     /** Through another of our devices that can reach the camera when we cannot. */
-    RELAY(3, "Relay");
+    RELAY(3, "Relay"),
+
+    /** A WebRTC data channel found through a room code: another network, a browser, anywhere. Peer to peer, or relayed by TURN. */
+    WEBRTC(4, "Internet");
 
     /** Either Bluetooth route: what decides how much video can be sent. */
     val isBluetooth: Boolean get() = this == BT_DIRECT || this == BLUETOOTH

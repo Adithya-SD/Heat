@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,14 +37,33 @@ import app.heat.phone.service.CameraService
 import app.heat.phone.service.HubHolder
 import app.heat.phone.ui.GlassPillButton
 import app.heat.glass.HeatText
+import app.heat.core.room.RoomCode
+import app.heat.phone.rooms.RoomViewer
 import app.heat.phone.ui.LiveScreen
+import app.heat.phone.ui.RoomViewerScreen
+import app.heat.phone.ui.RoomsScreen
 import app.heat.phone.ui.SettingsScreen
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    /** A room code that arrived as a link (heat://link/CODE, or the page's #link=CODE); consumed once by the UI. */
+    private val invite = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { PhoneRoot() }
+        readInvite(intent)
+        setContent { PhoneRoot(invite) }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        readInvite(intent)
+    }
+
+    private fun readInvite(intent: android.content.Intent?) {
+        val text = intent?.dataString ?: return
+        RoomCode.parseInvite(text)?.let { invite.value = it }
     }
 }
 
@@ -52,7 +72,7 @@ private fun permissionsWanted(): Array<String> =
     arrayOf(Manifest.permission.CAMERA, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
 
 @Composable
-private fun PhoneRoot() {
+private fun PhoneRoot(invite: androidx.compose.runtime.MutableState<String?>) {
     val ctx = LocalContext.current
     fun has(p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
 
@@ -70,7 +90,35 @@ private fun PhoneRoot() {
     val hub by HubHolder.hub.collectAsState()
     val glass = remember { GlassState() }
     var screen by rememberSaveable { mutableStateOf("live") }
-    BackHandler(enabled = screen != "live") { screen = "live" }
+    BackHandler(enabled = screen != "live") { screen = if (screen == "view") "rooms" else "live" }
+
+    // A joined room. Not saveable on purpose: leaving the app leaves the room, so no decoder or link is left running.
+    var viewer by remember { mutableStateOf<RoomViewer?>(null) }
+    val scope = rememberCoroutineScope()
+    fun join(code: String) {
+        val h = hub ?: return
+        scope.launch {
+            viewer?.stop()
+            val v = h.rooms.join(code)
+            v.start()
+            viewer = v
+            screen = "view"
+        }
+    }
+    fun leave() {
+        viewer?.stop()
+        viewer = null
+        screen = "rooms"
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewer?.stop() } }
+    LaunchedEffect(invite.value, hub) {
+        val code = invite.value
+        if (code != null && hub != null) {
+            invite.value = null
+            hub?.rooms?.remember(code)
+            join(code)
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         val h = hub
@@ -85,7 +133,9 @@ private fun PhoneRoot() {
 
             h == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { HeatText("Starting camera…", color = Heat.TextDim) }
             screen == "settings" -> SettingsScreen(h, glass) { screen = "live" }
-            else -> LiveScreen(h) { screen = "settings" }
+            screen == "rooms" -> RoomsScreen(h, onBack = { screen = "live" }, onJoin = { join(it) })
+            screen == "view" && viewer != null -> RoomViewerScreen(viewer!!, onClose = { leave() })
+            else -> LiveScreen(h, onRooms = { screen = "rooms" }, onSettings = { screen = "settings" })
         }
     }
 }

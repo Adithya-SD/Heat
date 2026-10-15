@@ -454,7 +454,7 @@ body[data-s=lkview] .bg,body[data-s=lkcam] .bg{display:none}
 </div>
 
 <!-- invite sheet (QR, code, link) -->
-<div class="pop" id="pop" role="dialog" aria-modal="true" aria-labelledby="pt"><div class="glass c2"><b id="pt">Invite someone</b><img id="qr" alt="QR code for the invite link" hidden><div class="big" id="pc" title="Copy code"></div><div class="keyrow" id="pkr" hidden><small>Room key</small><div class="keyv" id="pk"></div></div><small class="hint" id="ph"></small><div class="row"><button class="ghost" id="pl">Copy invite link</button><button class="ghost" id="ps" hidden>Share…</button></div></div></div>
+<div class="pop" id="pop" role="dialog" aria-modal="true" aria-labelledby="pt"><div class="glass c2"><b id="pt">Invite someone</b><img id="qr" alt="QR code for the invite link" hidden><div class="big" id="pc" title="Copy code"></div><div class="keyrow" id="pkr" hidden><small>Room key</small><div class="keyv" id="pk"></div></div><small class="hint" id="ph"></small><div class="row"><button class="ghost" id="pl">Copy invite link</button><button class="ghost" id="ps" hidden>Share…</button></div><button class="lk" id="lknew" hidden>New code…</button></div></div>
 <div class="pop" id="dg" role="dialog" aria-modal="true" aria-label="Connection check"><div class="glass c2 dg"><b>Connection check</b><small class="hint" id="dgs"></small><div id="dgr"></div><div class="row"><button class="ghost" id="dga">Run again</button><button class="ghost" id="dgc">Copy report</button></div></div></div>
 <div class="pop" id="keyp" role="dialog" aria-modal="true" aria-labelledby="keyt"><form class="glass c2 form" id="keyf" autocomplete="off"><svg class="i big-i"><use href="#i-lock"/></svg><b id="keyt">This room is locked</b><small class="hint" id="keyh">Enter the room key from the host (12 characters).</small><input id="keyi" aria-label="Room key" autocapitalize="characters" spellcheck="false" maxlength="14" placeholder="XXXX-XXXX-XXXX"><div class="row"><button class="ghost" type="button" id="keyx">Cancel</button><button class="ghost pri" type="submit">Join</button></div></form></div>
 <div class="pop" id="setp" role="dialog" aria-modal="true" aria-labelledby="setT"><form class="glass c2 form" id="setf" autocomplete="off"><b id="setT">Settings</b>
@@ -2269,7 +2269,10 @@ const LK = (() => {
     if (window.qrcode) { try { const z = qrcode(0, 'M'); z.addData(R.invite); z.make(); q.src = z.createDataURL(6, 0); q.hidden = false; } catch {} }
     $('#pt').textContent = R.role === 'cam' ? 'Share this camera' : 'Invite someone to watch';
     $('#pkr').hidden = true;
-    $('#ph').textContent = 'Anyone with the Heat app or this page can watch with this code. It is also the key: nobody without it can join, and the server only sees a hash.';
+    $('#ph').textContent = R.role === 'cam'
+      ? 'This code stays the same until you change it, so you can hand it out once and people can come back any time. It is also the key: nobody without it can join, and the server only sees a hash.'
+      : 'Anyone with the Heat app or this page can watch with this code. It is also the key: nobody without it can join, and the server only sees a hash.';
+    const nb = $('#lknew'); nb.hidden = R.role !== 'cam'; nb.textContent = 'New code…'; nb.dataset.armed = '';
     $('#pl').hidden = false; $('#ps').hidden = !navigator.share; $('#pop').classList.add('s');
   }
   function refreshRejoin() {
@@ -2280,6 +2283,12 @@ const LK = (() => {
 
   /* ---------- wiring ---------- */
   const sel = id => $e(id);
+  /* a new code locks out everyone who has the old one, so it takes two taps */
+  sel('lknew').onclick = e => {
+    const R = cur, b = e.currentTarget; if (!R || R.role !== 'cam') return;
+    if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Tap again: the old code stops working'; clearTimeout(b._t); b._t = setTimeout(() => { b.dataset.armed = ''; b.textContent = 'New code…'; }, 4000); return; }
+    ls('hl.host', HL.newCode()); $('#pop').classList.remove('s'); host(); toast('New code. The old one no longer works.');
+  };
   sel('lkx').onclick = () => leave(); sel('lkcx').onclick = () => leave();
   sel('lkinv').onclick = invite; sel('lkcinv').onclick = invite;
   sel('lkfs').onclick = () => fs();
@@ -2325,7 +2334,7 @@ const LK = (() => {
     view, host, leave, invite, refreshRejoin,
     get active() { return !!cur; },
     info() { return cur ? { url: cur.invite, code: cur.code } : null; },
-    debug() { return cur ? { role: cur.role, last: cur.last, state: cur.state, live: cur.live, rtt: cur.sess && cur.sess.rtt, viewers: cur.viewers ? cur.viewers.size : undefined, sent: cur.sent, decoded: cur.dec && cur.dec.shown, rxv: cur.rxv, dec: cur.dec && { ready: cur.dec.ready, state: cur.dec.dec && cur.dec.dec.state, q: cur.dec.dec && cur.dec.dec.decodeQueueSize } } : null; }
+    debug() { return cur ? { role: cur.role, last: cur.last, state: cur.state, live: cur.live, cfg: cur.cfg, pend: cur.pend, st: cur.st, rtt: cur.sess && cur.sess.rtt, viewers: cur.viewers ? cur.viewers.size : undefined, sent: cur.sent, decoded: cur.dec && cur.dec.shown, rxv: cur.rxv, dec: cur.dec && { ready: cur.dec.ready, state: cur.dec.dec && cur.dec.dec.state, q: cur.dec.dec && cur.dec.dec.decodeQueueSize } } : null; }
   };
 })();
 /* ===== link:rooms:end ===== */

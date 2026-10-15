@@ -33,6 +33,7 @@ import app.heat.core.motion.MotionEngine
 import app.heat.core.util.Clock
 import app.heat.phone.camera.CameraEngine
 import app.heat.phone.camera.H264Encoder
+import app.heat.phone.rooms.RoomManager
 import app.heat.platform.DataLayerHooks
 import app.heat.platform.GroupSync
 import app.heat.platform.MulticastLockHolder
@@ -184,6 +185,9 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         }
     )
 
+    /** Heat Link: this phone's own room, and the rooms it joins. Sessions that arrive over the internet land in [host]. */
+    val rooms = RoomManager(appContext, scope, deviceId, host.acceptHandler())
+
     // ── lifecycle ────────────────────────────────────────────────────
 
     fun start() {
@@ -194,6 +198,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         DataLayerHooks.acceptor = acceptor
         rfcomm = RfcommListener(appContext, scope, acceptor).also { it.start() }
         mark("accepting viewers (Wi-Fi and Bluetooth)")
+        rooms.restore()
 
         multicast.acquire()
         beacon = Beacon(deviceId, groupKey, scope, clock)
@@ -244,6 +249,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
 
     fun close() {
         DataLayerHooks.acceptor = null
+        runCatching { rooms.shutdown() }
         runCatching { network.stop() }
         runCatching { orientation.disable() }
         runCatching { beacon.stop() }
@@ -354,7 +360,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
      * Bluetooth first and finds Wi-Fi a second later must not make the picture restart twice.
      */
     private fun followCarriers(carriers: List<CarrierKind>, now: Long) {
-        slowestCarrier = carriers.firstOrNull { it.isBluetooth } ?: carriers.firstOrNull()
+        slowestCarrier = carriers.minByOrNull { StreamPlan.carrierCap(it) }
         if (carriers.isEmpty()) {
             btOnlySinceMs = 0
             return

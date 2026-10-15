@@ -20,6 +20,9 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        // libwebrtc is big and per-architecture. Every phone that can run this camera app is 64-bit ARM or older 32-bit ARM.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -62,6 +65,8 @@ android {
 
 dependencies {
     implementation(project(":platform"))
+    implementation(project(":rooms"))
+    implementation(libs.zxing.core)
     implementation(project(":glass"))
 
     implementation(platform(libs.androidx.compose.bom))

@@ -46,13 +46,15 @@ class CameraClient(
     clock: Clock,
     sessionConfig: SessionConfig = SessionConfig(),
     private val role: Role = Role.VIEWER,
-    private val appVersion: String = "1"
+    private val appVersion: String = "1",
+    /** Hold the peer to [cameraId]. Off for a room, where the camera is whoever holds the code and its id is not known beforehand. */
+    pin: Boolean = true
 ) : PeerListener {
 
     private val name = selfName
     private val sync = ConfigSync()
 
-    val link: PeerLink = PeerLink(cameraId, self, group, scope, clock, this, sessionConfig)
+    val link: PeerLink = PeerLink(if (pin) cameraId else null, self, group, scope, clock, this, sessionConfig)
 
     private val _config = MutableStateFlow<CameraConfig?>(null)
 
