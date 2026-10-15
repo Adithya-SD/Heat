@@ -694,7 +694,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-15.4'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-15.5'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -704,6 +704,7 @@ const norm=s=>s.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8),fmt=c=>c.lengt
 let mode,kind,peer,stream,facing='environment',code,vp,conn,call,rt,wd,hb,cti,ot,wtm,tk=0,ctk=0,sid=0,lastRx=0,liveOn=0,muted=false,ac,wl,evs=[],unread=0,tto,bg,lid=0,ut=0,
  dialAt=0,openAt=0,startAt=0,lp=null,lpBusy=0,lastErr='',lastSt=['',0],
  zoomR=null,zoomV=null,rotHinted=0,rotMode=['cw','ccw','off'].includes(ls('rot'))?ls('rot'):'cw',remoteOn=0,swapped=0,micOn=1,camOn=1,rmic=1,rcam=1,callT0=0,scr=null,cUnread=0,waiting=0,camN=2;
+let heatFb='';   /* a code typed into the call box: if no call has it, try it as a Heat room */
 let rname='',askAdmit=ls('ask')!=='0',lockPick=ls('lk')!=='0',pendingKey='',bad=0,helloBusy=0,waitingAdmit=0,camId='',micId='',nsOn=ls('ns')!=='0',netKind='',scrAt=0,askCur=null;
 const askQ=[],admitted=new Set(),knock=new Map(),hooks={stop:[],go:[]},myName=()=>(ls('name')||'').trim().slice(0,24);
 const viewers=new Map(),go=s=>{document.body.dataset.s=s;scrAt=performance.now();requestAnimationFrame(fit);layout();hooks.go.forEach(f=>f(s))};
@@ -1079,6 +1080,8 @@ function viewPeer(){
  p.on('error',e=>{if(p.dead||mode!=='view')return;
   if(e.type==='peer-unavailable'){
    lastErr='unavail';const old=conn;conn=null;try{old&&old.close()}catch{}
+   /* typed into the video-call box but no call room has that code: it is a Heat room (same 8 symbols), so open it as one */
+   if(!liveOn&&heatFb&&heatFb===code){const hc=heatFb;heatFb='';stop();LK.view(hc);return}
    if(!liveOn)stat('Host not found — waiting for it…',0);sched(2000)}
   else{
    lastErr='net';stat(['network','server-error','socket-error','socket-closed'].includes(e.type)?'Can’t reach the server — retrying…':'Reconnecting…',0);
@@ -1203,7 +1206,7 @@ const openDiag=()=>{$('#dg').classList.add('s');runDiag()};
 on('#dgo',openDiag);$$('.dgb').forEach(b=>b.onclick=openDiag);on('#dga',runDiag);on('#dgc',()=>dgReport?copyText(dgReport,'Report copied'):toast('Wait for the check to finish'));
 $('#dg').onclick=e=>{if(e.target.id==='dg'){$('#dg').classList.remove('s');dgRun++}};
 $('#bid').textContent='build '+BUILD;
-$('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();viewStart(v)}};
+$('#ci').oninput=e=>{const v=norm(e.target.value);e.target.value=fmt(v);if(v.length===8){e.target.blur();heatFb=v;viewStart(v)}};
 $('#lki').oninput=e=>{const v=HL.norm(e.target.value);e.target.value=HL.fmt(v);if(v.length===8){e.target.blur();e.target.value='';LK.view(v)}};
 $('#lki').addEventListener('paste',e=>{const c=linkCodeIn((e.clipboardData||window.clipboardData).getData('text')||'');if(c){e.preventDefault();$('#lki').value='';LK.view(c)}});
 $('#cs').hidden=!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
@@ -1281,7 +1284,7 @@ $('#ci').addEventListener('paste',e=>{
  const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
  const t=lt.trim(),m=/join=([A-Z2-9]{8})/i.exec(t),km=/[#&]k=([A-Z2-9]{12})/i.exec(t);
  const c=m?m[1].toUpperCase():/^[A-Za-z0-9 -]{8,12}$/.test(t)?norm(t):'';
- if(c.length===8){e.preventDefault();$('#ci').value=fmt(c);$('#ci').blur();viewStart(c,km?km[1].toUpperCase():'')}});
+ if(c.length===8){e.preventDefault();$('#ci').value=fmt(c);$('#ci').blur();heatFb=c;viewStart(c,km?km[1].toUpperCase():'')}});
 /* don't lose a running camera or call to a stray tab close */
 addEventListener('beforeunload',e=>{if(mode==='host'||(mode==='view'&&liveOn)){e.preventDefault();e.returnValue=''}});
 
