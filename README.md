@@ -16,7 +16,7 @@ One standalone page, [`public/index.html`](public/index.html). No accounts, no v
 ## Heat Link: rooms shared with the Android app
 
 The **Heat app** segment on the home screen opens a room that the Heat Android app and other browsers can join with a
-12-symbol code (`ABCD-EFGH-JKMN`), a link (`#link=CODE`) or a QR code. A room is one camera and any number of viewers, and
+8-symbol code (`ABCD-EFGH`; older 12-symbol codes still work), a link (`#link=CODE`) or a QR code. A room is one camera and any number of viewers, and
 either end can be the phone or a browser: the phone shares its camera and a page watches it, a page shares its camera and
 the phone watches it, or two pages watch each other.
 

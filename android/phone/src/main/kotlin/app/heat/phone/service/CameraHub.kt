@@ -215,6 +215,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         network.start()
         _state.value = _state.value.copy(lanAddress = TcpListener.localAddress())
 
+        host.onViewerPatch = { who, patch -> Log.i(TAG, "settings from $who: $patch") }
         orientation = object : OrientationEventListener(appContext) {
             override fun onOrientationChanged(degrees: Int) {
                 if (degrees == ORIENTATION_UNKNOWN) return

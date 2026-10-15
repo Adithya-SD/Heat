@@ -110,7 +110,18 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
     val smoother = remember(hubState.zoomMin, hubState.zoomMax) {
         ZoomSmoother(zoomShown.floatValue, hubState.zoomMin.coerceAtMost(1f), hubState.zoomMax.coerceAtLeast(1f))
     }
+    val switchingNow by rememberUpdatedState(hubState.lensSwitching)
+    val lensNow by rememberUpdatedState(hubState.activeLens?.ratio ?: 1f)
+    val hasWider by rememberUpdatedState(hubState.lenses.any { it.ratio < (hubState.activeLens?.ratio ?: 1f) * 0.99f })
     LaunchedEffect(target, smoother) {
+        // Going wider than the lens in use, the camera changes lens first and only then moves. The screen does the
+        // same: it holds still (showing the last frame) until the new lens's first frame, then moves with the camera.
+        if (hasWider && target < lensNow * 0.999f && smoother.settled) {
+            var waited = 0
+            while (!switchingNow && waited < 250) { delay(10); waited += 10 }
+            while (switchingNow && waited < 3_000) { delay(10); waited += 10 }
+            delay(180)                                 // the camera holds the old framing this long too
+        }
         smoother.setTarget(target)
         var last = 0L
         while (!smoother.settled) {
@@ -139,7 +150,7 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
                 dissolve.snapTo(1f)
             }
         } else if (frozen != null) {
-            dissolve.animateTo(0f, tween(520))
+            dissolve.animateTo(0f, tween(160))
             frozen = null
         }
     }

@@ -226,7 +226,7 @@ private fun JoinCard(recent: List<String>, onJoin: (String) -> Unit, onForget: (
         }
         Spacer(Modifier.height(14.dp))
         Box(Modifier.fillMaxWidth().matte(RoundedCornerShape(16.dp), Heat.MatteHi).padding(horizontal = 16.dp, vertical = 16.dp), contentAlignment = Alignment.Center) {
-            if (field.text.isEmpty()) HeatText("ABCD-EFGH-JKMN", size = 22, color = Heat.TextFaint, align = TextAlign.Center)
+            if (field.text.isEmpty()) HeatText("ABCD-EFGH", size = 22, color = Heat.TextFaint, align = TextAlign.Center)
             BasicTextField(
                 field, { set(it.text) },
                 textStyle = TextStyle(color = Heat.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center, letterSpacing = 1.sp),

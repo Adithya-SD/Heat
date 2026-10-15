@@ -173,51 +173,6 @@ private fun CameraRow(c: CameraClient, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-// ── activity ─────────────────────────────────────────────────────────
-
-@Composable
-private fun ActivityScreen(hub: WatchHub, back: () -> Unit) {
-    val entries by hub.activity.collectAsState()
-    val list = rememberScalingLazyListState()
-    ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        item { HeatText("Activity", size = 15, weight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp)) }
-        if (entries.isEmpty()) item { HeatText("Nothing yet. Alerts from every camera appear here with their picture.", size = 12, color = Heat.TextDim, align = TextAlign.Center, modifier = Modifier.fillMaxWidth(0.8f)) }
-        for (e in entries) item(key = "${e.camera.hex}-${e.atMs}") {
-            ActivityRow(e) { hub.select(e.camera); back() }
-        }
-        item { Spacer(Modifier.height(24.dp)) }
-    }
-}
-
-@Composable
-private fun ActivityRow(e: WatchHub.ActivityEntry, onClick: () -> Unit) {
-    val time = remember(e.atMs) { java.text.DateFormat.getTimeInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(e.atMs)) }
-    Row(
-        Modifier.fillMaxWidth(0.88f).clip(RoundedCornerShape(20.dp)).background(Color(0x26FFFFFF)).clickable(onClick = onClick).padding(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val pic = e.picture
-        Box(Modifier.size(width = 54.dp, height = 40.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
-            if (pic != null) Image(pic.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            else HeatIconView(HeatIcon.Pictures, Heat.TextFaint, 18.dp)
-        }
-        Spacer(Modifier.width(9.dp))
-        Column(Modifier.weight(1f)) {
-            HeatText(e.cameraName, size = 13, weight = FontWeight.SemiBold, maxLines = 1)
-            HeatText(
-                when (e.kind) {
-                    AlertKind.MOTION -> "Motion"
-                    AlertKind.TAMPER -> "Moved"
-                    AlertKind.LOW_BATTERY -> "Low battery"
-                    AlertKind.OVERHEAT -> "Hot"
-                    AlertKind.CAMERA_ERROR -> "Camera problem"
-                } + " · " + time,
-                size = 10, color = Heat.TextDim, maxLines = 1
-            )
-        }
-    }
-}
-
 // ── settings ─────────────────────────────────────────────────────────
 
 @Composable

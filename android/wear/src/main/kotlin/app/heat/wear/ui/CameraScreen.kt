@@ -231,7 +231,7 @@ fun CameraScreen(
                     Spacer(Modifier.width(6.dp))
                     HeatIconView(iconFor(mode), accent, 14.dp)
                     Spacer(Modifier.width(5.dp))
-                    HeatText(mode.displayName, size = 11, weight = FontWeight.Medium, color = Heat.TextDim, maxLines = 1)
+                    if (cfg == null || lineShown) HeatText(mode.displayName, size = 11, weight = FontWeight.Medium, color = Heat.TextDim, maxLines = 1)
                     if (cfg != null) {
                         Spacer(Modifier.width(6.dp))
                         HeatText(BezelController.describe(mode, cfg), size = 13, weight = FontWeight.Bold, color = Heat.Text, maxLines = 1)
@@ -401,10 +401,10 @@ private fun CameraPicture(client: CameraClient, hub: WatchHub, placing: Boolean,
 // ── the ring of buttons ──────────────────────────────────────────────
 
 /**
- * Six glass buttons on the rim, in mirrored pairs, all the same size and the same distance from the edge: arm
- * (shield) at three o'clock and power at nine; gallery and reset in the upper corners; settings and blackout in the
- * lower ones. The menu chip owns twelve o'clock, and at six sits one small glass pill: take a picture on the left,
- * record on the right. Angles are clockwise from twelve; radii are a fraction of the screen's own.
+ * The buttons on the rim, placed as in the reference layout: arm (shield) top-left and the gallery top-right, power
+ * at nine and reset at three, settings bottom-left and blackout bottom-right, the capture button large at six with
+ * record as a small dot beside it. The menu chip owns twelve o'clock. Angles are clockwise from twelve; radii and
+ * sizes are fractions of the screen's own radius, so the layout is the same on every watch.
  */
 @Composable
 private fun EdgeButtons(
@@ -423,29 +423,67 @@ private fun EdgeButtons(
             val a = Math.toRadians(angle)
             return this.align(Alignment.Center).offset(x = r * (radius * Math.sin(a)).toFloat(), y = r * (-radius * Math.cos(a)).toFloat())
         }
-        val ring = 0.77f
-        GlassButton(glass, Modifier.at(90.0, ring), onArm, tint = if (armed) Color(0x3334D27A) else null) {
-            if (arming > 0) HeatText("$arming", size = 14, weight = FontWeight.Bold, color = Heat.Amber)
-            else HeatIconView(HeatIcon.Shield, if (armed) Heat.Green else Heat.Text, ICON)
+        val small = r * 0.27f
+        val icon = r * 0.13f
+        GlassButton(glass, Modifier.at(318.0, 0.80f), small, onArm, tint = if (armed) Color(0x3334D27A) else null) {
+            if (arming > 0) HeatText("$arming", size = 13, weight = FontWeight.Bold, color = Heat.Amber)
+            else HeatIconView(HeatIcon.Shield, if (armed) Heat.Green else Heat.Text, icon)
         }
-        GlassButton(glass, Modifier.at(270.0, ring), { if (powerArmed) onPower() else powerArmed = true }, tint = if (powerArmed) Color(0x55FF4D4D) else null) {
-            HeatIconView(HeatIcon.Power, if (powerArmed) Heat.Red else Heat.Text, ICON)
+        GalleryButton(glass, Modifier.at(42.0, 0.80f), small, icon, latest, onGallery)
+        GlassButton(glass, Modifier.at(270.0, 0.78f), small, { if (powerArmed) onPower() else powerArmed = true }, tint = if (powerArmed) Color(0x55FF4D4D) else null) {
+            HeatIconView(HeatIcon.Power, if (powerArmed) Heat.Red else Heat.Text, icon)
         }
-        GalleryButton(glass, Modifier.at(300.0, ring), latest, onGallery)
-        GlassButton(glass, Modifier.at(60.0, ring), onReset) { HeatIconView(HeatIcon.Reset, Heat.Text, ICON) }
-        GlassButton(glass, Modifier.at(240.0, ring), onSettings) { HeatIconView(HeatIcon.Gear, Heat.Text, ICON) }
-        GlassButton(glass, Modifier.at(120.0, ring), onBlackout) { HeatIconView(HeatIcon.Eye, Heat.Text, ICON) }
-        CaptureRecord(glass, Modifier.at(180.0, 0.74f), recordingSince, onPhoto, onRecord)
+        GlassButton(glass, Modifier.at(90.0, 0.78f), small, onReset) { HeatIconView(HeatIcon.Reset, Heat.Text, icon) }
+        GlassButton(glass, Modifier.at(223.0, 0.84f), small, onSettings) { HeatIconView(HeatIcon.Gear, Heat.Text, icon) }
+        GlassButton(glass, Modifier.at(137.0, 0.84f), small, onBlackout) { HeatIconView(HeatIcon.Eye, Heat.Text, icon) }
+        CaptureButton(glass, Modifier.at(180.0, 0.71f), r * 0.36f, onPhoto)
+        RecordDot(glass, Modifier.at(214.0, 0.62f), r * 0.17f, recordingSince, onRecord)
         if (flash) Box(Modifier.fillMaxSize().background(Color(0x55FFFFFF)))
+    }
+}
+
+/** Take a picture: the one larger glass button, ringed in the accent colour. */
+@Composable
+private fun CaptureButton(glass: GlassState, modifier: Modifier, size: Dp, onPhoto: () -> Unit) {
+    GlassButton(glass, modifier, size, onPhoto) {
+        Box(Modifier.fillMaxSize().border(1.5.dp, Heat.Orange.copy(alpha = 0.8f), CircleShape), contentAlignment = Alignment.Center) {
+            HeatIconView(HeatIcon.Camera, Heat.Orange, size * 0.42f)
+        }
+    }
+}
+
+/** Record: a small dot that turns into the running time while a clip is being written. */
+@Composable
+private fun RecordDot(glass: GlassState, modifier: Modifier, size: Dp, recordingSince: Long?, onRecord: () -> Unit) {
+    val now by produceState(android.os.SystemClock.elapsedRealtime(), recordingSince) {
+        while (recordingSince != null) { value = android.os.SystemClock.elapsedRealtime(); delay(250) }
+    }
+    if (recordingSince == null) {
+        GlassButton(glass, modifier, size, onRecord) {
+            Box(Modifier.size(size * 0.45f).clip(CircleShape).background(Heat.Red))
+        }
+    } else {
+        val blink = ((now - recordingSince) / 500) % 2 == 0L
+        GlassSurface(
+            glass,
+            modifier.size(width = size * 2.6f, height = size).pointerInput(onRecord) { detectTapGestures(onTap = { onRecord() }) },
+            shape = GlassShape.Capsule, bezel = 6.dp, tint = 0.02f, scrim = 0.14f
+        ) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(if (blink) Heat.Red else Heat.Red.copy(alpha = 0.35f)))
+                Spacer(Modifier.width(3.dp))
+                HeatText(formatDuration(now - recordingSince), size = 9, weight = FontWeight.Bold, color = Heat.Text, maxLines = 1)
+            }
+        }
     }
 }
 
 /** One round glass button. [tint] washes the glass with a colour for a state (armed, about to power off). */
 @Composable
-private fun GlassButton(glass: GlassState, modifier: Modifier, onClick: () -> Unit, tint: Color? = null, content: @Composable () -> Unit) {
+private fun GlassButton(glass: GlassState, modifier: Modifier, size: Dp, onClick: () -> Unit, tint: Color? = null, content: @Composable () -> Unit) {
     GlassSurface(
         glass,
-        modifier.size(BUTTON).pointerInput(onClick) { detectTapGestures(onTap = { onClick() }) },
+        modifier.size(size).pointerInput(onClick) { detectTapGestures(onTap = { onClick() }) },
         shape = GlassShape.Capsule, bezel = 8.dp, tint = 0.02f, scrim = 0.12f
     ) {
         Box(Modifier.fillMaxSize().clip(CircleShape).background(tint ?: Color.Transparent), contentAlignment = Alignment.Center) { content() }
@@ -454,13 +492,13 @@ private fun GlassButton(glass: GlassState, modifier: Modifier, onClick: () -> Un
 
 /** The gallery: the newest picture or clip fills the glass, with what it is written small inside it. */
 @Composable
-private fun GalleryButton(glass: GlassState, modifier: Modifier, latest: Gallery.Item?, onClick: () -> Unit) {
+private fun GalleryButton(glass: GlassState, modifier: Modifier, size: Dp, icon: Dp, latest: Gallery.Item?, onClick: () -> Unit) {
     val thumb by produceState<Bitmap?>(null, latest?.thumb?.path) {
         value = latest?.thumb?.let { f -> withContext(Dispatchers.IO) { runCatching { android.graphics.BitmapFactory.decodeFile(f.path) }.getOrNull() } }
     }
-    GlassButton(glass, modifier, onClick) {
+    GlassButton(glass, modifier, size, onClick) {
         val t = thumb
-        if (t == null) HeatIconView(HeatIcon.Pictures, Heat.Text, ICON)
+        if (t == null) HeatIconView(HeatIcon.Pictures, Heat.Text, icon)
         else Box(Modifier.fillMaxSize().padding(2.5.dp).clip(CircleShape)) {
             Image(t.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             val label = when (latest?.kind) {
@@ -475,39 +513,11 @@ private fun GalleryButton(glass: GlassState, modifier: Modifier, latest: Gallery
     }
 }
 
-/** Take a picture (left) or record (right): one small glass pill, split by a hairline. Recording shows its time. */
-@Composable
-private fun CaptureRecord(glass: GlassState, modifier: Modifier, recordingSince: Long?, onPhoto: () -> Unit, onRecord: () -> Unit) {
-    val now by produceState(android.os.SystemClock.elapsedRealtime(), recordingSince) {
-        while (recordingSince != null) { value = android.os.SystemClock.elapsedRealtime(); delay(250) }
-    }
-    GlassSurface(glass, modifier.size(width = 70.dp, height = 30.dp), shape = GlassShape.Capsule, bezel = 7.dp, tint = 0.02f, scrim = 0.12f) {
-        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f).fillMaxHeight().pointerInput(onPhoto) { detectTapGestures(onTap = { onPhoto() }) }, contentAlignment = Alignment.Center) {
-                HeatIconView(HeatIcon.Capture, Heat.Text, 15.dp)
-            }
-            Box(Modifier.size(width = 0.6.dp, height = 16.dp).background(Color(0x40FFFFFF)))
-            Box(Modifier.weight(1f).fillMaxHeight().pointerInput(onRecord) { detectTapGestures(onTap = { onRecord() }) }, contentAlignment = Alignment.Center) {
-                if (recordingSince != null) {
-                    val blink = ((now - recordingSince) / 500) % 2 == 0L
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(6.dp).clip(CircleShape).background(if (blink) Heat.Red else Heat.Red.copy(alpha = 0.35f)))
-                        Spacer(Modifier.width(3.dp))
-                        HeatText(formatDuration(now - recordingSince), size = 9, weight = FontWeight.Bold, color = Heat.Text, maxLines = 1)
-                    }
-                } else HeatIconView(HeatIcon.Record, Heat.Red, 13.dp)
-            }
-        }
-    }
-}
-
 internal fun formatDuration(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
     return "%d:%02d".format(s / 60, s % 60)
 }
 
-private val BUTTON = 36.dp
-private val ICON = 17.dp
 
 /** Touch position in view pixels -> sensor-space fractions, which is where the tracker box lives. */
 private fun placeZone(bezel: BezelController, at: Offset, w: Int, h: Int, videoW: Int, videoH: Int, rotation: Int) {

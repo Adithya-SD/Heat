@@ -28,6 +28,7 @@ rootProject.name = "HeatAndroid"
 // :glass-preview JVM tool that renders the real AGSL shader to PNG so refraction can be checked without a device
 // :phone         camera + hub app
 // :wear          watch viewer/remote app
+// :lab           Lens Lab: a separate plain camera app for trying out a phone's lenses (not Heat)
 include(":core")
 include(":platform")
 include(":rooms")
@@ -35,3 +36,4 @@ include(":glass")
 include(":glass-preview")
 include(":phone")
 include(":wear")
+include(":lab")

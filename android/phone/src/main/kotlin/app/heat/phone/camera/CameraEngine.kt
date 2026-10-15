@@ -153,6 +153,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
     private var switching = false
     private var switchStartedMs = 0L
     private var openAfterClose = false
+    private var holdZoomUntilMs = 0L
 
     // Updates from any thread land here; only the newest is ever applied.
     private val pendingDesired = AtomicReference<Desired?>(null)
@@ -237,6 +238,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
         val wantEncoder = if (droppedEncoder) null else encoderSurface?.takeIf { it.isValid }
         val needRebuild = session == null || wantPreview !== builtPreview || wantEncoder !== builtEncoder
         if (needRebuild) {
+            if (!building) Log.i(TAG, "session build: none=${session == null} preview=${wantPreview !== builtPreview} encoder=${wantEncoder !== builtEncoder}")
             if (!building) buildSession(dev, wantPreview, wantEncoder)
         } else {
             applyRequest()
@@ -600,6 +602,9 @@ class CameraEngine(context: Context, private val listener: Listener) {
             if (s !== session) return
             if (switching) {
                 switching = false
+                // The new lens shows the old framing for a moment (the screen fades it in over the frozen frame), and
+                // only then does the zoom move, so the motion is seen on the new lens instead of hidden in the fade.
+                holdZoomUntilMs = SystemClock.elapsedRealtime() + POST_SWITCH_HOLD_MS
                 Log.i(TAG, "lens switch complete in ${SystemClock.elapsedRealtime() - switchStartedMs} ms")
                 listener.onLensSwitch(false)
             }
@@ -629,6 +634,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
             }
             return
         }
+        if (SystemClock.elapsedRealtime() < holdZoomUntilMs) { lastFrameNs = timestampNs; return }
         if (reportedSettled) Log.i(TAG, "zoom moving: ${sm.zoom} -> ${sm.target} on device $openId")
         reportedSettled = false
         sm.step(dt)
@@ -787,6 +793,8 @@ class CameraEngine(context: Context, private val listener: Listener) {
 
     private companion object {
         const val TAG = "HeatCamera"
+        /** After a lens change, how long the new lens holds the old framing before the zoom moves. Keep equal to the UI's. */
+        const val POST_SWITCH_HOLD_MS = 180L
         val HIDDEN_IDS = (2..9).map { it.toString() } + (20..29).map { it.toString() } + (50..59).map { it.toString() }
     }
 }

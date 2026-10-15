@@ -117,6 +117,9 @@ class CameraHost(
     @Volatile var lastClose: String? = null
         private set
 
+    /** Diagnostics: every settings change a viewer sends, with who sent it. */
+    @Volatile var onViewerPatch: ((viewer: String, patch: String) -> Unit)? = null
+
     /** Errors thrown by application callbacks; never fatal. Collected for diagnostics. */
     @Volatile var lastError: Throwable? = null
         private set
@@ -239,6 +242,7 @@ class CameraHost(
             when (msg) {
                 is Msg.SetConfig -> {
                     v.lastSeq = msg.seq
+                    onViewerPatch?.invoke(v.id.short, msg.patch.toString())
                     val old = configHost.config
                     configHost.apply(msg.patch)
                     if (configHost.config != old) afterConfigChange(old) else markConfigDirty()

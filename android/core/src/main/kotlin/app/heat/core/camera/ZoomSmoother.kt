@@ -34,13 +34,16 @@ class ZoomSmoother(
     /** Seconds to settle a tiny move. */
     private val baseSettleSec: Float = 0.11f,
     /** Extra seconds per natural-log unit of distance (a doubling is 0.69). */
-    private val perLogUnitSec: Float = 0.22f
+    private val perLogUnitSec: Float = 0.42f
 ) {
     private var x1 = ln(initial.coerceIn(minZoom, maxZoom).toDouble())
     private var v1 = 0.0
     private var x2 = x1
     private var v2 = 0.0
     private var goal = x1
+
+    /** Current stiffness. Eased toward what the distance asks for, so a change of target never jolts the speed. */
+    private var omega = -1.0
 
     /** The zoom to show right now. */
     val zoom: Float get() = exp(x2).toFloat()
@@ -65,6 +68,7 @@ class ZoomSmoother(
         goal = x1
         v1 = 0.0
         v2 = 0.0
+        omega = -1.0
     }
 
     /** Advance by [dtSec] seconds and return the new zoom. */
@@ -77,7 +81,8 @@ class ZoomSmoother(
         val n = ceil(dtSec / SLICE).toInt().coerceIn(1, MAX_SLICES)
         val h = dtSec.toDouble() / n
         repeat(n) {
-            val omega = omegaFor(abs(goal - x2))
+            val want = omegaFor(abs(goal - x2))
+            omega = if (omega < 0) want else omega + (want - omega) * (h / OMEGA_EASE_SEC).coerceAtMost(1.0)
             val nx1 = advance(x1, v1, goal, omega, h)
             val nv1 = advanceV(x1, v1, goal, omega, h)
             // The second spring chases the first; use the first's midpoint over the slice for accuracy.
@@ -110,6 +115,7 @@ class ZoomSmoother(
         /** Two springs in a row are within ~2% of the target after about this many time constants. */
         const val SETTLE_FACTOR = 8.4
         const val MAX_OMEGA = 90.0
+        const val OMEGA_EASE_SEC = 0.12
         const val SLICE = 1.0 / 240
         const val MAX_SLICES = 128
         const val EPS_X = 1e-4
