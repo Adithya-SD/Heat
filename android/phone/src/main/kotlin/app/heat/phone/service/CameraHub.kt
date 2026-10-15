@@ -126,6 +126,12 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
     private var watchRequestedAt = 0L
     private var info: CameraEngine.Info? = null
     private var profile: StreamProfile = StreamPlan.WIFI
+
+    // The frame rate asked of the camera: 60 when the road is clear, fewer frames as it narrows (see FrameRateGovernor).
+    private val fpsGov = app.heat.core.host.FrameRateGovernor()
+    @Volatile private var targetFps = 30
+    private var fpsCapFromCamera = 60
+    private var slowFrames = 0
     private var streaming = Triple(false, false, Tier.MAX)
     private var deviceRotation = 0
     private var thermal = 0
@@ -225,9 +231,11 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
                     pushStatus()
                 }
             }
+        }.also {
+            // The phone's own screen stays portrait, but the stream carries how the phone is held, so the watch and
+            // other viewers turn the picture upright when the phone is turned (the viewer rotates, the app does not).
+            if (it.canDetectOrientation()) it.enable()
         }
-        // The picture is locked upright as the phone stands (portrait): turning the phone must not turn what the
-        // watch and viewers see. The listener stays defined but is never enabled, so the rotation is always 0.
 
         // Give the watch the household key. Retried until the Data Layer accepts it.
         scope.launch {
@@ -290,7 +298,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         if (r.triggered) {
             host.raiseAlert(AlertKind.MOTION, r.changedPercent, r.escalation)
             _state.value = _state.value.copy(lastMotionMs = System.currentTimeMillis(), motionPercent = r.changedPercent)
-            AlertNotifier.motion(appContext, host.config.value)
+            AlertNotifier.motion(appContext, host.config.value, host.viewerCount.value)
         }
         if (_state.value.calibrating != r.calibrating) _state.value = _state.value.copy(calibrating = r.calibrating)
     }
@@ -338,7 +346,37 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         }
     }
 
+    // ── pictures and clips ───────────────────────────────────────────
+
+    /** What this phone has captured: pictures from the preview, clips written from the encoder's own stream. */
+    val gallery = app.heat.platform.Gallery(appContext, "heat/phone-gallery")
+    @Volatile private var clipSink: app.heat.platform.Gallery.ClipSink? = null
+
+    /** How the phone is held, as the stream reports it: what makes a viewer (or a saved clip) turn the picture upright. */
+    private fun streamRotation(): Int {
+        val i = info ?: return 0
+        val dev = if (i.facing == Facing.FRONT) -deviceRotation else deviceRotation
+        return (i.sensorOrientation + dev + 360) % 360
+    }
+
+    /**
+     * Records a clip from the encoder's stream, which is already running for viewers: no second encode and no extra
+     * camera use. It starts at the next keyframe (asked for now), ends by itself after the clip length in settings,
+     * or when stopped. [thumb] is the picture shown for it in the gallery.
+     */
+    fun startClip(thumb: android.graphics.Bitmap?): Boolean {
+        if (!encoder.running) return false
+        val sink = gallery.startClip(encoder.width, encoder.height, streamRotation(), host.config.value.label, emptyList(), thumb) { clipSink = null }
+            ?: return true
+        clipSink = sink
+        encoder.requestKeyframe()
+        return true
+    }
+
+    fun stopClip() = gallery.stopClip()
+
     private fun onEncoded(flags: Int, ptsUs: Long, data: ByteArray, offset: Int, length: Int) {
+        clipSink?.write(flags and app.heat.core.link.MediaFlags.KEYFRAME != 0, ptsUs, data, offset, length)
         mark("first encoded frame")
         val asked = watchRequestedAt
         if (asked != 0L && flags and app.heat.core.link.MediaFlags.KEYFRAME != 0) {
@@ -386,6 +424,9 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
     private fun switchProfile(p: StreamProfile, startBps: Int) {
         Log.i(TAG, "encoder profile -> ${p.width}x${p.height}@${p.fps}")
         governor.reset(startBps)
+        fpsGov.reset(30)
+        targetFps = 30
+        fpsCapFromCamera = 60
         startEncoder(p)
         pushStatus()
     }
@@ -405,7 +446,8 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         iso = c.camera.iso,
         shutterDenom = c.camera.shutterDenom,
         blendLenses = c.camera.blendLenses,
-        lowPower = !streaming.first && host.armed.value && !screenWanted
+        lowPower = !streaming.first && host.armed.value && !screenWanted,
+        fps = targetFps
     )
 
     @Volatile var screenWanted = false
@@ -481,6 +523,7 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         accumulatedDropped += dropped
         val bps = governor.sample(accumulatedOffered, accumulatedDropped, ceiling(), clock.nowMs())
         if (encoder.running) encoder.setBitrate(bps)
+        adaptFrameRate(bps)
 
         // Battery policy: warn once on the way down, and stop watching rather than die silently in the night.
         val power = host.config.value.power
@@ -504,6 +547,27 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         pushStatus()
     }
 
+    /**
+     * Fewer, better frames as the road narrows; up to 60 when it is clear. The camera is asked for the rate directly
+     * (no encoder restart), and if it cannot really deliver what was asked (some phones ignore a 60 fps range when
+     * three outputs are open) the cap drops to what it does deliver, so no rate is ever claimed that is not real.
+     */
+    private fun adaptFrameRate(bps: Int) {
+        if (!encoder.running) return
+        val camMax = minOf(profile.fps, info?.maxFps ?: 30)
+        val measured = engine.measuredFps
+        if (measured in 1..(targetFps * 7 / 10) && targetFps >= 45) {
+            if (++slowFrames >= 3) { fpsCapFromCamera = if (measured >= 30) 30 else 15; slowFrames = 0 }
+        } else slowFrames = 0
+        val next = fpsGov.update(bps, encoder.width * encoder.height, minOf(camMax, fpsCapFromCamera), clock.nowMs())
+        if (next != targetFps) {
+            Log.i(TAG, "frame rate $targetFps -> $next (bitrate ${bps / 1000} kbps, camera delivers $measured)")
+            targetFps = next
+            engine.update(desiredFrom(host.config.value))
+            pushStatus()
+        }
+    }
+
     private var tickCount = 0
     private var warnedLow = false
     private var accumulatedOffered = 0L
@@ -513,16 +577,13 @@ class CameraHub(private val context: Context) : CameraEngine.Listener {
         val i = info
         val c = host.config.value
         val s = _state.value
-        val rotation = if (i == null) 0 else {
-            val dev = if (i.facing == Facing.FRONT) -deviceRotation else deviceRotation
-            (i.sensorOrientation + dev + 360) % 360
-        }
+        val rotation = streamRotation()
         val lens = s.activeLens
         val digital = lens != null && s.zoomNow >= lens.ratio * 1.05f
         host.updateStatus {
             it.copy(
                 streaming = streaming.first && encoder.running,
-                stream = if (encoder.running) StreamInfo(encoder.width, encoder.height, profile.fps, encoder.bitrate, "avc", rotation) else null,
+                stream = if (encoder.running) StreamInfo(encoder.width, encoder.height, targetFps, encoder.bitrate, "avc", rotation) else null,
                 lenses = s.lenses.map { l -> LensInfo(l.id, l.label, l.ratio) },
                 activeLens = lens?.id,
                 lensLabel = lens?.let { l -> "${l.label}x" } ?: if (c.camera.zoom < 0.95f) "0.5x" else "1x",

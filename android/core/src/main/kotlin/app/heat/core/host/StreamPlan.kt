@@ -22,11 +22,12 @@ data class StreamProfile(
  * big one starved of bits.
  */
 object StreamPlan {
-    val WIFI = StreamProfile(640, 480, 30, minBps = 400_000, maxBps = 6_000_000, gopSec = 1)
-    val BLUETOOTH = StreamProfile(320, 240, 15, minBps = 60_000, maxBps = 360_000, gopSec = 2)
+    // fps here is the most the profile may use; FrameRateGovernor chooses the rate actually asked of the camera.
+    val WIFI = StreamProfile(640, 480, 60, minBps = 200_000, maxBps = 6_000_000, gopSec = 1)
+    val BLUETOOTH = StreamProfile(320, 240, 30, minBps = 40_000, maxBps = 500_000, gopSec = 2)
 
     /** The range the bitrate governor may roam, wide enough for either profile: carriers cap it from above. */
-    val GOVERNOR_RANGE = StreamProfile(640, 480, 30, minBps = 60_000, maxBps = 6_000_000)
+    val GOVERNOR_RANGE = StreamProfile(640, 480, 60, minBps = 40_000, maxBps = 6_000_000)
 
     /**
      * The most a carrier can carry, whatever the encoder is currently set to. Needed because the encoder keeps

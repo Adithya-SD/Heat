@@ -16,6 +16,7 @@ import app.heat.core.model.AlertKind
 import app.heat.core.model.HapticProfile
 import app.heat.core.model.Msg
 import app.heat.core.util.Clock
+import app.heat.platform.Gallery
 import app.heat.platform.PreviewDecoder
 import app.heat.platform.DataLayerDialer
 import app.heat.platform.DataLayerHooks
@@ -99,6 +100,15 @@ class WatchHub(context: Context) {
     data class AlertEvent(val camera: DeviceId, val alert: Msg.Alert)
     private val _lastAlert = MutableStateFlow<AlertEvent?>(null)
     val lastAlert: StateFlow<AlertEvent?> = _lastAlert.asStateFlow()
+
+    /** The alert the wearer has not yet acknowledged. Shown as an indicator on the camera screen until a tap clears it. */
+    data class Banner(val camera: DeviceId, val cameraName: String, val kind: AlertKind, val atMs: Long)
+    private val _banner = MutableStateFlow<Banner?>(null)
+    val banner: StateFlow<Banner?> = _banner.asStateFlow()
+    fun dismissBanner() { _banner.value = null }
+
+    /** One value per motion alert that should flash the screen white (the app is on screen). */
+    val flashes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 4)
 
     /** One line of the activity list: which camera, what, when, and the picture that came with it if there was one. */
     class ActivityEntry(val camera: DeviceId, val cameraName: String, val kind: AlertKind, val atMs: Long, @Volatile var picture: Bitmap? = null)
@@ -409,6 +419,15 @@ class WatchHub(context: Context) {
                         val profile = c.config.value?.alerts?.watchHaptics ?: HapticProfile.NORMAL
                         haptics.alert(profile, a)
                         _lastAlert.value = AlertEvent(c.cameraId, a)
+                        val who = c.hello.value?.name ?: name
+                        if (a.kind == AlertKind.MOTION || a.kind == AlertKind.TAMPER) {
+                            _banner.value = Banner(c.cameraId, who, a.kind, System.currentTimeMillis())
+                            // An alert always breaks blackout: the screen that was resting is the one that must be seen.
+                            if (blackout) setBlackout(false)
+                            if (foreground) flashes.tryEmit(Unit)
+                        }
+                        // App closed: a notification on the watch. App open: the flash, the buzz and the indicator are the alert.
+                        if (!foreground) WatchAlerts.post(appContext, who, a.kind)
                         val entry = ActivityEntry(c.cameraId, c.hello.value?.name ?: name, a.kind, System.currentTimeMillis())
                         lastEntry[c.cameraId] = entry
                         _activity.value = (listOf(entry) + _activity.value).take(ACTIVITY_MAX)

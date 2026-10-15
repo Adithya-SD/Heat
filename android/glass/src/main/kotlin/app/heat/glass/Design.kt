@@ -48,7 +48,7 @@ object Heat {
 enum class HeatIcon {
     Bolt, Flip, Gear, Shield, Back, Close, Check, Eye, Plus, Minus, Camera, Alert, Wifi, Bluetooth, Aim, List, Chevron,
     Zoom, Waves, Drop, Sun, Focus, Thermo, Grain, Shutter, Moon, Lock, Search, Link, Share, Copy, Power, Rooms, Pictures, EyeOff,
-    Reset, Record, Capture, Play, Trash
+    Reset, Record, Capture, Play, Trash, Save
 }
 
 /**
@@ -110,6 +110,11 @@ private fun DrawScope.drawIcon(icon: HeatIcon, c: Color, u: Float) {
         HeatIcon.Capture -> {
             drawCircle(c, 8.6f * u, p(12f, 12f), style = stroke)
             drawCircle(c, 6.1f * u, p(12f, 12f), style = Fill)
+        }
+        HeatIcon.Save -> {
+            poly(12f to 4f, 12f to 14.5f)
+            poly(7.5f to 10f, 12f to 14.5f, 16.5f to 10f)
+            poly(5f to 19.5f, 19f to 19.5f)
         }
         HeatIcon.Play -> poly(8f to 5f, 19f to 12f, 8f to 19f, close = true, fill = true)
         HeatIcon.Trash -> {

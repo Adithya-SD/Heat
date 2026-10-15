@@ -6,6 +6,7 @@ import android.view.Surface
 import android.view.TextureView
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -85,7 +86,7 @@ import app.heat.glass.Heat
 import app.heat.glass.HeatIcon
 import app.heat.glass.HeatIconView
 import app.heat.glass.HeatText
-import app.heat.wear.Gallery
+import app.heat.platform.Gallery
 import app.heat.wear.LastPicture
 import app.heat.wear.Rotary
 import app.heat.wear.WatchHaptics
@@ -208,7 +209,8 @@ fun CameraScreen(
                         } while (event.changes.any { it.pressed })
                     }
                 } else {
-                    detectTapGestures(onLongPress = { onCameras() })
+                    // A tap anywhere clears the motion indicator; a long press opens the camera list.
+                    detectTapGestures(onLongPress = { onCameras() }, onTap = { if (hub.banner.value != null) hub.dismissBanner() })
                 }
             }
         ) {
@@ -252,13 +254,15 @@ fun CameraScreen(
             // The ring of buttons. Gone while placing the tracker so nothing is in the way.
             if (!placing) {
                 val items by hub.gallery.items.collectAsState()
+                val prefVersion by hub.gallery.prefs.version.collectAsState()
+                val clipping = remember(prefVersion) { hub.gallery.prefs.clipping }
                 val recordingSince by hub.gallery.recording.collectAsState()
                 var flash by remember { mutableStateOf(false) }
                 EdgeButtons(
                     glass = glass,
                     armed = armed, arming = arming,
                     latest = items.firstOrNull(),
-                    recordingSince = recordingSince,
+                    recordingSince = recordingSince, clipping = clipping,
                     flash = flash,
                     onArm = { client.arm(!(armed || arming > 0)); haptics.action() },
                     onGallery = onActivity, onSettings = onSettings,
@@ -281,9 +285,59 @@ fun CameraScreen(
         }
     }
 
+    MotionAlert(hub)
+
     // Blackout: one black screen, nothing decoded or drawn behind it, and the video stopped. Tap anywhere to come back.
     val blackout by hub.isBlackout.collectAsState()
     if (blackout) BlackoutScreen { hub.setBlackout(false) }
+}
+
+/**
+ * What an alert looks like with the app open: one short, bright white flash (and the screen at full brightness for
+ * it) with the strong buzz from the hub, then a pulsing red ring round the rim and a "Motion" tag that stay until a
+ * tap anywhere clears them. (With the app closed the hub posts a notification instead.)
+ */
+@Composable
+private fun MotionAlert(hub: WatchHub) {
+    val ctx = LocalContext.current
+    val banner by hub.banner.collectAsState()
+    val flash = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(hub) {
+        hub.flashes.collect {
+            val window = (ctx as? android.app.Activity)?.window
+            val before = window?.attributes?.screenBrightness
+            window?.let { w -> w.attributes = w.attributes.also { a -> a.screenBrightness = 1f } }
+            flash.snapTo(1f)
+            delay(260)
+            flash.animateTo(0f, tween(240))
+            window?.let { w -> w.attributes = w.attributes.also { a -> a.screenBrightness = before ?: -1f } }
+        }
+    }
+    if (flash.value > 0.01f) Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = flash.value)))
+
+    val b = banner
+    if (b != null) {
+        val pulse = androidx.compose.animation.core.rememberInfiniteTransition(label = "alertPulse")
+        val a by pulse.animateFloat(0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(650), androidx.compose.animation.core.RepeatMode.Reverse), label = "alertRing")
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = 5.dp.toPx()
+            val d = size.minDimension - stroke
+            drawArc(Heat.Red.copy(alpha = a), 0f, 360f, false, Offset(stroke / 2, stroke / 2), Size(d, d), style = Stroke(stroke))
+        }
+        Box(Modifier.fillMaxSize().pointerInput(b) { detectTapGestures(onTap = { hub.dismissBanner() }) }, contentAlignment = Alignment.TopCenter) {
+            Row(
+                Modifier.padding(top = 54.dp).clip(CircleShape).background(Color(0xE6B3261E)).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(Color.White.copy(alpha = a)))
+                Spacer(Modifier.width(6.dp))
+                HeatText(if (b.kind == app.heat.core.model.AlertKind.TAMPER) "Moved" else "Motion", size = 13, weight = FontWeight.Bold, color = Color.White, maxLines = 1)
+                Spacer(Modifier.width(5.dp))
+                HeatText(b.cameraName, size = 11, color = Color(0xCCFFFFFF), maxLines = 1)
+            }
+            HeatText("Tap to clear", size = 10, color = Color(0xB3FFFFFF), modifier = Modifier.padding(top = 86.dp))
+        }
+    }
 }
 
 @Composable
@@ -391,7 +445,7 @@ private fun CameraPicture(client: CameraClient, hub: WatchHub, placing: Boolean,
 @Composable
 private fun EdgeButtons(
     glass: GlassState, armed: Boolean, arming: Int,
-    latest: Gallery.Item?, recordingSince: Long?, flash: Boolean,
+    latest: Gallery.Item?, recordingSince: Long?, clipping: Boolean, flash: Boolean,
     onArm: () -> Unit, onGallery: () -> Unit, onSettings: () -> Unit, onReset: () -> Unit,
     onBlackout: () -> Unit, onPower: () -> Unit, onPhoto: () -> Unit, onRecord: () -> Unit
 ) {
@@ -419,7 +473,8 @@ private fun EdgeButtons(
         GlassButton(glass, Modifier.at(223.0, 0.84f), small, onSettings) { HeatIconView(HeatIcon.Gear, Heat.Text, icon) }
         GlassButton(glass, Modifier.at(137.0, 0.84f), small, onBlackout) { HeatIconView(HeatIcon.Eye, Heat.Text, icon) }
         CaptureButton(glass, Modifier.at(180.0, 0.71f), r * 0.36f, onPhoto)
-        RecordDot(glass, Modifier.at(214.0, 0.62f), r * 0.17f, recordingSince, onRecord)
+        // Clips are off until switched on in settings; the dot is only there when they are (or while one is running).
+        if (clipping || recordingSince != null) RecordDot(glass, Modifier.at(214.0, 0.62f), r * 0.17f, recordingSince, onRecord)
         if (flash) Box(Modifier.fillMaxSize().background(Color(0x55FFFFFF)))
     }
 }

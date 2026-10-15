@@ -36,7 +36,15 @@ class CameraService : LifecycleService() {
         super.onCreate()
         ensureChannels(this)
         val notification = buildNotification(this, armed = false)
-        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
+        try {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
+        } catch (t: RuntimeException) {
+            // Android refuses a camera service started from the background when nothing of ours is on screen. Not a
+            // crash: end quietly and let QuietStart tell the user how to start it.
+            android.util.Log.w("HeatService", "background camera start refused: ${t.message}")
+            stopSelf()
+            return
+        }
         val hub = CameraHub(applicationContext)
         HubHolder.set(hub)
         hub.start()
@@ -51,6 +59,7 @@ class CameraService : LifecycleService() {
     override fun onBind(intent: Intent): IBinder? = super.onBind(intent)
 
     override fun onDestroy() {
+        if (HubHolder.hub.value == null) { super.onDestroy(); return }
         HubHolder.hub.value?.close()
         HubHolder.set(null)
         super.onDestroy()
@@ -121,12 +130,14 @@ class CameraService : LifecycleService() {
 
 /** Phone-side alert. Posting it also reaches a paired watch through Wear OS notification bridging, even with our watch app closed. */
 object AlertNotifier {
-    private var lastMs = 0L
-
-    fun motion(context: Context, config: CameraConfig) {
-        val now = System.currentTimeMillis()
-        if (now - lastMs < 10_000) return
-        lastMs = now
+    /**
+     * [viewers] is how many viewers are connected now. A connected viewer (the watch app, a browser, another phone) shows
+     * the alert itself, and posts its own notification if it is not on screen, so the phone stays quiet then: no
+     * second, bridged notification on a watch that already has the first. With nobody connected, this is the alert.
+     * No cooldown: every alert the camera raises is posted (same id, so they replace each other instead of piling up).
+     */
+    fun motion(context: Context, config: CameraConfig, viewers: Int = 0) {
+        if (viewers > 0) return
         if (inQuietHours(config)) return
         val open = PendingIntent.getActivity(
             context, 2, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),

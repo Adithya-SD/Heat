@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         app.heat.platform.PeerLauncher.onScreen = true
+        WatchAlerts.clear(this)          // looking at the app is answering its notification
         hub.setForeground(true)
         // Keep the process (and the link) alive for a while after we leave: the next open is then instant.
         runCatching { startForegroundService(android.content.Intent(this, WatchLinkService::class.java)) }

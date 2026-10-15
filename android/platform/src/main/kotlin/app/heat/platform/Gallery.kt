@@ -1,5 +1,6 @@
-package app.heat.wear
+package app.heat.platform
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -9,15 +10,17 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
+import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.util.Log
 import app.heat.core.host.FrameFeed
-import app.heat.platform.PreviewDecoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,23 +29,63 @@ import java.io.File
 import java.nio.ByteBuffer
 
 /**
- * Pictures and clips kept on the watch: stills taken with the capture button, clips recorded with the record
- * button, and the picture each motion alert brings.
+ * How pictures and clips are kept. Every value is a setting and every setting is remembered.
  *
- * Nothing extra is asked of the camera. A still is the newest frame of the stream already arriving, decoded on its
- * own at the stream's full size (not a screenshot of the round screen). A clip is the stream's H.264 written
- * straight into an MP4 as it arrives, starting from the last keyframe, so it begins the instant the button is
- * pressed and costs no re-encoding at all.
- *
- * Files are named `<kind>_<epochMs>_<durationMs>_<camera>.<ext>`, with a small `.thumb.jpg` beside each, so the
- * list is rebuilt from the folder alone.
+ * Clipping is off until it is switched on; until then the capture button takes a picture. Nothing the user has not
+ * collected stays forever: the folder holds at most [maxItems] things (the oldest uncollected go first), and
+ * anything uncollected is deleted [expireDays] days after it was made. "Collected" means saved to the phone's own
+ * gallery with Save, which also keeps it here.
  */
-class Gallery(context: Context) {
+class CapturePrefs(context: Context) {
+    private val p = context.applicationContext.getSharedPreferences("heat-capture", Context.MODE_PRIVATE)
+    private val _version = MutableStateFlow(0)
+
+    /** Changes whenever any value does, so screens and the gallery re-read. */
+    val version: StateFlow<Int> = _version.asStateFlow()
+
+    var clipping: Boolean
+        get() = p.getBoolean("clipping", false)
+        set(v) = put { putBoolean("clipping", v) }
+
+    /** Length of a clip in seconds. 0 means it runs until stopped. */
+    var clipSec: Int
+        get() = p.getInt("clipSec", 5)
+        set(v) = put { putInt("clipSec", v.coerceIn(0, 120)) }
+
+    var maxItems: Int
+        get() = p.getInt("maxItems", 20)
+        set(v) = put { putInt("maxItems", v.coerceIn(1, 500)) }
+
+    /** Days an uncollected picture or clip is kept. 0 means never delete. */
+    var expireDays: Int
+        get() = p.getInt("expireDays", 2)
+        set(v) = put { putInt("expireDays", v.coerceIn(0, 365)) }
+
+    private fun put(block: android.content.SharedPreferences.Editor.() -> Unit) {
+        p.edit().apply(block).apply()
+        _version.value++
+    }
+}
+
+/**
+ * Pictures and clips kept on a device: stills taken with the capture button, clips recorded with the record button,
+ * and the picture each motion alert brings.
+ *
+ * Nothing extra is asked of the camera. A watch still is the newest frame of the stream already arriving, decoded on
+ * its own at the stream's full size; a phone still is its live preview. A clip is the stream's H.264 written straight
+ * into an MP4 as it arrives (starting from the last keyframe where one is held), so it begins the instant the button
+ * is pressed and costs no re-encoding.
+ *
+ * Files are named `<kind>_<epochMs>_<durationMs>_<camera>.<ext>`, with a small `.thumb.jpg` beside each, so the list
+ * is rebuilt from the folder alone. A `.kept` file beside an item marks it collected.
+ */
+class Gallery(private val context: Context, folder: String = "heat/gallery") {
     enum class Kind { PHOTO, CLIP, ALERT }
 
-    class Item(val file: File, val thumb: File, val kind: Kind, val atMs: Long, val durationMs: Long, val camera: String)
+    class Item(val file: File, val thumb: File, val kind: Kind, val atMs: Long, val durationMs: Long, val camera: String, val kept: Boolean)
 
-    private val dir = File(context.filesDir, "heat/gallery").apply { mkdirs() }
+    val prefs = CapturePrefs(context)
+    private val dir = File(context.filesDir, folder).apply { mkdirs() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _items = MutableStateFlow<List<Item>>(emptyList())
@@ -56,20 +99,38 @@ class Gallery(context: Context) {
     val recording: StateFlow<Long?> = _recording.asStateFlow()
 
     private var recorder: ClipRecorder? = null
-    private var recordingDecoder: PreviewDecoder? = null
+    private var onClipEnd: (() -> Unit)? = null
 
     init {
         scope.launch { rescan() }
+        // Settings can shorten the list or the keeping time; the hourly pass catches items that expire while the app idles.
+        scope.launch { prefs.version.collect { rescan() } }
+        scope.launch { while (true) { delay(60 * 60_000L); rescan() } }
     }
 
-    private fun rescan() {
-        val list = dir.listFiles().orEmpty()
+    @Synchronized
+    fun rescan() {
+        val all = dir.listFiles().orEmpty()
             .filter { !it.name.endsWith(".thumb.jpg") && (it.name.endsWith(".jpg") || it.name.endsWith(".mp4")) }
             .mapNotNull { parse(it) }
             .sortedByDescending { it.atMs }
-        // Keep the folder bounded: the oldest go first.
-        list.drop(MAX_ITEMS).forEach { delete(it, rescan = false) }
-        _items.value = list.take(MAX_ITEMS)
+        val now = System.currentTimeMillis()
+        val days = prefs.expireDays
+        // Uncollected items past their time go; collected ones stay until the user removes them.
+        all.filter { !it.kept && days > 0 && now - it.atMs > days * 86_400_000L }.forEach { delete(it, refresh = false) }
+        var live = all.filter { it.file.exists() }
+        // Over the limit: the oldest uncollected go first.
+        val limit = prefs.maxItems
+        var excess = live.size - limit
+        if (excess > 0) {
+            for (it in live.filter { !it.kept }.sortedBy { it.atMs }) {
+                if (excess <= 0) break
+                delete(it, refresh = false)
+                excess--
+            }
+            live = live.filter { it.file.exists() }
+        }
+        _items.value = live
     }
 
     private fun parse(f: File): Item? {
@@ -77,16 +138,37 @@ class Gallery(context: Context) {
         if (parts.size < 4) return null
         val kind = runCatching { Kind.valueOf(parts[0]) }.getOrNull() ?: return null
         return Item(f, File(dir, f.nameWithoutExtension + ".thumb.jpg"), kind, parts[1].toLongOrNull() ?: return null,
-            parts[2].toLongOrNull() ?: 0, parts[3].replace('-', ' '))
+            parts[2].toLongOrNull() ?: 0, parts[3].replace('-', ' '), File(dir, f.nameWithoutExtension + ".kept").exists())
     }
 
     private fun base(kind: Kind, atMs: Long, durationMs: Long, camera: String) =
         "${kind.name}_${atMs}_${durationMs}_${camera.replace(Regex("[^A-Za-z0-9]+"), "-").take(24).ifEmpty { "Camera" }}"
 
-    fun delete(item: Item, rescan: Boolean = true) {
+    fun delete(item: Item, refresh: Boolean = true) {
         item.file.delete()
         item.thumb.delete()
-        if (rescan) _items.value = _items.value.filter { it.file != item.file }
+        File(dir, item.file.nameWithoutExtension + ".kept").delete()
+        if (refresh) _items.value = _items.value.filter { it.file != item.file }
+    }
+
+    /** Saves a copy to the device's own gallery (Pictures/Heat or Movies/Heat) and keeps the item here. */
+    fun save(item: Item, done: (Boolean) -> Unit) {
+        scope.launch {
+            val ok = runCatching {
+                val video = item.kind == Kind.CLIP
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "Heat_${item.atMs}.${if (video) "mp4" else "jpg"}")
+                    put(MediaStore.MediaColumns.MIME_TYPE, if (video) "video/mp4" else "image/jpeg")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, (if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES) + "/Heat")
+                }
+                val collection = if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                val uri = context.contentResolver.insert(collection, values) ?: error("no uri")
+                context.contentResolver.openOutputStream(uri)?.use { out -> item.file.inputStream().use { it.copyTo(out) } }
+                File(dir, item.file.nameWithoutExtension + ".kept").writeText("1")
+            }.isSuccess
+            rescan()
+            done(ok)
+        }
     }
 
     /** An alert's picture, exactly as the camera sent it. */
@@ -97,34 +179,44 @@ class Gallery(context: Context) {
         rescan()
     }
 
+    /** A picture already in hand (the phone's own preview). */
+    fun savePhoto(bitmap: Bitmap, camera: String, done: (Boolean) -> Unit = {}) {
+        scope.launch {
+            val ok = runCatching {
+                val b = base(Kind.PHOTO, System.currentTimeMillis(), 0, camera)
+                File(dir, "$b.jpg").outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+                writeThumb(bitmap, File(dir, "$b.thumb.jpg"))
+            }.isSuccess
+            rescan()
+            done(ok)
+        }
+    }
+
     /** The newest frame from [decoder], at full size and the right way up. Calls back with the result on success. */
     fun takePhoto(decoder: PreviewDecoder, width: Int, height: Int, rotation: Int, camera: String, done: (Boolean) -> Unit) = scope.launch {
         val bmp = decodeNewest(decoder.group(), width, height, rotation)
         if (bmp == null) { done(false); return@launch }
-        val b = base(Kind.PHOTO, System.currentTimeMillis(), 0, camera)
-        File(dir, "$b.jpg").outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 92, it) }
-        writeThumb(bmp, File(dir, "$b.thumb.jpg"))
-        rescan()
-        done(true)
+        savePhoto(bmp, camera, done)
     }
 
-    /** Starts a clip from the last keyframe of [decoder]'s stream. False if there is nothing to record yet. */
+    /**
+     * Starts a clip. [first] are frames already held (from the last keyframe), written first; further frames come from
+     * the returned sink's `write`. Ends by itself after the clip length from [prefs] (unless that is 0), or on
+     * [stopClip]. [onEnd] runs when it does, so the owner can stop feeding it. Null if a clip is already running.
+     */
     @Synchronized
-    fun startClip(decoder: PreviewDecoder, width: Int, height: Int, rotation: Int, camera: String): Boolean {
-        if (recorder != null) return true
-        val group = decoder.group()
-        if (group.isEmpty() || width <= 0 || height <= 0) return false
+    fun startClip(width: Int, height: Int, rotation: Int, camera: String, first: List<FrameFeed.Frame>, thumbFrom: Bitmap?, onEnd: () -> Unit): ClipSink? {
+        if (recorder != null) return null
         val atMs = System.currentTimeMillis()
         val tmp = File(dir, "rec_${atMs}.part")
         val r = ClipRecorder(tmp, width, height, rotation)
-        group.forEach { r.write(it.key, it.ptsUs, it.data, 0, it.data.size) }
-        decoder.tap = { key, pts, data, off, len -> r.write(key, pts, data, off, len) }
+        first.forEach { r.write(it.key, it.ptsUs, it.data, 0, it.data.size) }
         recorder = r
-        recordingDecoder = decoder
+        onClipEnd = onEnd
         _recording.value = SystemClock.elapsedRealtime()
-        // The clip's thumbnail is its first picture.
         scope.launch {
-            decodeNewest(group.take(1), width, height, rotation)?.let { writeThumb(it, File(dir, "rec_${atMs}.thumb.part")) }
+            val bmp = thumbFrom ?: decodeNewest(first.take(1), width, height, rotation)
+            bmp?.let { writeThumb(it, File(dir, "rec_${atMs}.thumb.part")) }
         }
         r.onFinished = { durationMs ->
             scope.launch {
@@ -134,21 +226,33 @@ class Gallery(context: Context) {
                 rescan()
             }
         }
-        scope.launch {
-            kotlinx.coroutines.delay(MAX_CLIP_MS)
-            if (recorder === r) stopClip()
-        }
-        return true
+        val len = prefs.clipSec
+        if (len > 0) scope.launch { delay(len * 1000L); if (recorder === r) stopClip() }
+        scope.launch { delay(MAX_CLIP_MS); if (recorder === r) stopClip() }
+        return ClipSink { key, pts, data, off, n -> r.write(key, pts, data, off, n) }
+    }
+
+    fun interface ClipSink {
+        fun write(keyframe: Boolean, ptsUs: Long, data: ByteArray, offset: Int, length: Int)
     }
 
     @Synchronized
     fun stopClip() {
         val r = recorder ?: return
-        recordingDecoder?.tap = null
         recorder = null
-        recordingDecoder = null
         _recording.value = null
+        onClipEnd?.invoke()
+        onClipEnd = null
         r.finish()
+    }
+
+    /** Convenience for a viewer that already has a decoder (the watch): replay its held group, then follow its tap. */
+    fun startClip(decoder: PreviewDecoder, width: Int, height: Int, rotation: Int, camera: String): Boolean {
+        val group = decoder.group()
+        if (group.isEmpty() || width <= 0 || height <= 0) return false
+        val sink = startClip(width, height, rotation, camera, group, null) { decoder.tap = null } ?: return true
+        decoder.tap = { key, pts, data, off, n -> sink.write(key, pts, data, off, n) }
+        return true
     }
 
     private fun writeThumb(src: Bitmap, f: File) {
@@ -159,9 +263,8 @@ class Gallery(context: Context) {
 
     companion object {
         private const val TAG = "HeatGallery"
-        private const val MAX_ITEMS = 200
         private const val THUMB = 240
-        private const val MAX_CLIP_MS = 5 * 60_000L
+        private const val MAX_CLIP_MS = 10 * 60_000L
 
         /**
          * Decodes a group of pictures on its own codec (no surface) and returns its last frame as a bitmap, rotated
@@ -247,9 +350,10 @@ class Gallery(context: Context) {
 
 /**
  * Writes an H.264 stream into an MP4 as it arrives. Its own thread does the writing, so the network thread that
- * hands frames over only copies them. The first keyframe's SPS and PPS describe the track.
+ * hands frames over only copies them. The first keyframe's SPS and PPS describe the track; frames before the first
+ * keyframe are skipped (they could not be decoded anyway).
  */
-private class ClipRecorder(private val file: File, private val width: Int, private val height: Int, private val rotation: Int) {
+internal class ClipRecorder(private val file: File, private val width: Int, private val height: Int, private val rotation: Int) {
     private val thread = HandlerThread("heat-clip").apply { start() }
     private val handler = Handler(thread.looper)
     private var muxer: MediaMuxer? = null

@@ -57,7 +57,7 @@ import app.heat.glass.Heat
 import app.heat.glass.HeatIcon
 import app.heat.glass.HeatIconView
 import app.heat.glass.HeatText
-import app.heat.wear.Gallery
+import app.heat.platform.Gallery
 import app.heat.wear.Rotary
 import app.heat.wear.WatchHub
 import kotlinx.coroutines.Dispatchers
@@ -75,7 +75,8 @@ fun GalleryScreen(hub: WatchHub, back: () -> Unit) {
     val o = open
     if (o != null) {
         BackHandler { open = null }
-        Viewer(o, onDelete = { hub.gallery.delete(o); open = null })
+        val current = items.firstOrNull { it.file == o.file } ?: o          // picks up "kept" once saved
+        Viewer(current, onDelete = { hub.gallery.delete(o); open = null }, onSave = { hub.gallery.save(o) { } })
         return
     }
     val list = rememberScalingLazyListState()
@@ -140,7 +141,7 @@ private fun timeOf(i: Gallery.Item) = DateFormat.getTimeInstance(DateFormat.SHOR
  * fitted and close-up. A clip plays on a loop; a tap pauses it. Delete asks twice.
  */
 @Composable
-private fun Viewer(item: Gallery.Item, onDelete: () -> Unit) {
+private fun Viewer(item: Gallery.Item, onDelete: () -> Unit, onSave: () -> Unit) {
     var scale by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val shownScale by animateFloatAsState(scale, tween(140), label = "viewerZoom")
@@ -182,12 +183,17 @@ private fun Viewer(item: Gallery.Item, onDelete: () -> Unit) {
         }
         var confirm by remember { mutableStateOf(false) }
         LaunchedEffect(confirm) { if (confirm) { delay(3_000); confirm = false } }
-        Box(
-            Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp).size(30.dp).clip(CircleShape)
-                .background(if (confirm) Color(0xAAFF4D4D) else Color(0x88000000))
-                .clickable { if (confirm) onDelete() else confirm = true },
-            contentAlignment = Alignment.Center
-        ) { HeatIconView(HeatIcon.Trash, Color.White, 14.dp) }
+        Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier.size(30.dp).clip(CircleShape).background(Color(0x88000000)).clickable(enabled = !item.kept) { onSave() },
+                contentAlignment = Alignment.Center
+            ) { HeatIconView(if (item.kept) HeatIcon.Check else HeatIcon.Save, if (item.kept) Heat.Green else Color.White, 14.dp) }
+            Box(
+                Modifier.size(30.dp).clip(CircleShape).background(if (confirm) Color(0xAAFF4D4D) else Color(0x88000000))
+                    .clickable { if (confirm) onDelete() else confirm = true },
+                contentAlignment = Alignment.Center
+            ) { HeatIconView(HeatIcon.Trash, Color.White, 14.dp) }
+        }
     }
 }
 

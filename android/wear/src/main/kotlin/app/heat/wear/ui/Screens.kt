@@ -182,6 +182,8 @@ private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, hu
     val status by client.status.collectAsState()
     val pairing by hub.pairing.collectAsState()
     val c = config
+    val prefs = hub.gallery.prefs
+    @Suppress("UNUSED_VARIABLE") val prefsVersion by prefs.version.collectAsState()      // re-read the values below when any changes
     val list = rememberScalingLazyListState()
     ScalingLazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         item { HeatText(c?.label ?: "Settings", size = 15, weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(top = 18.dp, bottom = 2.dp)) }
@@ -216,6 +218,12 @@ private fun SettingsScreen(client: CameraClient, cameras: List<CameraClient>, hu
                 }
             }
         }
+        // Pictures and clips kept on the watch. Clipping is off until switched on; until then capture takes a picture.
+        item { SectionLabel("Pictures and clips") }
+        item { Toggle("Clipping", prefs.clipping) { prefs.clipping = it } }
+        item { Stepper("Clip length", prefs.clipSec, 0..120, 1, { if (it == 0) "until stopped" else "${it}s" }) { prefs.clipSec = it } }
+        item { Stepper("Keep at most", prefs.maxItems, 1..200, 1, { "$it items" }) { prefs.maxItems = it } }
+        item { Stepper("Delete after", prefs.expireDays, 0..30, 1, { if (it == 0) "never" else "$it day${if (it == 1) "" else "s"}" }) { prefs.expireDays = it } }
         // Connection details: what to read out if something will not connect.
         item { SectionLabel("Connection") }
         item { Info("Link", link.phase.name.lowercase().replaceFirstChar(Char::uppercase) + (link.carrier?.let { " · ${it.label}" } ?: "")) }

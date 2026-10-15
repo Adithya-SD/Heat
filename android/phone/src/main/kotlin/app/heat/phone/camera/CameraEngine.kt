@@ -74,6 +74,8 @@ class CameraEngine(context: Context, private val listener: Listener) {
 
     data class Info(
         val cameraId: String,
+        /** The fastest frame rate the sensor's own ranges offer. */
+        val maxFps: Int = 30,
         val facing: Facing,
         val sensorOrientation: Int,
         val zoomMin: Float,
@@ -108,7 +110,9 @@ class CameraEngine(context: Context, private val listener: Listener) {
         val shutterDenom: Int = 0,
         val blendLenses: Boolean = true,
         /** Lower the frame rate: nobody is watching and nothing needs 30 fps. */
-        val lowPower: Boolean = false
+        val lowPower: Boolean = false,
+        /** The frame rate asked of the sensor while a viewer watches (chosen by the link; 60 when it is clear). */
+        val fps: Int = 30
     )
 
     private val manager = context.applicationContext.getSystemService(CameraManager::class.java)
@@ -461,6 +465,7 @@ class CameraEngine(context: Context, private val listener: Listener) {
         val zr = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
         return Info(
             cameraId = id,
+            maxFps = c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.maxOfOrNull { it.upper } ?: 30,
             facing = if (isFront) Facing.FRONT else Facing.REAR,
             sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90,
             zoomMin = g?.zoomMin ?: zr?.lower ?: 1f,
@@ -612,7 +617,20 @@ class CameraEngine(context: Context, private val listener: Listener) {
         }
     }
 
+    /** Frames per second the camera is really delivering, measured over the last second or so. */
+    @Volatile var measuredFps = 0
+        private set
+    private var fpsWindowStartNs = 0L
+    private var fpsWindowFrames = 0
+
     private fun onFrame(timestampNs: Long) {
+        if (fpsWindowStartNs == 0L) fpsWindowStartNs = timestampNs
+        fpsWindowFrames++
+        if (timestampNs - fpsWindowStartNs >= 1_000_000_000L) {
+            measuredFps = (fpsWindowFrames * 1e9 / (timestampNs - fpsWindowStartNs)).toInt()
+            fpsWindowStartNs = timestampNs
+            fpsWindowFrames = 0
+        }
         val sm = smoother ?: return
         val dt = if (lastFrameNs == 0L) 1f / 30f else ((timestampNs - lastFrameNs) / 1e9f).coerceIn(0.001f, 0.25f)
         lastFrameNs = timestampNs
@@ -751,7 +769,10 @@ class CameraEngine(context: Context, private val listener: Listener) {
         WhiteBalance.FLUORESCENT -> CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT
     }
 
-    /** Day: as fast as the sensor allows. Night: the lowest range the sensor offers, so the shutter can stay open. */
+    /**
+     * Day: the sensor's range that tops out at the wanted rate (nearest below it, or the lowest there is), steadiest
+     * first. Night: the lowest range the sensor offers, so the shutter can stay open.
+     */
     private fun pickFps(c: CameraCharacteristics, d: Desired): Range<Int> {
         val ranges = c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.toList().orEmpty()
         if (ranges.isEmpty()) return Range(15, 30)
@@ -760,7 +781,11 @@ class CameraEngine(context: Context, private val listener: Listener) {
         val picked = when {
             d.lowPower -> best({ it.upper in 10..15 }, { it.lower * 100 + it.upper })
             d.night == NightMode.NIGHT -> best({ it.upper >= 15 }, { -it.lower * 100 + it.upper })
-            else -> best({ it.upper >= 30 }, { it.lower * 100 + it.upper })
+            else -> {
+                val want = d.fps.coerceAtLeast(5)
+                val top = ranges.map { it.upper }.filter { it <= want }.maxOrNull() ?: ranges.minOf { it.upper }
+                best({ it.upper == top }, { it.lower * 100 + it.upper })
+            }
         }
         return picked ?: ranges.maxByOrNull { it.upper * 100 - abs(it.lower - it.upper) } ?: Range(15, 30)
     }

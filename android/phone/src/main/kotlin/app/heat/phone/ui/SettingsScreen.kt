@@ -160,6 +160,7 @@ fun SettingsScreen(hub: CameraHub, glass: GlassState, onBack: () -> Unit) {
                             }
                         }
                     }
+                    item(key = "pictures") { PicturesCard(glass, hub) }
                 } else if (hits.isEmpty()) {
                     item {
                         Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -275,6 +276,31 @@ private fun SearchField(glass: GlassState, query: String, onQuery: (String) -> U
                 Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0x33FFFFFF)).tappable(onClear), contentAlignment = Alignment.Center) {
                     HeatIconView(HeatIcon.Close, Heat.Text, 14.dp)
                 }
+            }
+        }
+    }
+}
+
+/** Pictures and clips kept on this phone: clipping is off until switched on, and nothing uncollected is kept forever. */
+@Composable
+private fun PicturesCard(glass: GlassState, hub: CameraHub) {
+    val prefs = hub.gallery.prefs
+    @Suppress("UNUSED_VARIABLE") val version by prefs.version.collectAsState()      // re-read the values below when any changes
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(Modifier.padding(start = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            HeatIconView(HeatIcon.Pictures, Heat.Ember1, 16.dp)
+            Spacer(Modifier.width(8.dp))
+            HeatText("PICTURES AND CLIPS", size = 12, weight = FontWeight.SemiBold, color = Heat.TextFaint)
+        }
+        GlassSurface(glass, Modifier.fillMaxWidth(), shape = GlassShape.Rounded(22f), refract = false) {
+            Column {
+                ToggleRow("Clipping", prefs.clipping, { prefs.clipping = it }, "Off: the capture button takes a picture. On: a record button appears next to it.")
+                RowDivider()
+                StepperRow("Clip length", prefs.clipSec, 0..120, { prefs.clipSec = it }, format = { if (it == 0) "Until stopped" else "$it s" }, hint = "A clip ends by itself after this long.")
+                RowDivider()
+                StepperRow("Keep at most", prefs.maxItems, 1..200, { prefs.maxItems = it }, format = { "$it items" }, hint = "When the gallery is full the oldest uncollected item goes first.")
+                RowDivider()
+                StepperRow("Delete after", prefs.expireDays, 0..30, { prefs.expireDays = it }, format = { if (it == 0) "Never" else "$it day${if (it == 1) "" else "s"}" }, hint = "Anything you have not saved is deleted this long after it was made.")
             }
         }
     }

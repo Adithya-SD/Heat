@@ -139,7 +139,8 @@ private fun PhoneRoot(invite: androidx.compose.runtime.MutableState<String?>) {
             screen == "settings" -> SettingsScreen(h, glass) { screen = "live" }
             screen == "rooms" -> RoomsScreen(h, onBack = { screen = "live" }, onJoin = { join(it) })
             screen == "view" && viewer != null -> RoomViewerScreen(viewer!!, onClose = { leave() })
-            else -> LiveScreen(h, onRooms = { screen = "rooms" }, onSettings = { screen = "settings" })
+            screen == "gallery" -> app.heat.phone.ui.GalleryScreen(h, onBack = { screen = "live" })
+            else -> LiveScreen(h, onRooms = { screen = "rooms" }, onSettings = { screen = "settings" }, onGallery = { screen = "gallery" })
         }
     }
 }

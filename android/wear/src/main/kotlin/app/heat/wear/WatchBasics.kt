@@ -61,24 +61,21 @@ class WatchHaptics(context: Context) : Haptics {
     /** A single episode feels different from something that will not go away: stronger and longer as [alert] escalates. */
     fun alert(profile: HapticProfile, alert: Msg.Alert) {
         val v = vibrator ?: return
-        val scale = when (profile) {
+        // An alert has to be felt through a sleeve and across a room: full amplitude, long pulses. Softer profiles
+        // are for people who asked for them; the default is as strong as the motor goes.
+        val (pulseMs, amplitude, minPulses) = when (profile) {
             HapticProfile.OFF -> return
-            HapticProfile.SOFT -> 0.5f
-            HapticProfile.NORMAL -> 1f
-            HapticProfile.STRONG -> 1.6f
+            HapticProfile.SOFT -> Triple(160L, 120, 1)
+            HapticProfile.NORMAL -> Triple(420L, 255, 2)
+            HapticProfile.STRONG -> Triple(600L, 255, 3)
         }
-        val level = 1 + alert.escalation.coerceIn(0, 3)
+        val pulses = minPulses + alert.escalation.coerceIn(0, 3)
         val timings = ArrayList<Long>()
-        timings += 0L
-        repeat(level) {
-            timings += (120 * scale).toLong()
-            timings += 90L
-        }
         val amps = ArrayList<Int>()
-        amps += 0
-        repeat(level) {
-            amps += (255 * (scale / 1.6f)).toInt().coerceIn(40, 255)
-            amps += 0
+        timings += 0L; amps += 0
+        repeat(pulses) {
+            timings += pulseMs; amps += amplitude
+            timings += 110L; amps += 0
         }
         runCatching {
             v.vibrate(VibrationEffect.createWaveform(timings.toLongArray(), amps.toIntArray(), -1))

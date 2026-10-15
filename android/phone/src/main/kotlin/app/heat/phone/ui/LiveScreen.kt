@@ -8,6 +8,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +43,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -79,7 +82,7 @@ import kotlinx.coroutines.delay
  * worded the same way, that the watch's menu offers); arming is one tap on the shield in the middle.
  */
 @Composable
-fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
+fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit, onGallery: () -> Unit) {
     val config by hub.host.config.collectAsState()
     val armed by hub.host.armed.collectAsState()
     val viewers by hub.host.viewerCount.collectAsState()
@@ -88,7 +91,18 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
 
     var aiming by remember { mutableStateOf(false) }
     var peekUntil by remember { mutableStateOf(0L) }
-    var active by remember { mutableStateOf(BezelMode.ZOOM) }
+    var active by remember { mutableStateOf(BezelMode.EXPOSURE) }
+    // Zoom is the lens buttons; slide on them and they become a ruler (like a phone camera's dial), which goes back to buttons a moment after the finger lifts.
+    var rulerOn by remember { mutableStateOf(false) }
+    var touching by remember { mutableStateOf(false) }
+    LaunchedEffect(touching, rulerOn) { if (!touching && rulerOn) { delay(2_200); if (!touching) rulerOn = false } }
+    var shutterFlash by remember { mutableStateOf(false) }
+    LaunchedEffect(shutterFlash) { if (shutterFlash) { delay(120); shutterFlash = false } }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val recordingSince by hub.gallery.recording.collectAsState()
+    val galleryItems by hub.gallery.items.collectAsState()
+    val capturePrefsVersion by hub.gallery.prefs.version.collectAsState()
+    val clipping = remember(capturePrefsVersion) { hub.gallery.prefs.clipping }
     var toolsOpen by remember { mutableStateOf(false) }
     val now = rememberTicker(armed || armingEnds > 0)
 
@@ -192,6 +206,8 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
             }
         }
 
+        if (shutterFlash) Box(Modifier.fillMaxSize().background(Color(0x66FFFFFF)))
+
         // Quiet scrims so the chrome reads over any picture.
         Box(Modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent))))
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(420.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000)))))
@@ -214,8 +230,43 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
 
             Spacer(Modifier.weight(1f))
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                LensButtons(hubState.lenses, hubState.zoomMax, { zoomShown.floatValue }, onSelect = { setZoom(it) })
+            Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(if (rulerOn) 0.0001f else 1f), contentAlignment = Alignment.CenterStart) {
+                    if (!rulerOn) GalleryThumb(galleryItems.firstOrNull(), onGallery)
+                }
+                Box(
+                    if (rulerOn) Modifier.weight(6f) else Modifier,
+                    contentAlignment = Alignment.Center
+                ) {
+                    ZoomStrip(
+                        rulerOn = rulerOn,
+                        lenses = hubState.lenses, zoomMin = hubState.zoomMin, zoomMax = hubState.zoomMax,
+                        zoomShown = { zoomShown.floatValue },
+                        onZoom = { setZoom(it) },
+                        onSlideStart = { touching = true; rulerOn = true },
+                        onSlideEnd = { touching = false }
+                    )
+                }
+                Box(Modifier.weight(if (rulerOn) 0.0001f else 1f), contentAlignment = Alignment.CenterEnd) {
+                    if (!rulerOn) CaptureButtons(
+                        clipping = clipping, recordingSince = recordingSince,
+                        onPhoto = {
+                            val bmp = previewView?.takeIf { it.isAvailable }?.getBitmap(960, 1280)
+                            if (bmp != null) {
+                                shutterFlash = true
+                                hub.gallery.savePhoto(bmp, config.label) { ok ->
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        if (!ok) android.widget.Toast.makeText(ctx, "Could not save the picture", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        },
+                        onRecord = {
+                            if (recordingSince != null) hub.stopClip()
+                            else hub.startClip(previewView?.takeIf { it.isAvailable }?.getBitmap(480, 640))
+                        }
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
 
@@ -226,26 +277,16 @@ fun LiveScreen(hub: CameraHub, onRooms: () -> Unit, onSettings: () -> Unit) {
                 exit = androidx.compose.animation.fadeOut(tween(120)) + androidx.compose.animation.shrinkVertically(tween(180))
             ) {
                 Column {
-                    Box(Modifier.padding(horizontal = 16.dp)) {
-                        val detent = Controls.detentFor(active)
-                        if (active == BezelMode.ZOOM || detent == null) {
-                            LogRuler(
-                                zoomState = { zoomShown.floatValue },
-                                minZoom = hubState.zoomMin, maxZoom = hubState.zoomMax,
-                                stops = hubState.lenses.map { it.ratio },
-                                onTarget = { setZoom(it) },
-                                onDragging = {}
-                            )
-                        } else {
+                    Controls.detentFor(active)?.let { detent ->
+                        Box(Modifier.padding(horizontal = 16.dp)) {
                             DetentRuler(
                                 detent.labels, detent.read(config),
                                 onIndex = { i -> hub.host.editLocally { c -> detent.write(c, i) } }
                             )
                         }
+                        Spacer(Modifier.height(12.dp))
                     }
-                    Spacer(Modifier.height(12.dp))
                     ChipRow {
-                        ControlChip(BezelMode.ZOOM, liveZoomText(zoomShown.floatValue), active == BezelMode.ZOOM, isSwitch = false, on = false) { active = BezelMode.ZOOM }
                         ControlChip(BezelMode.EXPOSURE, BezelController.describe(BezelMode.EXPOSURE, config), active == BezelMode.EXPOSURE, false, false) { active = BezelMode.EXPOSURE }
                         if (hubState.manualFocus) ControlChip(BezelMode.FOCUS, BezelController.describe(BezelMode.FOCUS, config), active == BezelMode.FOCUS, false, false) { active = BezelMode.FOCUS }
                         ControlChip(BezelMode.WHITE_BALANCE, BezelController.describe(BezelMode.WHITE_BALANCE, config), active == BezelMode.WHITE_BALANCE, false, false) { active = BezelMode.WHITE_BALANCE }
@@ -436,6 +477,83 @@ private fun ZoneOverlay(zone: Zone, editing: Boolean, motion: Float, onChange: (
                 for (cx in listOf(r.x, r.x + s.width)) for (cy in listOf(r.y, r.y + s.height)) {
                     drawCircle(Color.White, 5.dp.toPx(), Offset(cx, cy))
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Zoom: the lens buttons, and when you slide across them they become a ruler you drag like a tape measure (the way a
+ * phone camera's zoom does). The ruler returns to buttons a moment after the finger lifts. A tap on a button goes to
+ * that lens; a slide anywhere on the strip zooms continuously.
+ */
+@Composable
+private fun ZoomStrip(
+    rulerOn: Boolean, lenses: List<app.heat.core.camera.LensEntry>, zoomMin: Float, zoomMax: Float,
+    zoomShown: () -> Float, onZoom: (Float) -> Unit, onSlideStart: () -> Unit, onSlideEnd: () -> Unit
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val pxPerLn = with(density) { 160.dp.toPx() }
+    var local by remember { mutableFloatStateOf(0f) }
+    Box(
+        Modifier.pointerInput(zoomMin, zoomMax) {
+            detectHorizontalDragGestures(
+                onDragStart = { local = kotlin.math.ln(zoomShown()); onSlideStart() },
+                onDragEnd = onSlideEnd, onDragCancel = onSlideEnd
+            ) { change, dx ->
+                change.consume()
+                local = (local - dx / pxPerLn).coerceIn(kotlin.math.ln(zoomMin), kotlin.math.ln(zoomMax))
+                onZoom(kotlin.math.exp(local))
+            }
+        }
+    ) {
+        if (rulerOn) LogRuler(
+            zoomState = zoomShown, minZoom = zoomMin, maxZoom = zoomMax,
+            stops = lenses.map { it.ratio }, onTarget = onZoom,
+            onDragging = { if (it) onSlideStart() else onSlideEnd() }
+        ) else LensButtons(lenses, zoomMax, zoomShown, onSelect = onZoom)
+    }
+}
+
+/** The newest picture or clip, small, at the left of the zoom strip: tap for the gallery. Empty until there is one. */
+@Composable
+private fun GalleryThumb(latest: app.heat.platform.Gallery.Item?, onClick: () -> Unit) {
+    val thumb by androidx.compose.runtime.produceState<Bitmap?>(null, latest?.thumb?.path) {
+        value = latest?.thumb?.let { f -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.graphics.BitmapFactory.decodeFile(f.path) }.getOrNull() } }
+    }
+    Box(Modifier.size(44.dp).matte(RoundedCornerShape(14.dp)).tappable(onClick), contentAlignment = Alignment.Center) {
+        val t = thumb
+        if (t == null) HeatIconView(HeatIcon.Pictures, Heat.TextDim, 20.dp)
+        else Image(t.asImageBitmap(), null, Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
+    }
+}
+
+/**
+ * Take a picture: always there, small. When clips are switched on in settings a second, red button records one (it
+ * ends by itself after the clip length in settings, or when pressed again) and shows the time while it runs.
+ */
+@Composable
+private fun CaptureButtons(clipping: Boolean, recordingSince: Long?, onPhoto: () -> Unit, onRecord: () -> Unit) {
+    val now by androidx.compose.runtime.produceState(android.os.SystemClock.elapsedRealtime(), recordingSince) {
+        while (recordingSince != null) { value = android.os.SystemClock.elapsedRealtime(); delay(250) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (recordingSince != null) {
+            val secs = ((now - recordingSince) / 1000).coerceAtLeast(0)
+            Row(
+                Modifier.height(40.dp).matte(CircleShape, Color(0xFF3A1414)).tappable(onRecord).padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(9.dp).background(Heat.Red, CircleShape))
+                Spacer(Modifier.width(7.dp))
+                HeatText("%d:%02d".format(secs / 60, secs % 60), size = 13, weight = FontWeight.SemiBold)
+            }
+        } else {
+            if (clipping) Box(Modifier.size(38.dp).matte(CircleShape).tappable(onRecord), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(14.dp).background(Heat.Red, CircleShape))
+            }
+            Box(Modifier.size(44.dp).matte(CircleShape).border(1.5.dp, Heat.Ember1, CircleShape).tappable(onPhoto), contentAlignment = Alignment.Center) {
+                HeatIconView(HeatIcon.Camera, Heat.Ember1, 20.dp)
             }
         }
     }

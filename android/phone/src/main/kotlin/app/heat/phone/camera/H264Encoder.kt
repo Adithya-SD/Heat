@@ -57,6 +57,7 @@ class H264Encoder(
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, gopSec.coerceAtLeast(1))
                 // The camera runs at its own rate; this makes the encoder skip frames to hold the profile's rate.
                 setInteger(MediaFormat.KEY_MAX_FPS_TO_ENCODER, fps)
+                setInteger(MediaFormat.KEY_OPERATING_RATE, fps)
                 setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
                 setInteger(MediaFormat.KEY_LATENCY, 0)
                 setInteger(MediaFormat.KEY_PRIORITY, 0)

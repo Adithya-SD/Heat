@@ -80,8 +80,15 @@ object PeerLauncher {
 
     const val CLOSE_PATH = "/heat/close"
 
+    /**
+     * Set by an app that wants to answer a ping without showing anything (the phone: it starts its camera service in the
+     * background and the screen never wakes). Returns true if it handled the ping; false falls back to opening the app.
+     */
+    @Volatile var quietOpen: ((Context) -> Boolean)? = null
+
     internal fun opened(context: Context) {
         if (onScreen) return
+        if (quietOpen?.invoke(context) == true) return
         val app = context.applicationContext
         val launch = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
