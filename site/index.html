@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Heat · a motion camera for your phone and watch</title>
+<meta name="description" content="Turn a spare phone into a motion-detecting camera and watch it live on your wrist or in a browser. No accounts. Free Android apps.">
+<meta name="theme-color" content="#07070c">
+<link rel="icon" href="app/icons/icon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#07070c;--panel:#111116;--panel2:#1b1b22;--text:#f5f5f7;--dim:rgba(245,245,247,.68);--faint:rgba(245,245,247,.45);--line:rgba(255,255,255,.12);--ember0:#ff4a12;--ember1:#ffa23d;--ember:#ff7a2f}
+@media (prefers-color-scheme:light){:root{--bg:#fbfaf8;--panel:#ffffff;--panel2:#f1eeea;--text:#16161a;--dim:rgba(22,22,26,.7);--faint:rgba(22,22,26,.5);--line:rgba(0,0,0,.12)}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;min-height:100dvh}
+body::before{content:"";position:fixed;inset:-20% -10% auto -10%;height:70vh;background:radial-gradient(60% 60% at 50% 0%,rgba(255,106,40,.22),transparent 70%);pointer-events:none}
+main{position:relative;max-width:640px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) 20px 56px}
+.mark{display:flex;align-items:center;gap:10px;margin:8px 0 36px;font-weight:700;letter-spacing:-.01em}
+.mark svg{width:30px;height:30px}
+h1{font-size:clamp(34px,8vw,52px);line-height:1.05;letter-spacing:-.03em;margin:0 0 14px;font-weight:800}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--ember0),var(--ember1));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--dim);font-size:18px;margin:0 0 30px;max-width:34em}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:20px;margin:0 0 16px}
+.card h2{margin:0 0 4px;font-size:18px;letter-spacing:-.01em}
+.card p{margin:0 0 14px;color:var(--dim);font-size:15px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.btn{appearance:none;border:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 20px;border-radius:999px;font:inherit;font-weight:650;text-decoration:none;color:#fff;background:linear-gradient(180deg,var(--ember1),var(--ember0));box-shadow:0 6px 20px rgba(255,90,20,.28)}
+.btn.ghost{background:var(--panel2);color:var(--text);box-shadow:none;border:1px solid var(--line)}
+.btn:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--ember1);outline-offset:3px}
+.btn small{font-weight:500;opacity:.85}
+.code{width:100%;min-height:52px;padding:0 18px;border-radius:16px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:600 22px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;text-align:center;text-transform:uppercase;margin:0 0 12px}
+.code::placeholder{color:var(--faint);letter-spacing:.14em}
+.hint{min-height:1.4em;margin:10px 0 0;color:var(--faint);font-size:14px}
+ol{margin:0;padding-left:20px;color:var(--dim);font-size:15px}
+ol li{margin:6px 0}
+code{font:13px ui-monospace,Menlo,monospace;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+details{margin:14px 0 0;color:var(--dim);font-size:15px}
+summary{cursor:pointer;font-weight:600;color:var(--text)}
+footer{margin-top:30px;color:var(--faint);font-size:13px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<main>
+  <div class="mark">
+    <svg viewBox="0 0 108 108" aria-hidden="true"><path fill="#ff7a2f" d="M54,18 C59,32 74,39 74,57 C74,71 64,82 54,82 C44,82 34,71 34,57 C34,50 38,44 42,39 C43,45 47,47 50,47 C50,38 49,28 54,18 Z"/><path fill="#ffc247" d="M54,49 C56,56 62,60 62,68 C62,74 58,78 54,78 C50,78 46,74 46,68 C46,63 48,61 51,58 C52,61 53,61 54,61 C53,56 53,52 54,49 Z"/></svg>
+    Heat
+  </div>
+
+  <h1>Your old phone, <em>watching</em> for you.</h1>
+  <p class="lead">Heat turns a spare phone into a motion-detecting camera. Watch it live on your wrist or in a browser, and get an alert the moment something moves. No accounts, no cloud, free.</p>
+
+  <section class="card" aria-labelledby="dl">
+    <h2 id="dl">Get the apps</h2>
+    <p>Android. The phone app is the camera; the watch app (Wear OS) is the remote and viewer.</p>
+    <div class="row">
+      <a class="btn" href="download/Heat.apk" download>Phone app <small>· Android</small></a>
+      <a class="btn ghost" href="download/Heat-watch.apk" download>Watch app <small>· Wear OS</small></a>
+    </div>
+    <details>
+      <summary>How to install</summary>
+      <ol>
+        <li>Open the downloaded <code>Heat.apk</code> on the phone. Android will ask you to allow installs from this browser once.</li>
+        <li>Open Heat, allow the camera, and leave it where it can see the room.</li>
+        <li>For the watch, turn on Wi-Fi debugging in the watch's developer options, then run <code>adb install Heat-watch.apk</code> from a computer. Opening the watch app starts the phone's camera by itself.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="card" aria-labelledby="join">
+    <h2 id="join">Join a room</h2>
+    <p>Got a Heat code like <b>ABCD-EFGH</b>? Enter it to watch that camera.</p>
+    <form id="f" autocomplete="off" novalidate>
+      <label for="c" hidden>Room code</label>
+      <input id="c" class="code" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="16" placeholder="ABCD-EFGH" aria-describedby="h">
+      <div class="row">
+        <button class="btn" type="submit" id="app">Open in the Heat app</button>
+        <button class="btn ghost" type="button" id="web">Watch in browser</button>
+      </div>
+      <p class="hint" id="h" role="status"></p>
+    </form>
+  </section>
+
+  <footer>
+    <span>Everything between your devices is end-to-end encrypted.</span>
+    <a href="app/privacy.html">Privacy</a>
+    <a href="app/terms.html">Terms</a>
+    <a href="app/">Heat in the browser</a>
+  </footer>
+</main>
+<script>
+(() => {
+  const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';           // no 0 O 1 I L, same as the apps
+  const $ = id => document.getElementById(id);
+  const norm = s => String(s || '').toUpperCase().split('').filter(c => ALPHABET.includes(c)).join('').slice(0, 12);
+  const fmt = s => (s.match(/.{1,4}/g) || []).join('-');
+  const valid = c => c.length === 8 || c.length === 12;
+  const hint = t => { $('h').textContent = t; };
+  const input = $('c');
+
+  // A pasted invite link works too: take the code out of #link=CODE or heat://link/CODE.
+  input.addEventListener('input', () => {
+    const raw = input.value;
+    const m = /(?:link=|heat:\/\/link\/)([A-Za-z0-9-]{8,16})/i.exec(raw);
+    input.value = fmt(norm(m ? m[1] : raw));
+    hint('');
+  });
+  const code = () => {
+    const c = norm(input.value);
+    if (!valid(c)) { hint('A Heat code is 8 letters and numbers, like ABCD-EFGH.'); input.focus(); return null; }
+    return c;
+  };
+
+  $('f').addEventListener('submit', e => {
+    e.preventDefault();
+    const c = code(); if (!c) return;
+    // Try the app. If nothing took over the screen, the app is not installed: say so and point at the download.
+    let left = false;
+    const gone = () => { left = true; };
+    addEventListener('pagehide', gone, { once: true });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) left = true; }, { once: true });
+    location.href = 'heat://link/' + c;
+    setTimeout(() => { if (!left) hint('Heat did not open. Install the phone app above, or use "Watch in browser".'); }, 1500);
+  });
+  $('web').addEventListener('click', () => {
+    const c = code(); if (!c) return;
+    location.href = 'app/#link=' + c;
+  });
+})();
+</script>
+</body>
+</html>

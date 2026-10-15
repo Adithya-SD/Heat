@@ -694,7 +694,7 @@ function loadIce(){
  if(CONFIG.iceServers||!CONFIG.iceEndpoint||!/^https?:/.test(location.protocol))return;
  iceReady=(async()=>{try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500),r=await fetch(CONFIG.iceEndpoint,{cache:'no-store',signal:ac.signal});clearTimeout(t);
   if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.iceServers)&&j.iceServers.length)ICE.iceServers=[ICE.iceServers[0],...j.iceServers]}catch{}})()}
-const BUILD='2026-10-15.3'; /* shown on the home screen so you can confirm both devices run the same version */
+const BUILD='2026-10-15.4'; /* shown on the home screen so you can confirm both devices run the same version */
 const PV=2;                 /* protocol version: devices on different versions say so instead of failing quietly */
 const st={arm:true,sens:6,roi:{x:.2,y:.2,w:.6,h:.6}};
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch{}};
@@ -1278,7 +1278,7 @@ addEventListener('keydown',e=>{
 /* a Heat Link invite: https://…/#link=CODE, heat://link/CODE, or the bare code (8 symbols; older codes 12) */
 const linkCodeIn=t=>{t=String(t||'').trim();const m=/(?:link=|heat:\/\/link\/)([A-Za-z2-9-]{8,16})/i.exec(t),c=HL.norm(m?m[1]:/^[A-Za-z2-9 -]{12,16}$/.test(t)?t:'');return c.length===8||c.length===12?c:''};
 $('#ci').addEventListener('paste',e=>{
- const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)||HL.norm(lt).length===12?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
+ const lt=((e.clipboardData||window.clipboardData).getData('text')||''),lc=/link=|heat:\/\//i.test(lt)||(HL.norm(lt).length===8||HL.norm(lt).length===12)?linkCodeIn(lt):'';if(lc){e.preventDefault();LK.view(lc);return}
  const t=lt.trim(),m=/join=([A-Z2-9]{8})/i.exec(t),km=/[#&]k=([A-Z2-9]{12})/i.exec(t);
  const c=m?m[1].toUpperCase():/^[A-Za-z0-9 -]{8,12}$/.test(t)?norm(t):'';
  if(c.length===8){e.preventDefault();$('#ci').value=fmt(c);$('#ci').blur();viewStart(c,km?km[1].toUpperCase():'')}});
@@ -2557,9 +2557,9 @@ $('#evl').addEventListener('click',e=>{const r=e.target.closest('.ev'),x=r&&evs[
 /* ---------- boot ---------- */
 loadIce();
 {const sm=/[?&]start=(call|watch)/.exec(location.search);if(sm){pick=sm[1];applyPick();try{history.replaceState(null,'',location.pathname+location.hash)}catch{}}}   /* manifest shortcuts: preselect, never auto-start the camera */
-{const h=location.hash,hm=/(?:^|[#&])join=([A-Z2-9]{8})/.exec(h),hk=/[#&]k=([A-Z2-9]{12})/.exec(h),lm=/(?:^|[#&])link=([A-Za-z2-9-]{12,16})/.exec(h);
+{const h=location.hash,hm=/(?:^|[#&])join=([A-Z2-9]{8})/.exec(h),hk=/[#&]k=([A-Z2-9]{12})/.exec(h),lm=/(?:^|[#&])link=([A-Za-z2-9-]{8,16})/.exec(h);
  LK.refreshRejoin();
- if(lm&&HL.norm(lm[1]).length===12){try{history.replaceState(null,'',location.pathname+location.search)}catch{}LK.view(lm[1])}
+ if(lm&&(HL.norm(lm[1]).length===8||HL.norm(lm[1]).length===12)){try{history.replaceState(null,'',location.pathname+location.search)}catch{}LK.view(lm[1])}
  else if(hm){try{history.replaceState(null,'',location.pathname+location.search)}catch{}viewStart(hm[1],hk?hk[1]:'')}}
 </script>
 </body></html>
